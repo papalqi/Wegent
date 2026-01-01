@@ -840,7 +840,7 @@
     "display_name_hint": "Human-readable name for display (optional)",
     "base_shell": "Base Shell",
     "select_base_shell": "Select a base shell type",
-    "base_shell_hint": "The shell type this custom shell is based on (ClaudeCode, Agno)",
+    "base_shell_hint": "The shell type this custom shell is based on (ClaudeCode, Codex, Agno)",
     "base_image": "Base Image",
     "base_image_hint": "Docker image address (e.g., ghcr.io/your-org/your-image:latest)",
     "no_shells": "No shells available",

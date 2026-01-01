@@ -229,7 +229,7 @@ export function ChatInputControls({
           />
         )}
 
-        {/* File Upload Button - show for shells that support attachments (Chat, ClaudeCode) */}
+        {/* File Upload Button - show for shells that support attachments (Chat, ClaudeCode, Codex) */}
         {supportsAttachments(selectedTeam) && (
           <AttachmentButton onFileSelect={onFileSelect} disabled={isLoading || isStreaming} />
         )}

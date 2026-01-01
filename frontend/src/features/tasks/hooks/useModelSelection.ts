@@ -182,6 +182,7 @@ export function useModelSelection({
     if (!selectedTeam?.agent_type) return null;
     const agentType = selectedTeam.agent_type.toLowerCase();
     if (agentType === 'agno') return 'openai';
+    if (agentType === 'codex') return 'openai';
     if (agentType === 'claude' || agentType === 'claudecode') return 'claude';
     return null;
   }, [selectedTeam?.agent_type]);

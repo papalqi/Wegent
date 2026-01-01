@@ -46,6 +46,29 @@ const shellRequirements: Record<string, SoftwareRequirement[]> = {
       description: 'Claude Code CLI (recommended)',
     },
   ],
+  Codex: [
+    {
+      name: 'Node.js',
+      command: 'node --version',
+      minVersion: '20.0.0',
+      required: true,
+      description: 'JavaScript runtime for Codex CLI',
+    },
+    {
+      name: 'Python',
+      command: 'python --version',
+      minVersion: '3.12.0',
+      required: true,
+      description: 'Python interpreter for agent execution',
+    },
+    {
+      name: 'codex',
+      command: 'codex --version',
+      minVersion: '0.77.0',
+      required: true,
+      description: 'OpenAI Codex CLI',
+    },
+  ],
   Agno: [
     {
       name: 'Python',
@@ -66,7 +89,7 @@ const shellRequirements: Record<string, SoftwareRequirement[]> = {
 };
 
 interface SoftwareRequirementsProps {
-  shellType: string; // Shell type (e.g., ClaudeCode, Agno, Dify)
+  shellType: string; // Shell type (e.g., ClaudeCode, Codex, Agno, Dify)
 }
 
 const SoftwareRequirements: React.FC<SoftwareRequirementsProps> = ({ shellType }) => {

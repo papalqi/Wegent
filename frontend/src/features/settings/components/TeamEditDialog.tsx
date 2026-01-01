@@ -124,7 +124,7 @@ export default function TeamEditDialog(props: TeamEditDialogProps) {
   const allowedAgentsForMode = useMemo((): AgentType[] | undefined => {
     const MODE_AGENT_FILTER: Record<TeamMode, AgentType[] | null> = {
       solo: null,
-      pipeline: ['ClaudeCode', 'Agno'],
+      pipeline: ['ClaudeCode', 'Codex', 'Agno'],
       route: ['Agno'],
       coordinate: ['Agno'],
       collaborate: ['Agno'],

@@ -21,13 +21,13 @@ import type { Team } from '@/types/api';
  * Shell types that support file attachments.
  * Add new shell types here when they gain attachment support.
  */
-const ATTACHMENT_SUPPORTED_SHELL_TYPES = ['chat', 'claudecode'] as const;
+const ATTACHMENT_SUPPORTED_SHELL_TYPES = ['chat', 'claudecode', 'codex'] as const;
 
 /**
  * Agent types that support file attachments.
  * This maps to team.agent_type field.
  */
-const ATTACHMENT_SUPPORTED_AGENT_TYPES = ['chat', 'claudecode'] as const;
+const ATTACHMENT_SUPPORTED_AGENT_TYPES = ['chat', 'claudecode', 'codex'] as const;
 
 /**
  * Check if a team uses Chat Shell type.
@@ -88,6 +88,7 @@ export function isClaudeCodeShell(team: Team | null): boolean {
  * Currently supports:
  * - Chat Shell: Full attachment support with vision for images
  * - ClaudeCode Shell: Attachments downloaded to workspace
+ * - Codex Shell: Attachments downloaded to workspace
  *
  * @param team - Team to check
  * @returns true if the team supports file attachments

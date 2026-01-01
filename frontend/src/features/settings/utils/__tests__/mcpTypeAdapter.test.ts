@@ -57,6 +57,30 @@ describe('mcpTypeAdapter', () => {
       expect((result.server1 as Record<string, unknown>).type).toBe('http');
     });
 
+    it('should convert streamable-http to http for Codex', () => {
+      const config = {
+        server1: {
+          type: 'streamable-http',
+          url: 'http://example.com',
+        },
+      };
+
+      const result = adaptMcpConfigForAgent(config, 'Codex');
+      expect((result.server1 as Record<string, unknown>).type).toBe('http');
+    });
+
+    it('should convert streamable-http to http for Codex', () => {
+      const config = {
+        server1: {
+          type: 'streamable-http',
+          url: 'http://example.com',
+        },
+      };
+
+      const result = adaptMcpConfigForAgent(config, 'Codex');
+      expect((result.server1 as Record<string, unknown>).type).toBe('http');
+    });
+
     it('should handle sse and stdio types without conversion', () => {
       const config = {
         server1: { type: 'sse', url: 'http://example.com' },
@@ -70,6 +94,10 @@ describe('mcpTypeAdapter', () => {
       const claudeResult = adaptMcpConfigForAgent(config, 'ClaudeCode');
       expect((claudeResult.server1 as Record<string, unknown>).type).toBe('sse');
       expect((claudeResult.server2 as Record<string, unknown>).type).toBe('stdio');
+
+      const codexResult = adaptMcpConfigForAgent(config, 'Codex');
+      expect((codexResult.server1 as Record<string, unknown>).type).toBe('sse');
+      expect((codexResult.server2 as Record<string, unknown>).type).toBe('stdio');
     });
 
     it('should handle case variations', () => {
@@ -130,6 +158,20 @@ describe('mcpTypeAdapter', () => {
       expect(isValidMcpTypeForAgent('streamable-http', 'ClaudeCode')).toBe(false);
     });
 
+    it('should validate Codex types', () => {
+      expect(isValidMcpTypeForAgent('sse', 'Codex')).toBe(true);
+      expect(isValidMcpTypeForAgent('http', 'Codex')).toBe(true);
+      expect(isValidMcpTypeForAgent('stdio', 'Codex')).toBe(true);
+      expect(isValidMcpTypeForAgent('streamable-http', 'Codex')).toBe(false);
+    });
+
+    it('should validate Codex types', () => {
+      expect(isValidMcpTypeForAgent('sse', 'Codex')).toBe(true);
+      expect(isValidMcpTypeForAgent('http', 'Codex')).toBe(true);
+      expect(isValidMcpTypeForAgent('stdio', 'Codex')).toBe(true);
+      expect(isValidMcpTypeForAgent('streamable-http', 'Codex')).toBe(false);
+    });
+
     it('should validate Agno types', () => {
       expect(isValidMcpTypeForAgent('sse', 'Agno')).toBe(true);
       expect(isValidMcpTypeForAgent('streamable-http', 'Agno')).toBe(true);
@@ -147,6 +189,16 @@ describe('mcpTypeAdapter', () => {
   describe('getSupportedMcpTypes', () => {
     it('should return ClaudeCode supported types', () => {
       const types = getSupportedMcpTypes('ClaudeCode');
+      expect(types).toEqual(['sse', 'http', 'stdio']);
+    });
+
+    it('should return Codex supported types', () => {
+      const types = getSupportedMcpTypes('Codex');
+      expect(types).toEqual(['sse', 'http', 'stdio']);
+    });
+
+    it('should return Codex supported types', () => {
+      const types = getSupportedMcpTypes('Codex');
       expect(types).toEqual(['sse', 'http', 'stdio']);
     });
 

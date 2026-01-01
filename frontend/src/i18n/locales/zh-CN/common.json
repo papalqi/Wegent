@@ -841,7 +841,7 @@
     "display_name_hint": "用于显示的友好名称（可选）",
     "base_shell": "基础 Shell",
     "select_base_shell": "选择基础 Shell 类型",
-    "base_shell_hint": "此自定义 Shell 基于的 Shell 类型（ClaudeCode、Agno）",
+    "base_shell_hint": "此自定义 Shell 基于的 Shell 类型（ClaudeCode、Codex、Agno）",
     "base_image": "Base Image",
     "base_image_hint": "Docker 镜像地址（例如：ghcr.io/your-org/your-image:latest）",
     "no_shells": "暂无 Shell",

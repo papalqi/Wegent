@@ -41,7 +41,7 @@ import { useTranslation } from 'react-i18next';
 import { adaptMcpConfigForAgent, isValidAgentType } from '../utils/mcpTypeAdapter';
 
 /** Agent types supported by the system */
-export type AgentType = 'ClaudeCode' | 'Agno' | 'Dify';
+export type AgentType = 'ClaudeCode' | 'Codex' | 'Agno' | 'Dify';
 
 /** Interface for bot data returned by getBotData */
 export interface BotFormData {
@@ -341,14 +341,14 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
 
     fetchShells();
   }, [toast, t, allowedAgents, scope, groupName]);
-  // Check if current agent supports skills (ClaudeCode only, Chat shell is hidden)
+  // Check if current agent supports skills (ClaudeCode/Codex only, Chat shell is hidden)
   const supportsSkills = useMemo(() => {
     // Get shell type from the selected shell
     const selectedShell = shells.find(s => s.name === agentName);
     const shellType = selectedShell?.shellType || agentName;
-    // Skills are supported for ClaudeCode shell type only
+    // Skills are supported for ClaudeCode/Codex shell type only
     // Chat shell skills selection is hidden (but skills still work if configured)
-    return shellType === 'ClaudeCode';
+    return shellType === 'ClaudeCode' || shellType === 'Codex';
   }, [agentName, shells]);
 
   // Get current shell type for skill filtering
@@ -373,7 +373,7 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
   );
 
   useEffect(() => {
-    // Only fetch skills when agent supports skills (ClaudeCode or Chat)
+    // Only fetch skills when agent supports skills (ClaudeCode/Codex)
     if (!supportsSkills) {
       setAllSkills([]);
       setAvailableSkills([]);
@@ -621,8 +621,8 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
     let parsedMcpConfig: Record<string, unknown> = {};
     if (!isDifyAgent && mcpConfig.trim()) {
       parsedMcpConfig = JSON.parse(mcpConfig);
-      if (parsedMcpConfig && agentName && isValidAgentType(agentName)) {
-        parsedMcpConfig = adaptMcpConfigForAgent(parsedMcpConfig, agentName);
+      if (parsedMcpConfig && currentShellType && isValidAgentType(currentShellType)) {
+        parsedMcpConfig = adaptMcpConfigForAgent(parsedMcpConfig, currentShellType);
       }
     }
 
@@ -642,7 +642,9 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
     selectedProtocol,
     selectedModel,
     selectedModelType,
+    selectedModelNamespace,
     mcpConfig,
+    currentShellType,
     agentName,
     botName,
     prompt,
@@ -695,7 +697,7 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
     } finally {
       setBotSaving(false);
     }
-  }, [validateBot, getBotData, editingBotId, setBots, toast, t]);
+  }, [validateBot, getBotData, editingBotId, setBots, toast, t, scope, groupName]);
 
   // Expose methods via ref
   useImperativeHandle(
@@ -803,11 +805,13 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
       try {
         parsedMcpConfig = JSON.parse(mcpConfig);
         // Adapt MCP config types based on selected agent
-        if (parsedMcpConfig && agentName) {
-          if (isValidAgentType(agentName)) {
-            parsedMcpConfig = adaptMcpConfigForAgent(parsedMcpConfig, agentName);
+        if (parsedMcpConfig && currentShellType) {
+          if (isValidAgentType(currentShellType)) {
+            parsedMcpConfig = adaptMcpConfigForAgent(parsedMcpConfig, currentShellType);
           } else {
-            console.warn(`Unknown agent type "${agentName}", skipping MCP config adaptation`);
+            console.warn(
+              `Unknown agent type "${currentShellType}", skipping MCP config adaptation`
+            );
           }
         }
         setMcpConfigError(false);
@@ -957,6 +961,8 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
                 value={agentName}
                 onValueChange={value => {
                   if (readOnly) return;
+                  const nextShell = shells.find(s => s.name === value);
+                  const nextShellType = nextShell?.shellType || value;
                   if (value !== agentName) {
                     setIsCustomModel(false);
                     setSelectedModel('');
@@ -970,12 +976,15 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
                     if (mcpConfig.trim()) {
                       try {
                         const currentMcpConfig = JSON.parse(mcpConfig);
-                        if (isValidAgentType(value)) {
-                          const adaptedConfig = adaptMcpConfigForAgent(currentMcpConfig, value);
+                        if (isValidAgentType(nextShellType)) {
+                          const adaptedConfig = adaptMcpConfigForAgent(
+                            currentMcpConfig,
+                            nextShellType
+                          );
                           setMcpConfig(JSON.stringify(adaptedConfig, null, 2));
                         } else {
                           console.warn(
-                            `Unknown agent type "${value}", skipping MCP config adaptation`
+                            `Unknown agent type "${nextShellType}", skipping MCP config adaptation`
                           );
                         }
                       } catch (error) {
@@ -1131,10 +1140,13 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
                       </SelectTrigger>
                       <SelectContent>
                         {/* Filter protocol options based on agent type */}
-                        {agentName === 'ClaudeCode' && (
+                        {currentShellType === 'ClaudeCode' && (
                           <SelectItem value="claude">Claude (Anthropic)</SelectItem>
                         )}
-                        {agentName === 'Agno' && (
+                        {currentShellType === 'Codex' && (
+                          <SelectItem value="openai">OpenAI</SelectItem>
+                        )}
+                        {currentShellType === 'Agno' && (
                           <>
                             <SelectItem value="openai">OpenAI</SelectItem>
                             <SelectItem value="claude">Claude (Anthropic)</SelectItem>
@@ -1142,12 +1154,14 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
                           </>
                         )}
                         {/* Show all options if agent type is unknown or not selected */}
-                        {agentName !== 'ClaudeCode' && agentName !== 'Agno' && (
-                          <>
-                            <SelectItem value="openai">OpenAI</SelectItem>
-                            <SelectItem value="claude">Claude (Anthropic)</SelectItem>
-                          </>
-                        )}
+                        {currentShellType !== 'ClaudeCode' &&
+                          currentShellType !== 'Codex' &&
+                          currentShellType !== 'Agno' && (
+                            <>
+                              <SelectItem value="openai">OpenAI</SelectItem>
+                              <SelectItem value="claude">Claude (Anthropic)</SelectItem>
+                            </>
+                          )}
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-text-muted mt-1">{t('common:bot.protocol_hint')}</p>
@@ -1169,7 +1183,7 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
                     rows={4}
                     disabled={readOnly}
                     placeholder={
-                      agentName === 'ClaudeCode'
+                      currentShellType === 'ClaudeCode'
                         ? `{
   "env": {
     "model": "claude",
@@ -1178,8 +1192,17 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
     "base_url": "xxxxxx"
   }
 }`
-                        : agentName === 'Agno'
+                        : currentShellType === 'Codex'
                           ? `{
+  "env": {
+    "model": "openai",
+    "model_id": "xxxxxx",
+    "api_key": "xxxxxx",
+    "base_url": "xxxxxx"
+  }
+}`
+                          : currentShellType === 'Agno'
+                            ? `{
   "env": {
     "model": "openai or claude",
     "model_id": "xxxxxx",
@@ -1187,7 +1210,7 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
     "base_url": "xxxxxx"
   }
 }`
-                          : ''
+                            : ''
                     }
                     className={`w-full px-4 py-2 bg-base rounded-md text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 font-mono text-base h-[150px] custom-scrollbar ${agentConfigError ? 'border border-red-400 focus:ring-red-300 focus:border-red-400' : 'border border-border focus:ring-primary/40 focus:border-primary'} ${readOnly ? 'cursor-not-allowed opacity-70' : ''}`}
                   />
@@ -1252,7 +1275,7 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
                 )}
               </div>
 
-              {/* Skills Selection - Show for agents that support skills (ClaudeCode, Chat) */}
+              {/* Skills Selection - Show for agents that support skills (ClaudeCode/Codex) */}
               {supportsSkills && (
                 <div className="flex flex-col">
                   <div className="flex items-center justify-between mb-1">
@@ -1465,7 +1488,7 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
         onClose={() => setImportModalVisible(false)}
         onImport={handleImportConfirm}
         toast={toast}
-        agentType={agentName as 'ClaudeCode' | 'Agno'}
+        agentType={isValidAgentType(currentShellType) ? currentShellType : undefined}
       />
 
       {/* Skill Management Modal */}

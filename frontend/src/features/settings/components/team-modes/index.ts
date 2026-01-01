@@ -16,17 +16,17 @@ export type TeamMode = 'solo' | 'pipeline' | 'route' | 'coordinate' | 'collabora
 /**
  * Agent types supported by the system
  */
-export type AgentType = 'ClaudeCode' | 'Agno' | 'Dify';
+export type AgentType = 'ClaudeCode' | 'Codex' | 'Agno' | 'Dify';
 
 /**
  * Mode to supported agent types mapping
- * - solo: All agent types (ClaudeCode, Agno, Dify)
- * - pipeline: ClaudeCode and Agno only (no Dify)
+ * - solo: All agent types (ClaudeCode, Codex, Agno, Dify)
+ * - pipeline: Code shells (ClaudeCode, Codex, Agno)
  * - route/coordinate/collaborate: Agno only (multi-agent collaboration modes)
  */
 const MODE_AGENT_FILTER: Record<TeamMode, AgentType[] | null> = {
   solo: null, // null means all agents are allowed
-  pipeline: ['ClaudeCode', 'Agno'],
+  pipeline: ['ClaudeCode', 'Codex', 'Agno'],
   route: ['Agno'],
   coordinate: ['Agno'],
   collaborate: ['Agno'],
@@ -43,7 +43,7 @@ const MODE_AGENT_FILTER: Record<TeamMode, AgentType[] | null> = {
  */
 function getActualShellType(shellType: string, shellMap: Map<string, UnifiedShell>): string {
   // First check if shellType is already a known agent type
-  const knownAgentTypes: AgentType[] = ['ClaudeCode', 'Agno', 'Dify'];
+  const knownAgentTypes: AgentType[] = ['ClaudeCode', 'Codex', 'Agno', 'Dify'];
   if (knownAgentTypes.includes(shellType as AgentType)) {
     return shellType;
   }
