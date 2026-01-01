@@ -31,7 +31,8 @@ Guides for Wegent platform users:
 
 - [Creating Ghosts](./guides/user/creating-ghosts.md) - Define the "soul" of your agents
 - [Creating Bots](./guides/user/creating-bots.md) - Assemble complete agent instances
-- [Managing Skills](./guides/user/managing-skills.md) - Upload and use Claude Code Skills
+- [Managing Skills](./guides/user/managing-skills.md) - Upload and use Skills (ClaudeCode / Codex)
+- [Codex Shell Guide](./guides/user/codex-shell.md) - Codex usage, base image requirements, troubleshooting, rollout/rollback
 - [Creating Teams](./guides/user/creating-teams.md) - Build collaborative agent teams
 - [Managing Tasks](./guides/user/managing-tasks.md) - Create and manage work tasks
 - [Spec Clarification Mode](./guides/user/spec-clarification-guide.md) - Interactive requirement specification clarification guide

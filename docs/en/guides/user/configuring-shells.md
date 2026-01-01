@@ -46,7 +46,7 @@ When a Bot references a Shell, the system follows this lookup order:
 2. **Public Shells**: If not found, falls back to system-provided public Shells in the `public_shells` table
 
 This allows users to:
-- Use preset public Shells (like `ClaudeCode`, `Agno`, `Dify`) without creating them
+- Use preset public Shells (like `ClaudeCode`, `Codex`, `Agno`, `Dify`) without creating them
 - Override public Shells by creating custom Shells with the same name
 - Define private Shells that only they can access
 
@@ -66,7 +66,7 @@ Shells provide Bots with the following core capabilities:
 
 ## 📊 Runtime Selection Guide
 
-Wegent currently supports three main runtimes:
+Wegent currently supports four main runtimes:
 
 ### ClaudeCode Runtime (Recommended)
 
@@ -84,6 +84,23 @@ Wegent currently supports three main runtimes:
 - ✅ Mature and stable
 
 **Recommended for**: Most development tasks
+
+### Codex Runtime (OpenAI-based)
+
+**Use Cases**:
+- Code development and refactoring with OpenAI models
+- File operations and management
+- Git branch management and commits
+- Coding workflows similar to ClaudeCode, but using OpenAI protocol models
+
+**Features**:
+- ✅ OpenAI-based coding runtime (containerized)
+- ✅ Supports MCP tool invocation
+- ✅ Full filesystem access
+- ✅ Git integration
+- ✅ Supports Skills (deployed to `~/.codex/skills`)
+
+**Recommended for**: Teams using OpenAI models for coding tasks
 
 ### Agno Runtime (Experimental)
 
@@ -123,15 +140,15 @@ Wegent currently supports three main runtimes:
 
 ### Decision Table
 
-| Feature | ClaudeCode | Agno | Dify |
-|---------|------------|------|------|
-| **Stability** | ⭐⭐⭐⭐⭐ Mature | ⭐⭐⭐ Experimental | ⭐⭐⭐⭐ Stable |
-| **Code Development** | ⭐⭐⭐⭐⭐ Excellent | ⭐⭐ Basic | ⭐⭐ Limited |
-| **Tool Invocation** | ⭐⭐⭐⭐⭐ Complete | ⭐⭐⭐ Partial | ⭐⭐⭐ Via Dify |
-| **Git Integration** | ⭐⭐⭐⭐⭐ Complete | ⭐⭐ Limited | ❌ None |
-| **Workflow Support** | ⭐⭐ Basic | ⭐⭐ Basic | ⭐⭐⭐⭐⭐ Excellent |
-| **Learning Curve** | ⭐⭐⭐⭐ Simple | ⭐⭐ Complex | ⭐⭐⭐⭐ Simple |
-| **Recommendation** | ✅ Development | ⚠️ Advanced | ✅ Workflows |
+| Feature | ClaudeCode | Codex | Agno | Dify |
+|---------|------------|-------|------|------|
+| **Stability** | ⭐⭐⭐⭐⭐ Mature | ⭐⭐⭐⭐ Stable | ⭐⭐⭐ Experimental | ⭐⭐⭐⭐ Stable |
+| **Code Development** | ⭐⭐⭐⭐⭐ Excellent | ⭐⭐⭐⭐⭐ Excellent | ⭐⭐ Basic | ⭐⭐ Limited |
+| **Tool Invocation** | ⭐⭐⭐⭐⭐ Complete | ⭐⭐⭐⭐⭐ Complete | ⭐⭐⭐ Partial | ⭐⭐⭐ Via Dify |
+| **Git Integration** | ⭐⭐⭐⭐⭐ Complete | ⭐⭐⭐⭐⭐ Complete | ⭐⭐ Limited | ❌ None |
+| **Workflow Support** | ⭐⭐ Basic | ⭐⭐ Basic | ⭐⭐ Basic | ⭐⭐⭐⭐⭐ Excellent |
+| **Learning Curve** | ⭐⭐⭐⭐ Simple | ⭐⭐⭐⭐ Simple | ⭐⭐ Complex | ⭐⭐⭐⭐ Simple |
+| **Recommendation** | ✅ Development | ✅ OpenAI coding | ⚠️ Advanced | ✅ Workflows |
 
 ---
 
@@ -152,7 +169,21 @@ Wegent comes with the following preset Shells that can be used immediately:
 - Code refactoring
 - Documentation writing
 
-### 2. Agno
+### 2. Codex
+
+**Name**: `Codex`
+**Runtime**: `Codex`
+**Status**: ✅ Available
+**Namespace**: `default`
+
+**Recommended Scenarios**:
+- Code development with OpenAI models
+- ClaudeCode-like coding workflows using OpenAI protocol models
+- Tasks that benefit from Skills and MCP
+
+> Tip: See [Codex Shell Guide](./codex-shell.md) for base image requirements and troubleshooting.
+
+### 3. Agno
 
 **Name**: `Agno`
 **Runtime**: `Agno`
@@ -164,7 +195,7 @@ Wegent comes with the following preset Shells that can be used immediately:
 - Experimental features
 - Special requirements
 
-### 3. Dify
+### 4. Dify
 
 **Name**: `Dify`
 **Runtime**: `Dify`
@@ -183,7 +214,7 @@ Wegent comes with the following preset Shells that can be used immediately:
 
 ### Method 1: Use Preset Shells (Recommended for Beginners)
 
-The system already has `ClaudeCode` and `Agno` Shells preset. You can directly reference them when creating a Bot:
+The system already has `ClaudeCode`, `Codex`, `Agno`, and `Dify` Shells preset. You can directly reference them when creating a Bot:
 
 ```yaml
 apiVersion: agent.wecode.io/v1
@@ -224,7 +255,7 @@ If you need a custom Shell configuration:
 4. Fill in the following fields:
    - **Name**: Unique identifier for the Shell (lowercase letters and hyphens)
    - **Namespace**: Usually use `default`
-   - **Runtime Type**: Select `ClaudeCode` or `Agno`
+   - **Runtime Type**: Select `ClaudeCode`, `Codex`, or `Agno`
    - **Supported Model Types**: (Optional) Specify model types this Shell supports
 5. Click **Submit** to create
 
@@ -506,7 +537,7 @@ View Shell status via Web interface:
 
 **Answer**:
 
-The preset `ClaudeCode` and `Agno` Shells are recommended configurations; it's best not to modify them.
+The preset `ClaudeCode` / `Codex` / `Agno` / `Dify` Shells are recommended configurations; it's best not to modify them.
 
 If you need custom configuration:
 - Create a new Shell resource
@@ -543,6 +574,7 @@ spec:
 
 ### Related Configuration Guides
 - [Model Configuration Guide](./configuring-models.md) - Configure AI model parameters
+- [Codex Shell Guide](./codex-shell.md) - Codex usage, base image requirements, troubleshooting, rollout/rollback
 
 ### Next Steps
 - [Creating Bots](./creating-bots.md) - Create complete Bot instances using Shells

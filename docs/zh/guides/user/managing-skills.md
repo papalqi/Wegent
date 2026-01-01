@@ -1,6 +1,6 @@
 # ✨ 管理 Skills
 
-Skills 是 Claude Code 的能力扩展包,可以为您的 Bot 添加专门的功能。本指南将教您如何上传、管理和使用 Wegent 中的 Skills。
+Skills 是能力扩展包,可以为您的 Bot 添加专门的功能。本指南将教您如何上传、管理和使用 Wegent 中的 Skills。
 
 ---
 
@@ -19,7 +19,11 @@ Skills 是 Claude Code 的能力扩展包,可以为您的 Bot 添加专门的功
 
 ## 🎯 什么是 Skill
 
-**Skill** 是一个 Claude Code 能力扩展包,包含可执行代码、配置和文档。当任务启动时,Skills 会被部署到 `~/.claude/skills/` 目录,扩展智能体的能力。
+**Skill** 是一个能力扩展包,包含可执行代码、配置和文档。当任务启动时,Skills 会被部署到对应 Shell 的 Skills 目录,扩展智能体的能力。
+
+部署路径与 Shell 运行时有关：
+- `ClaudeCode` → `~/.claude/skills/`
+- `Codex` → `~/.codex/skills/`
 
 **类比**: 如果 Bot 是一个人,Skills 就像工具或特殊技能:
 - **Ghost**: 人的性格和基础知识
@@ -229,13 +233,13 @@ spec:
 
 1. **Executor 获取 Bot 配置** 包括 Skills 列表
 2. **从 API 下载每个 Skill**
-3. **解压 ZIP 文件** 到 `~/.claude/skills/{skill-name}/`
-4. **Claude Code 自动加载 Skills**
+3. **解压 ZIP 文件** 到对应 Shell 的 Skills 目录（`~/.claude/skills/` 或 `~/.codex/skills/`）
+4. **Shell 运行时自动加载 Skills**
 5. **智能体可以使用 Skill 能力** 在任务执行期间
 
 **部署路径示例**:
 ```
-~/.claude/skills/
+~/.claude/skills/   # ClaudeCode
 ├── python-debugger/
 │   ├── SKILL.md
 │   ├── main.py
@@ -247,6 +251,8 @@ spec:
     ├── SKILL.md
     └── test_runner.py
 ```
+
+对于 Codex，目录为 `~/.codex/skills/`，结构相同。
 
 ---
 

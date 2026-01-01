@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_db
 from app.core import security
 from app.core.cache import cache_manager
+from app.core.config import settings
 from app.models.kind import Kind
 from app.models.user import User
 from app.schemas.kind import Shell as ShellCRD
@@ -229,6 +230,8 @@ def list_unified_shells(
     for shell in public_shells:
         try:
             unified = _public_shell_to_unified(shell)
+            if unified.shellType == "Codex" and not settings.CODEX_SHELL_ENABLED:
+                continue
             result.append(unified)
             seen_names.add(shell.name)
         except Exception as e:
@@ -268,6 +271,8 @@ def list_unified_shells(
                 if shell.name in seen_names:
                     continue
                 unified = _user_shell_to_unified(shell)
+                if unified.shellType == "Codex" and not settings.CODEX_SHELL_ENABLED:
+                    continue
                 result.append(unified)
                 seen_names.add(shell.name)
             except Exception as e:
@@ -307,7 +312,10 @@ def get_unified_shell(
             .first()
         )
         if user_shell:
-            return _user_shell_to_unified(user_shell).model_dump()
+            unified = _user_shell_to_unified(user_shell)
+            if unified.shellType == "Codex" and not settings.CODEX_SHELL_ENABLED:
+                raise HTTPException(status_code=404, detail="Shell not found")
+            return unified.model_dump()
         if shell_type == "user":
             raise HTTPException(status_code=404, detail="User shell not found")
 
@@ -324,7 +332,10 @@ def get_unified_shell(
         .first()
     )
     if public_shell:
-        return _public_shell_to_unified(public_shell).model_dump()
+        unified = _public_shell_to_unified(public_shell)
+        if unified.shellType == "Codex" and not settings.CODEX_SHELL_ENABLED:
+            raise HTTPException(status_code=404, detail="Shell not found")
+        return unified.model_dump()
 
     raise HTTPException(status_code=404, detail="Shell not found")
 
@@ -402,6 +413,10 @@ def create_shell(
         )
 
     base_shell_crd = ShellCRD.model_validate(base_shell.json)
+    if base_shell_crd.spec.shellType == "Codex" and not settings.CODEX_SHELL_ENABLED:
+        raise HTTPException(
+            status_code=400, detail="Codex shell is disabled by configuration"
+        )
     base_labels = base_shell_crd.metadata.labels or {}
     if base_labels.get("type") != "local_engine":
         raise HTTPException(

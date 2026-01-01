@@ -2,8 +2,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-import pytest
 import os
+
+import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings, settings
@@ -21,6 +22,7 @@ class TestSettings:
         assert s.VERSION == "1.0.0"
         assert s.API_PREFIX == "/api"
         assert s.ENABLE_API_DOCS is True
+        assert s.CODEX_SHELL_ENABLED is True
         assert s.ALGORITHM == "HS256"
         assert s.ACCESS_TOKEN_EXPIRE_MINUTES == 10080  # 7 days
 
@@ -30,6 +32,7 @@ class TestSettings:
         monkeypatch.setenv("API_PREFIX", "/test-api")
         monkeypatch.setenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120")
         monkeypatch.setenv("ENABLE_API_DOCS", "false")
+        monkeypatch.setenv("CODEX_SHELL_ENABLED", "false")
 
         s = Settings()
 
@@ -37,6 +40,7 @@ class TestSettings:
         assert s.API_PREFIX == "/test-api"
         assert s.ACCESS_TOKEN_EXPIRE_MINUTES == 120
         assert s.ENABLE_API_DOCS is False
+        assert s.CODEX_SHELL_ENABLED is False
 
     def test_settings_database_url(self):
         """Test database URL configuration"""
@@ -123,7 +127,7 @@ class TestSettings:
         s = Settings(
             PROJECT_NAME="Custom Project",
             ACCESS_TOKEN_EXPIRE_MINUTES=60,
-            MAX_RUNNING_TASKS_PER_USER=5
+            MAX_RUNNING_TASKS_PER_USER=5,
         )
 
         assert s.PROJECT_NAME == "Custom Project"

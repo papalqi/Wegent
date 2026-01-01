@@ -77,6 +77,7 @@ services:
       - ./backend/init_data:/app/init_data:ro
     environment:
       ENVIRONMENT: development
+      CODEX_SHELL_ENABLED: "${CODEX_SHELL_ENABLED:-true}"
       DB_AUTO_MIGRATE: "True"
       DATABASE_URL: mysql+pymysql://task_user:task_password@mysql:3306/task_manager
       EXECUTOR_CANCEL_TASK_URL: http://executor_manager:8001/executor-manager/tasks/cancel

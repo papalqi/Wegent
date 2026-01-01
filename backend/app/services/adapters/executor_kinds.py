@@ -927,6 +927,11 @@ class ExecutorKindsService(
                 if shell and shell.json:
                     shell_crd = Shell.model_validate(shell.json)
                     shell_type = shell_crd.spec.shellType
+                    if shell_type == "Codex" and not settings.CODEX_SHELL_ENABLED:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Codex shell is disabled by configuration",
+                        )
                     # Extract baseImage from shell (user-defined shell overrides public shell)
                     if shell_crd.spec.baseImage:
                         shell_base_image = shell_crd.spec.baseImage

@@ -583,6 +583,8 @@ async def recommend_shell_and_model(
             "Best for tasks that need multiple steps",
         ),
     }
+    if not settings.CODEX_SHELL_ENABLED:
+        friendly_shell_info.pop("Codex", None)
 
     for alt_type, (alt_reason, _) in friendly_shell_info.items():
         if alt_type != shell_type:

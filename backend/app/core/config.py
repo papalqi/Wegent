@@ -65,6 +65,10 @@ class Settings(BaseSettings):
         "http://localhost:8001/executor-manager/tasks/cancel"
     )
 
+    # Shell feature flags
+    # Set CODEX_SHELL_ENABLED=false to disable Codex selection and execution.
+    CODEX_SHELL_ENABLED: bool = True
+
     # JWT configuration
     SECRET_KEY: str = "secret-key"
     ALGORITHM: str = "HS256"

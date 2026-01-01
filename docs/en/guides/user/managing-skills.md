@@ -1,6 +1,6 @@
 # ✨ Managing Skills
 
-Skills are Claude Code capability extension packages that add specialized functionality to your Bots. This guide will teach you how to upload, manage, and use Skills in Wegent.
+Skills are capability extension packages that add specialized functionality to your Bots. This guide will teach you how to upload, manage, and use Skills in Wegent.
 
 ---
 
@@ -19,7 +19,11 @@ Skills are Claude Code capability extension packages that add specialized functi
 
 ## 🎯 What is a Skill
 
-A **Skill** is a Claude Code capability extension package that contains executable code, configurations, and documentation. Skills are deployed to `~/.claude/skills/` when a task starts, extending the agent's capabilities.
+A **Skill** is a capability extension package that contains executable code, configurations, and documentation. Skills are deployed when a task starts, extending the agent's capabilities.
+
+Deployment path depends on the Shell runtime:
+- `ClaudeCode` → `~/.claude/skills/`
+- `Codex` → `~/.codex/skills/`
 
 **Analogy**: If a Bot is like a person, Skills are like tools or special training:
 - **Ghost**: Person's personality and base knowledge
@@ -229,13 +233,13 @@ When a task starts:
 
 1. **Executor fetches Bot configuration** including skills list
 2. **Downloads each skill** from the API
-3. **Extracts ZIP files** to `~/.claude/skills/{skill-name}/`
-4. **Claude Code loads skills** automatically
+3. **Extracts ZIP files** to the Shell-specific skills directory (`~/.claude/skills/` or `~/.codex/skills/`)
+4. **Shell runtime loads skills** automatically
 5. **Agent can use skill capabilities** during task execution
 
 **Deployment path example**:
 ```
-~/.claude/skills/
+~/.claude/skills/   # ClaudeCode
 ├── python-debugger/
 │   ├── SKILL.md
 │   ├── main.py
@@ -247,6 +251,8 @@ When a task starts:
     ├── SKILL.md
     └── test_runner.py
 ```
+
+For Codex, the directory is `~/.codex/skills/` with the same structure.
 
 ---
 
