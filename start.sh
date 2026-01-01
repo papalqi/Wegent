@@ -194,7 +194,8 @@ wait_for_http() {
   start_ts="$(date +%s)"
 
   while true; do
-    if curl -fsS "$url" >/dev/null 2>&1; then
+    # Ensure curl doesn't hang forever if the TCP connection is accepted but no response is returned.
+    if curl -fsS --connect-timeout 2 --max-time 5 "$url" >/dev/null 2>&1; then
       return 0
     fi
     if (( $(date +%s) - start_ts > timeout_sec )); then
@@ -400,6 +401,10 @@ main() {
   local backend_pythonpath=""
   backend_pythonpath="${ROOT_DIR}:${PYTHONPATH:-}"
 
+  local backend_log=""
+  backend_log="${ROOT_DIR}/backend/uvicorn.log"
+  : >"$backend_log"
+
   env \
     PYTHONPATH="${backend_pythonpath}" \
     ENVIRONMENT="development" \
@@ -410,10 +415,11 @@ main() {
     EXECUTOR_CANCEL_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/tasks/cancel" \
     EXECUTOR_DELETE_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/executor/delete" \
     FRONTEND_URL="http://127.0.0.1:${FRONTEND_PORT}" \
-    setsid bash -c "cd '${ROOT_DIR}/backend' && exec uv run uvicorn app.main:app --host 0.0.0.0 --port '${BACKEND_PORT}'" &
+    setsid bash -c "cd '${ROOT_DIR}/backend' && exec uv run uvicorn app.main:app --host 0.0.0.0 --port '${BACKEND_PORT}'" >>"$backend_log" 2>&1 &
 
   BACKEND_PGID="$!"
   echo -e "${GREEN}✓ Backend started (PGID=${BACKEND_PGID})${NC}"
+  echo -e "${GREEN}  Backend log: ${backend_log}${NC}"
 
   if ! wait_for_http "http://127.0.0.1:${BACKEND_PORT}/api/health" 120; then
     die "Backend did not become healthy on port ${BACKEND_PORT}."
@@ -439,14 +445,19 @@ main() {
   echo ""
 
   echo -e "${BLUE}[6/6] Starting Frontend (host, npm start)...${NC}"
+  local frontend_log=""
+  frontend_log="${ROOT_DIR}/frontend/next.log"
+  : >"$frontend_log"
+
   env \
     NODE_ENV="production" \
     RUNTIME_INTERNAL_API_URL="http://127.0.0.1:${BACKEND_PORT}" \
     RUNTIME_SOCKET_DIRECT_URL="http://localhost:${BACKEND_PORT}" \
-    setsid bash -c "cd '${ROOT_DIR}/frontend' && exec npm start -- -p '${FRONTEND_PORT}'" &
+    setsid bash -c "cd '${ROOT_DIR}/frontend' && exec npm start -- -p '${FRONTEND_PORT}'" >>"$frontend_log" 2>&1 &
 
   FRONTEND_PGID="$!"
   echo -e "${GREEN}✓ Frontend started (PGID=${FRONTEND_PGID})${NC}"
+  echo -e "${GREEN}  Frontend log: ${frontend_log}${NC}"
 
   if ! wait_for_http "http://127.0.0.1:${FRONTEND_PORT}" 120; then
     die "Frontend did not become ready on port ${FRONTEND_PORT}."
@@ -469,4 +480,3 @@ main() {
 }
 
 main "$@"
-
