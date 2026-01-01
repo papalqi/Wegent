@@ -201,6 +201,8 @@ class ChatStartPayload(BaseModel):
     task_id: int
     subtask_id: int
     bot_name: Optional[str] = None
+    shell_type: Optional[str] = None
+    message_id: Optional[int] = None
 
 
 class SourceReference(BaseModel):

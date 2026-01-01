@@ -147,6 +147,7 @@ export interface ChatStartPayload {
   subtask_id: number;
   bot_name?: string;
   shell_type?: string; // Shell type for frontend display (Chat, ClaudeCode, Agno, etc.)
+  message_id?: number; // Message ID for ordering (primary sort key)
 }
 
 export interface ChatChunkPayload {

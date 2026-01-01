@@ -387,7 +387,7 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
    * Creates a new AI message in the unified messages Map
    */
   const handleChatStart = useCallback((data: ChatStartPayload) => {
-    const { task_id, subtask_id, shell_type } = data;
+    const { task_id, subtask_id, shell_type, message_id } = data;
 
     // DEBUG: Log the complete chat:start event payload
     console.log('[ChatStreamContext][chat:start] Received event:', {
@@ -396,6 +396,7 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
       subtask_id,
       shell_type,
       has_shell_type: !!shell_type,
+      message_id,
     });
 
     // Track subtask to task mapping
@@ -425,6 +426,7 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
           content: '',
           timestamp: Date.now(),
           subtaskId: subtask_id,
+          messageId: message_id,
           result: initialResult, // Include shell_type from chat:start event
         });
 
@@ -452,6 +454,7 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
             content: '',
             timestamp: Date.now(),
             subtaskId: subtask_id,
+            messageId: message_id,
             result: initialResult, // Include shell_type from chat:start event
           });
 
@@ -486,6 +489,7 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         content: '',
         timestamp: Date.now(),
         subtaskId: subtask_id,
+        messageId: message_id,
       });
 
       newMap.set(task_id, {

@@ -223,12 +223,49 @@ class ExecutorKindsService(
                 # update task status to RUNNING
                 self._update_task_to_running(db, updated_subtask.task_id)
 
+                bot_name: Optional[str] = None
+                shell_type: Optional[str] = None
+                try:
+                    if (
+                        isinstance(updated_subtask.bot_ids, list)
+                        and len(updated_subtask.bot_ids) > 0
+                    ):
+                        bot_id = updated_subtask.bot_ids[0]
+                        bot = (
+                            db.query(Kind)
+                            .filter(Kind.id == bot_id, Kind.is_active == True)
+                            .first()
+                        )
+
+                        if bot and bot.json:
+                            bot_name = bot.name
+                            bot_crd = Bot.model_validate(bot.json)
+                            shell, _ = self._query_shell(
+                                db,
+                                bot_crd.spec.shellRef.name,
+                                bot_crd.spec.shellRef.namespace,
+                                bot.user_id,
+                            )
+                            if shell and shell.json:
+                                shell_crd = Shell.model_validate(shell.json)
+                                shell_type = shell_crd.spec.shellType
+                except Exception as e:
+                    logger.warning(
+                        "Failed to resolve bot/shell for chat:start: task=%s subtask=%s error=%s",
+                        updated_subtask.task_id,
+                        updated_subtask.id,
+                        e,
+                    )
+
                 # Send chat:start WebSocket event for executor tasks
                 # This allows frontend to establish subtask-to-task mapping
                 # and prepare for receiving chat:done event later
                 self._emit_chat_start_ws_event(
                     task_id=updated_subtask.task_id,
                     subtask_id=updated_subtask.id,
+                    bot_name=bot_name,
+                    shell_type=shell_type,
+                    message_id=updated_subtask.message_id,
                 )
 
         return updated_subtasks
@@ -1427,6 +1464,8 @@ class ExecutorKindsService(
         task_id: int,
         subtask_id: int,
         bot_name: Optional[str] = None,
+        shell_type: Optional[str] = None,
+        message_id: Optional[int] = None,
     ) -> None:
         """
         Emit chat:start WebSocket event to notify frontend that AI response is starting.
@@ -1453,6 +1492,8 @@ class ExecutorKindsService(
                         task_id=task_id,
                         subtask_id=subtask_id,
                         bot_name=bot_name,
+                        shell_type=shell_type or "",
+                        message_id=message_id,
                     )
                     logger.info(
                         f"[WS] Successfully emitted chat:start event for task={task_id} subtask={subtask_id}"
