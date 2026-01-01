@@ -542,7 +542,7 @@ async def recommend_shell_and_model(
                     confidence=0.9,
                 )
                 break
-            elif shell_type == "Agno" and protocol == "openai":
+            elif shell_type in {"Agno", "Codex"} and protocol == "openai":
                 model_recommendation = ModelRecommendation(
                     model_name=model.name,
                     model_id=model_spec.get("modelConfig", {}).get("modelId"),
@@ -573,6 +573,10 @@ async def recommend_shell_and_model(
         "ClaudeCode": (
             "For coding and technical work",
             "Best when you need to work with code",
+        ),
+        "Codex": (
+            "For coding with OpenAI models",
+            "Best when you want an OpenAI-based coding workflow",
         ),
         "Agno": (
             "For complex multi-step tasks",
