@@ -10,6 +10,7 @@
 Docker executor for running tasks in Docker containers
 """
 
+import importlib
 import json
 import os
 import subprocess
@@ -37,6 +38,12 @@ from shared.status import TaskStatus
 from shared.telemetry.config import get_otel_config
 
 logger = setup_logger(__name__)
+
+
+def _current_executor_module():
+    """Return the live executor module so patches after reload are honored."""
+
+    return importlib.import_module(__name__)
 
 
 class DockerExecutor(Executor):
@@ -113,13 +120,17 @@ class DockerExecutor(Executor):
                         f"Existing executor container unavailable for task {task_id} "
                         f"(executor_name={executor_name}): {e}. Recreating container."
                     )
-                    execution_status["executor_name"] = generate_executor_name(
-                        task_id, subtask_id, user_name
+                    module_ref = _current_executor_module()
+                    execution_status["executor_name"] = (
+                        module_ref.generate_executor_name(
+                            task_id, subtask_id, user_name
+                        )
                     )
                     self._create_new_container(task, task_info, execution_status)
             else:
                 # Generate new container name
-                execution_status["executor_name"] = generate_executor_name(
+                module_ref = _current_executor_module()
+                execution_status["executor_name"] = module_ref.generate_executor_name(
                     task_id, subtask_id, user_name
                 )
 
@@ -182,7 +193,8 @@ class DockerExecutor(Executor):
 
     def _get_container_port(self, executor_name: str) -> int:
         """Get container port information"""
-        port_result = get_container_ports(executor_name)
+        module_ref = _current_executor_module()
+        port_result = module_ref.get_container_ports(executor_name)
         logger.info(f"Container port info: {executor_name}, {port_result}")
 
         ports = port_result.get("ports", [])
@@ -568,12 +580,14 @@ class DockerExecutor(Executor):
         self._add_network_config(cmd)
 
         # Add port mapping
-        port = find_available_port()
+        module_ref = _current_executor_module()
+        port = module_ref.find_available_port()
         logger.info(f"Assigned port {port} for container {executor_name}")
         cmd.extend(["-p", f"{port}:{port}", "-e", f"PORT={port}"])
 
         # Add callback URL
-        self._add_callback_url(cmd, task)
+        module_ref = _current_executor_module()
+        self._add_callback_url(cmd, task, module_ref=module_ref)
 
         # Add OpenTelemetry trace context for distributed tracing
         self._add_trace_context(cmd)
@@ -605,9 +619,12 @@ class DockerExecutor(Executor):
         if network:
             cmd.extend(["--network", network])
 
-    def _add_callback_url(self, cmd: List[str], task: Dict[str, Any]) -> None:
+    def _add_callback_url(
+        self, cmd: List[str], task: Dict[str, Any], module_ref=None
+    ) -> None:
         """Add callback URL configuration"""
-        callback_url = build_callback_url(task)
+        module_ref = module_ref or _current_executor_module()
+        callback_url = module_ref.build_callback_url(task)
         if callback_url:
             cmd.extend(["-e", f"CALLBACK_URL={callback_url}"])
 
