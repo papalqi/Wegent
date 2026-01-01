@@ -8,6 +8,7 @@ import os
 from typing import Iterable, Optional
 from unittest.mock import MagicMock
 
+import executor.agents.codex.codex_agent as codex_agent_module
 import pytest
 from executor.agents.codex.codex_agent import CodexAgent
 from shared.status import TaskStatus
@@ -97,9 +98,8 @@ class _FakeStateManager:
 
 
 class TestCodexAgent:
-    def test_configure_openai_env_sets_env_and_model(self, monkeypatch):
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    def test_configure_openai_env_sets_env_and_model(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(codex_agent_module.config, "WORKSPACE_ROOT", str(tmp_path))
 
         task_data = {
             "task_id": 1,
@@ -122,9 +122,55 @@ class TestCodexAgent:
 
         agent = CodexAgent(task_data)
 
-        assert os.environ["OPENAI_API_KEY"] == "sk-test"
-        assert os.environ["OPENAI_BASE_URL"] == "https://example.com"
+        assert agent._codex_env is not None
+        assert agent._codex_env["OPENAI_API_KEY"] == "sk-test"
+        assert agent._codex_env["OPENAI_BASE_URL"] == "https://example.com"
         assert agent._model == "gpt-test"
+
+    def test_configure_openai_env_writes_codex_config_and_auth(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(codex_agent_module.config, "WORKSPACE_ROOT", str(tmp_path))
+
+        task_data = {
+            "task_id": 1,
+            "subtask_id": 1,
+            "prompt": "hello",
+            "user": {"name": "test", "user_name": "test"},
+            "bot": [
+                {
+                    "shell_type": "codex",
+                    "agent_config": {
+                        "env": {
+                            "api_key": "sk-test",
+                            "CODEX_CONFIG_TOML": (
+                                'model_provider = "cch"\\n'
+                                'model = "gpt-test"\\n'
+                                "\\n"
+                                "[features]\\n"
+                                "plan_tool = true\\n"
+                            ),
+                        }
+                    },
+                }
+            ],
+        }
+
+        CodexAgent(task_data)
+
+        codex_dir = tmp_path / "1" / ".wegent_home" / ".codex"
+        auth_path = codex_dir / "auth.json"
+        config_path = codex_dir / "config.toml"
+
+        assert auth_path.exists() is True
+        assert json.loads(auth_path.read_text(encoding="utf-8")) == {
+            "OPENAI_API_KEY": "sk-test"
+        }
+
+        assert config_path.exists() is True
+        config_text = config_path.read_text(encoding="utf-8")
+        assert "\\n" not in config_text
+        assert 'model_provider = "cch"' in config_text
 
     def test_build_command_includes_model(self):
         task_data = {
@@ -149,6 +195,7 @@ class TestCodexAgent:
 
     @pytest.mark.asyncio
     async def test_async_execute_streams_and_completes(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(codex_agent_module.config, "WORKSPACE_ROOT", str(tmp_path))
         task_data = {
             "task_id": 123,
             "subtask_id": 1,
@@ -158,7 +205,19 @@ class TestCodexAgent:
             "git_repo_id": "1",
             "branch_name": "main",
             "user": {"name": "test", "user_name": "test"},
-            "bot": [{"shell_type": "codex", "cwd": str(tmp_path)}],
+            "bot": [
+                {
+                    "shell_type": "codex",
+                    "cwd": str(tmp_path),
+                    "agent_config": {
+                        "env": {
+                            "api_key": "sk-test",
+                            "base_url": "https://example.com",
+                            "CODEX_CONFIG_TOML": 'model_provider = "cch"\\n',
+                        }
+                    },
+                }
+            ],
         }
         agent = CodexAgent(task_data)
         agent.options["cwd"] = str(tmp_path)
@@ -173,6 +232,10 @@ class TestCodexAgent:
         )
 
         async def _fake_create_subprocess_exec(*args, **kwargs):
+            assert kwargs.get("env") is not None
+            assert kwargs["env"].get("OPENAI_API_KEY") == "sk-test"
+            assert kwargs["env"].get("OPENAI_BASE_URL") == "https://example.com"
+            assert kwargs["env"].get("HOME") == str(tmp_path / "123" / ".wegent_home")
             return fake_proc
 
         monkeypatch.setattr(

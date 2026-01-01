@@ -16,7 +16,8 @@ from typing import Any, Dict, Optional
 
 from executor.agents.agno.thinking_step_manager import ThinkingStepManager
 from executor.agents.base import Agent
-from executor.agents.claude_code.progress_state_manager import ProgressStateManager
+from executor.agents.claude_code.progress_state_manager import \
+    ProgressStateManager
 from executor.config import config
 from executor.tasks.resource_manager import ResourceManager
 from executor.tasks.task_state_manager import TaskState, TaskStateManager
@@ -57,6 +58,8 @@ class CodexAgent(Agent):
 
         self._process: Optional[asyncio.subprocess.Process] = None
         self._model: Optional[str] = None
+        self._codex_env: Optional[Dict[str, str]] = None
+        self._codex_dir: Optional[Path] = None
 
         # Configure OpenAI auth for Codex CLI from bot agent_config
         self._configure_openai_env(task_data)
@@ -76,7 +79,7 @@ class CodexAgent(Agent):
             deploy_skills_from_backend(
                 task_data=self.task_data,
                 skills=skills,
-                skills_dir=os.path.expanduser("~/.codex/skills"),
+                skills_dir=str(self._get_codex_dir() / "skills"),
             )
             return TaskStatus.SUCCESS
         except Exception as e:
@@ -113,12 +116,34 @@ class CodexAgent(Agent):
             return
 
         api_key = env.get("api_key")
-        if isinstance(api_key, str) and api_key and api_key != "***":
-            os.environ["OPENAI_API_KEY"] = api_key
-
         base_url = env.get("base_url")
+        codex_config_toml = env.get("CODEX_CONFIG_TOML")
+
+        # Never mutate the host process environment for credentials/config.
+        # We pass an isolated environment to the Codex CLI subprocess instead.
+        codex_env: Dict[str, str] = dict(os.environ)
+        self._codex_env = codex_env
+
+        should_isolate_home = (
+            isinstance(api_key, str) and api_key and api_key != "***"
+        ) or (isinstance(codex_config_toml, str) and codex_config_toml.strip())
+        if should_isolate_home:
+            self._prepare_isolated_codex_dir(codex_env)
+
+        if isinstance(api_key, str) and api_key and api_key != "***":
+            codex_env["OPENAI_API_KEY"] = api_key
+            if should_isolate_home:
+                self._ensure_codex_auth(api_key)
+
         if isinstance(base_url, str) and base_url.strip():
-            os.environ["OPENAI_BASE_URL"] = base_url.strip()
+            codex_env["OPENAI_BASE_URL"] = base_url.strip()
+
+        if (
+            should_isolate_home
+            and isinstance(codex_config_toml, str)
+            and codex_config_toml.strip()
+        ):
+            self._ensure_codex_config(codex_config_toml)
 
         model = env.get("model_id") or env.get("model")
         if isinstance(model, str) and model.strip():
@@ -128,12 +153,65 @@ class CodexAgent(Agent):
             "Configured Codex env (masked): %s",
             mask_sensitive_data(
                 {
-                    "has_api_key": bool(os.environ.get("OPENAI_API_KEY")),
-                    "base_url": os.environ.get("OPENAI_BASE_URL", ""),
+                    "has_api_key": bool(codex_env.get("OPENAI_API_KEY")),
+                    "base_url": codex_env.get("OPENAI_BASE_URL", ""),
                     "model": self._model,
+                    "codex_dir": str(self._codex_dir) if self._codex_dir else "",
                 }
             ),
         )
+
+    def _prepare_isolated_codex_dir(self, codex_env: Dict[str, str]) -> None:
+        codex_home = Path(config.WORKSPACE_ROOT) / str(self.task_id) / ".wegent_home"
+        try:
+            codex_home.mkdir(parents=True, exist_ok=True)
+            os.chmod(codex_home, 0o700)
+        except Exception as e:
+            logger.warning("Failed to prepare Codex HOME directory: %s", e)
+
+        codex_env["HOME"] = str(codex_home)
+        self._codex_dir = codex_home / ".codex"
+        try:
+            self._codex_dir.mkdir(parents=True, exist_ok=True)
+            os.chmod(self._codex_dir, 0o700)
+        except Exception as e:
+            logger.warning("Failed to prepare Codex directory: %s", e)
+
+    def _get_codex_dir(self) -> Path:
+        if self._codex_dir is not None:
+            return self._codex_dir
+        return Path(os.path.expanduser("~/.codex"))
+
+    def _ensure_codex_auth(self, api_key: str) -> None:
+        try:
+            codex_dir = self._get_codex_dir()
+            codex_dir.mkdir(parents=True, exist_ok=True)
+
+            auth_path = codex_dir / "auth.json"
+            auth_path.write_text(
+                json.dumps({"OPENAI_API_KEY": api_key}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            os.chmod(auth_path, 0o600)
+        except Exception as e:
+            logger.warning("Failed to write Codex auth.json: %s", e)
+
+    def _ensure_codex_config(self, codex_config_toml: str) -> None:
+        try:
+            codex_dir = self._get_codex_dir()
+            codex_dir.mkdir(parents=True, exist_ok=True)
+
+            decoded = self._decode_codex_config_toml(codex_config_toml)
+            config_path = codex_dir / "config.toml"
+            config_path.write_text(decoded, encoding="utf-8")
+            os.chmod(config_path, 0o600)
+        except Exception as e:
+            logger.warning("Failed to write Codex config.toml: %s", e)
+
+    def _decode_codex_config_toml(self, value: str) -> str:
+        # Backend stores config in JSON and may escape newlines for transport.
+        decoded = value.replace("\\r\\n", "\n").replace("\\n", "\n")
+        return decoded.replace('\\"', '"')
 
     def _initialize_state_manager(self) -> None:
         if self.state_manager is not None:
@@ -277,6 +355,7 @@ class CodexAgent(Agent):
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=self._codex_env,
         )
         self._process = process
         self.resource_manager.register_resource(
@@ -468,8 +547,8 @@ class CodexAgent(Agent):
     async def _execute_web_ui_validator(self) -> TaskStatus:
         shell_type = "Codex"
         skill_name = "web_ui_validator"
-        script_path = os.path.expanduser(
-            f"~/.codex/skills/{skill_name}/web_ui_validator.py"
+        script_path = str(
+            self._get_codex_dir() / "skills" / skill_name / "web_ui_validator.py"
         )
 
         if not os.path.exists(script_path):
@@ -532,6 +611,7 @@ class CodexAgent(Agent):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=work_dir,
+            env=self._codex_env,
         )
         self._process = process
         self.resource_manager.register_resource(
@@ -592,7 +672,9 @@ class CodexAgent(Agent):
     async def _execute_shell_smoke(self) -> TaskStatus:
         shell_type = "Codex"
         skill_name = "shell_smoke"
-        script_path = os.path.expanduser(f"~/.codex/skills/{skill_name}/shell_smoke.py")
+        script_path = str(
+            self._get_codex_dir() / "skills" / skill_name / "shell_smoke.py"
+        )
 
         if not os.path.exists(script_path):
             msg = f"Shell smoke skill not deployed: missing {script_path}"
@@ -650,6 +732,7 @@ class CodexAgent(Agent):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=work_dir,
+            env=self._codex_env,
         )
         self._process = process
         self.resource_manager.register_resource(
