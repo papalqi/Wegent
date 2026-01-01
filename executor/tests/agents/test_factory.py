@@ -2,12 +2,14 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from executor.agents.factory import AgentFactory
-from executor.agents.claude_code.claude_code_agent import ClaudeCodeAgent
 from executor.agents.agno.agno_agent import AgnoAgent
+from executor.agents.claude_code.claude_code_agent import ClaudeCodeAgent
+from executor.agents.codex.codex_agent import CodexAgent
 from executor.agents.dify.dify_agent import DifyAgent
+from executor.agents.factory import AgentFactory
 
 
 class TestAgentFactory:
@@ -20,8 +22,9 @@ class TestAgentFactory:
         - requests.get: DifyAgent.__init__ calls _get_app_mode() which makes GET to /v1/info
         - requests.post: CallbackClient.send_callback() makes POST to callback URL
         """
-        with patch('executor.agents.dify.dify_agent.requests.get') as mock_get, \
-             patch('executor.callback.callback_client.requests.post') as mock_post:
+        with patch("executor.agents.dify.dify_agent.requests.get") as mock_get, patch(
+            "executor.callback.callback_client.requests.post"
+        ) as mock_post:
             # Mock GET response for _get_app_mode()
             mock_get_response = MagicMock()
             mock_get_response.status_code = 200
@@ -31,7 +34,7 @@ class TestAgentFactory:
             # Mock POST response for callback
             mock_post_response = MagicMock()
             mock_post_response.status_code = 200
-            mock_post_response.content = b'{}'
+            mock_post_response.content = b"{}"
             mock_post_response.json.return_value = {}
             mock_post.return_value = mock_post_response
 
@@ -45,13 +48,8 @@ class TestAgentFactory:
             "subtask_id": 456,
             "task_title": "Test Task",
             "subtask_title": "Test Subtask",
-            "user": {
-                "user_name": "testuser"
-            },
-            "bot": [{
-                "api_key": "test_api_key",
-                "model": "claude-3-5-sonnet-20241022"
-            }]
+            "user": {"user_name": "testuser"},
+            "bot": [{"api_key": "test_api_key", "model": "claude-3-5-sonnet-20241022"}],
         }
 
     def test_get_claudecode_agent(self, task_data):
@@ -84,6 +82,21 @@ class TestAgentFactory:
         assert agent is not None
         assert isinstance(agent, AgnoAgent)
 
+    def test_get_codex_agent(self, task_data):
+        """Test creating Codex agent"""
+        agent = AgentFactory.get_agent("codex", task_data)
+
+        assert agent is not None
+        assert isinstance(agent, CodexAgent)
+        assert agent.task_id == task_data["task_id"]
+
+    def test_get_codex_agent_case_insensitive(self, task_data):
+        """Test creating Codex agent with different case"""
+        agent = AgentFactory.get_agent("CoDeX", task_data)
+
+        assert agent is not None
+        assert isinstance(agent, CodexAgent)
+
     def test_get_dify_agent(self, task_data):
         """Test creating Dify agent"""
         agent = AgentFactory.get_agent("dify", task_data)
@@ -114,8 +127,10 @@ class TestAgentFactory:
     def test_agents_registry(self):
         """Test that agents registry contains expected agents"""
         assert "claudecode" in AgentFactory._agents
+        assert "codex" in AgentFactory._agents
         assert "agno" in AgentFactory._agents
         assert "dify" in AgentFactory._agents
         assert AgentFactory._agents["claudecode"] == ClaudeCodeAgent
+        assert AgentFactory._agents["codex"] == CodexAgent
         assert AgentFactory._agents["agno"] == AgnoAgent
         assert AgentFactory._agents["dify"] == DifyAgent
