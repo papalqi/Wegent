@@ -21,6 +21,7 @@ import { taskApis } from '@/apis/tasks';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUser } from '@/features/common/UserContext';
+import { getTaskStatusLabelKey } from '@/utils/taskStatus';
 
 type TaskTitleDropdownProps = {
   title?: string;
@@ -42,6 +43,26 @@ export default function TaskTitleDropdown({
   const { user } = useUser();
   const displayTitle = title;
   const isGroupChat = taskDetail?.is_group_chat || false;
+  const statusKey = taskDetail ? getTaskStatusLabelKey(taskDetail.status) : null;
+  const statusLabel = taskDetail ? (statusKey ? t(statusKey) : taskDetail.status) : null;
+
+  const getStatusBadgeClassName = (status?: string | null) => {
+    switch (status) {
+      case 'COMPLETED':
+        return 'bg-green-500/10 text-green-600 dark:text-green-400';
+      case 'FAILED':
+        return 'bg-red-500/10 text-red-600 dark:text-red-400';
+      case 'CANCELLED':
+        return 'bg-gray-500/10 text-gray-600 dark:text-gray-400';
+      case 'CANCELLING':
+        return 'bg-orange-500/10 text-orange-600 dark:text-orange-400';
+      case 'PENDING':
+        return 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+      case 'RUNNING':
+      default:
+        return 'bg-primary/10 text-primary';
+    }
+  };
 
   const [showMembersDialog, setShowMembersDialog] = useState(false);
   const [showInviteLinkDialog, setShowInviteLinkDialog] = useState(false);
@@ -112,7 +133,17 @@ export default function TaskTitleDropdown({
               className
             )}
           >
-            <span className="truncate">{displayTitle}</span>
+            <span className="flex-1 min-w-0 truncate">{displayTitle}</span>
+            {statusLabel && (
+              <span
+                className={cn(
+                  'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0',
+                  getStatusBadgeClassName(taskDetail?.status)
+                )}
+              >
+                {statusLabel}
+              </span>
+            )}
             <ChevronDownIcon className="h-4 w-4 flex-shrink-0 text-text-muted" />
           </button>
         </DropdownMenuTrigger>
@@ -142,7 +173,17 @@ export default function TaskTitleDropdown({
             )}
           >
             <Users className="h-4 w-4 flex-shrink-0 text-text-muted" />
-            <span className="truncate">{displayTitle}</span>
+            <span className="flex-1 min-w-0 truncate">{displayTitle}</span>
+            {statusLabel && (
+              <span
+                className={cn(
+                  'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0',
+                  getStatusBadgeClassName(taskDetail?.status)
+                )}
+              >
+                {statusLabel}
+              </span>
+            )}
             <ChevronDownIcon className="h-4 w-4 flex-shrink-0 text-text-muted" />
           </button>
         </DropdownMenuTrigger>

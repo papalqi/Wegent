@@ -171,11 +171,13 @@ export default function SearchDialog({
       case 'FAILED':
         return <XCircle className="w-4 h-4 text-red-500" />;
       case 'CANCELLED':
-        return <StopCircle className="w-4 h-4 text-orange-500" />;
+        return <StopCircle className="w-4 h-4 text-gray-400" />;
       case 'PENDING':
         return <PauseCircle className="w-4 h-4 text-yellow-500" />;
       case 'RUNNING':
         return <RotateCw className="w-4 h-4 text-blue-500 animate-spin" />;
+      case 'CANCELLING':
+        return <RotateCw className="w-4 h-4 text-orange-500 animate-spin" />;
       default:
         return null;
     }

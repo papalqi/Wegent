@@ -24,6 +24,8 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { taskApis } from '@/apis/tasks';
 import { isTaskUnread } from '@/utils/taskViewStatus';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { getTaskStatusLabelKey } from '@/utils/taskStatus';
+import { saveLastTeamByMode } from '@/utils/userPreferences';
 
 interface TaskListSectionProps {
   tasks: Task[];
@@ -51,6 +53,7 @@ export default function TaskListSection({
     selectedTaskDetail,
     setSelectedTask,
     refreshTasks,
+    refreshSelectedTaskDetail,
     viewStatusVersion,
     markTaskAsViewed,
   } = useTaskContext();
@@ -256,6 +259,54 @@ export default function TaskListSection({
     }
   };
 
+  const handleRefreshStatus = (taskId: number) => {
+    refreshTasks();
+    if (selectedTaskDetail?.id === taskId) {
+      refreshSelectedTaskDetail(false);
+    }
+  };
+
+  const handleCancelTask = async (taskId: number) => {
+    setLoading(true);
+    try {
+      await taskApis.cancelTask(taskId);
+      handleRefreshStatus(taskId);
+    } catch (err) {
+      console.error('Cancel failed', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inferTaskMode = (task: Task): 'chat' | 'code' => {
+    if (task.task_type === 'code') return 'code';
+    if (task.task_type === 'chat') return 'chat';
+    if (task.git_repo && task.git_repo.trim() !== '') return 'code';
+    return 'chat';
+  };
+
+  const handleRestartTask = (task: Task) => {
+    const confirmed = confirm(
+      t(
+        'common:tasks.restart_confirm_message',
+        'Restart will start a new task and reset the current view. Continue?'
+      )
+    );
+    if (!confirmed) return;
+
+    const mode = inferTaskMode(task);
+    const targetPath = mode === 'code' ? paths.code.getHref() : paths.chat.getHref();
+
+    if (typeof window !== 'undefined' && task.team_id) {
+      saveLastTeamByMode(task.team_id, mode);
+    }
+
+    setSelectedTask(null);
+    clearAllStreams();
+    router.replace(targetPath);
+    onTaskClick?.();
+  };
+
   if (tasks.length === 0) return null;
 
   const getStatusIcon = (status: string) => {
@@ -275,6 +326,13 @@ export default function TaskListSection({
         );
       case 'PENDING':
         return <PauseCircle className="w-4 h-4 text-yellow-500" />;
+      case 'CANCELLING':
+        return (
+          <RotateCw
+            className="w-4 h-4 text-orange-500 animate-spin"
+            style={{ animationDuration: '1.2s' }}
+          />
+        );
       default:
         return <PauseCircle className="w-4 h-4 text-gray-400" />;
     }
@@ -392,6 +450,8 @@ export default function TaskListSection({
 
             const truncatedTitle =
               task.title.length > 30 ? task.title.slice(0, 30) + '...' : task.title;
+            const statusKey = getTaskStatusLabelKey(task.status);
+            const statusLabel = statusKey ? t(statusKey) : task.status;
 
             return (
               <TooltipProvider key={task.id}>
@@ -420,7 +480,7 @@ export default function TaskListSection({
                   <TooltipContent side="right" className="max-w-xs">
                     <p className="font-medium">{truncatedTitle}</p>
                     <p className="text-xs text-text-muted">
-                      {taskTypeLabel} · {formatTimeAgo(task.created_at)}
+                      {taskTypeLabel} · {statusLabel} · {formatTimeAgo(task.created_at)}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -440,6 +500,8 @@ export default function TaskListSection({
             }
             return taskType === 'code' ? t('common:navigation.code') : t('common:navigation.chat');
           })();
+          const statusKey = getTaskStatusLabelKey(task.status);
+          const statusLabel = statusKey ? t(statusKey) : task.status;
 
           return (
             <TooltipProvider key={task.id}>
@@ -495,9 +557,12 @@ export default function TaskListSection({
                         onClick={e => e.stopPropagation()}
                       >
                         <TaskMenu
-                          taskId={task.id}
+                          task={task}
                           handleCopyTaskId={handleCopyTaskId}
                           handleDeleteTask={handleDeleteTask}
+                          handleCancelTask={handleCancelTask}
+                          handleRestartTask={handleRestartTask}
+                          handleRefreshStatus={handleRefreshStatus}
                           isGroupChat={task.is_group_chat}
                         />
                       </div>
@@ -507,7 +572,7 @@ export default function TaskListSection({
                 <TooltipContent side="left" className="max-w-xs">
                   <p className="font-medium">{task.title}</p>
                   <p className="text-xs text-text-muted">
-                    {taskTypeLabel} · {formatTimeAgo(task.created_at)}
+                    {taskTypeLabel} · {statusLabel} · {formatTimeAgo(task.created_at)}
                   </p>
                 </TooltipContent>
               </Tooltip>

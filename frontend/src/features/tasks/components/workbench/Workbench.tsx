@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Disclosure,
   DisclosureButton,
@@ -136,6 +136,10 @@ function formatDateTime(dateString: string | undefined): string {
   }
 }
 
+function normalizeTaskId(value: string | undefined): string {
+  return value?.replace(/^#/, '') || '';
+}
+
 export default function Workbench({
   isOpen,
   onClose,
@@ -159,11 +163,18 @@ export default function Workbench({
   const { theme } = useTheme();
   const { t } = useTranslation();
 
+  const selectedTaskId = normalizeTaskId(taskNumber);
+
   // Internal state: cache the latest workbench data
   const [cachedWorkbenchData, setCachedWorkbenchData] = useState<WorkbenchData | null>(null);
+  const lastWorkbenchTaskIdRef = useRef<string>('');
 
   // Use cached data for rendering
-  const displayData = cachedWorkbenchData;
+  const displayData =
+    cachedWorkbenchData &&
+    (!selectedTaskId || normalizeTaskId(cachedWorkbenchData.taskNumber) === selectedTaskId)
+      ? cachedWorkbenchData
+      : null;
 
   // Loading state rotation (4 seconds)
   useEffect(() => {
@@ -189,25 +200,43 @@ export default function Workbench({
     }
   }, [displayData, t]);
 
+  // Reset cached workbench/diff state when switching tasks to avoid showing stale data.
+  useEffect(() => {
+    setCachedWorkbenchData(null);
+    setDiffData(null);
+    setIsDiffLoading(false);
+    setDiffLoadError(null);
+    setShowErrorDialog(false);
+    setShowCommits(false);
+    setCopiedCommitId(null);
+    setActiveTab('overview');
+    setIsTimelineExpanded(false);
+    lastWorkbenchTaskIdRef.current = '';
+  }, [selectedTaskId]);
+
   // Observer pattern: listen to workbenchData changes
   useEffect(() => {
     // If the API returns new workbench data (not null/undefined), update the cache
     if (workbenchData) {
-      // Check if task has changed by comparing task numbers or IDs
-      const taskChanged =
-        cachedWorkbenchData && cachedWorkbenchData.taskNumber !== workbenchData.taskNumber;
+      const incomingTaskId = normalizeTaskId(workbenchData.taskNumber);
+      if (selectedTaskId && incomingTaskId && selectedTaskId !== incomingTaskId) {
+        // Ignore stale payload during task switching.
+        return;
+      }
 
       setCachedWorkbenchData(workbenchData);
 
       // Reset diff data when task changes
-      if (taskChanged) {
+      if (lastWorkbenchTaskIdRef.current && lastWorkbenchTaskIdRef.current !== incomingTaskId) {
         setDiffData(null);
         setIsDiffLoading(false);
         setDiffLoadError(null);
       }
+
+      lastWorkbenchTaskIdRef.current = incomingTaskId;
     }
     //If workbenchData is null/undefined, keep the previous state (don't update cache)
-  }, [workbenchData, cachedWorkbenchData]);
+  }, [workbenchData, selectedTaskId]);
 
   const loadDiffData = async () => {
     if (!cachedWorkbenchData || !cachedWorkbenchData.git_info.target_branch) {

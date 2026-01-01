@@ -107,11 +107,20 @@ class ExecutorKindsService(
 
         # Update subtask status to RUNNING (concurrent safe)
         updated_subtasks = self._update_subtasks_to_running(db, subtasks)
-        db.commit()
-
-        # Format return data
-        result = self._format_subtasks_response(db, updated_subtasks)
-        return result
+        try:
+            # Format return data before commit.
+            #
+            # If formatting fails (e.g., missing related resources), we must rollback;
+            # otherwise subtasks/tasks may get stuck in RUNNING without an executor.
+            result = self._format_subtasks_response(db, updated_subtasks)
+            db.commit()
+            return result
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "dispatch_tasks failed; rolled back subtask/task status updates"
+            )
+            raise
 
     def _get_subtasks_for_task(
         self, db: Session, task_id: int, status: str, limit: int
@@ -995,7 +1004,6 @@ class ExecutorKindsService(
             auth_token = None
             if user:
                 # Generate a JWT token for the user to access backend API
-                from app.core.config import settings
                 from app.core.security import create_access_token
 
                 try:

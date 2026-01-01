@@ -89,6 +89,7 @@ export const TaskContextProvider = ({ children }: { children: ReactNode }) => {
 
   // Track previous task ID for leaving WebSocket room when switching tasks
   const previousTaskIdRef = useRef<number | null>(null);
+  const lastFocusRefreshAtRef = useRef<number>(0);
 
   // Pagination related - legacy combined list
   const [hasMore, setHasMore] = useState(true);
@@ -555,6 +556,31 @@ export const TaskContextProvider = ({ children }: { children: ReactNode }) => {
       cleanup();
     };
   }, [isConnected, registerTaskHandlers, handleTaskCreated, handleTaskInvited, handleTaskStatus]);
+
+  // Re-sync task list when WebSocket reconnects (covers missed events while disconnected)
+  useEffect(() => {
+    if (isConnected) {
+      refreshTasks();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]);
+
+  // Re-sync on window focus (helps keep status accurate without heavy polling)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleFocus = () => {
+      const now = Date.now();
+      // Throttle to avoid spamming refreshes
+      if (now - lastFocusRefreshAtRef.current < 5000) return;
+      lastFocusRefreshAtRef.current = now;
+      refreshTasks();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Removed polling - relying entirely on WebSocket real-time updates
   // Task list will be updated via WebSocket events:
