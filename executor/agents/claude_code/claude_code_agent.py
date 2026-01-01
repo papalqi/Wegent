@@ -31,6 +31,7 @@ from executor.utils.mcp_utils import (
     extract_mcp_servers_config,
     replace_mcp_server_variables,
 )
+from executor.utils.skill_deployer import deploy_skills_from_backend
 from shared.logger import setup_logger
 from shared.models.task import ExecutionResult, ThinkingStep
 from shared.status import TaskStatus
@@ -804,6 +805,9 @@ class ClaudeCodeAgent(Agent):
                 logger.info(f"Task {self.task_id} was cancelled before execution")
                 return TaskStatus.COMPLETED
 
+            if self._should_run_shell_smoke():
+                return await self._execute_shell_smoke()
+
             progress = 65
             # Update current progress
             self._update_progress(progress)
@@ -995,6 +999,134 @@ class ClaudeCodeAgent(Agent):
                 ).dict(),
             )
             return TaskStatus.FAILED
+
+    def _should_run_shell_smoke(self) -> bool:
+        prompt = (self.prompt or "").strip()
+        if "@shell_smoke" not in prompt:
+            return False
+
+        bots = self.task_data.get("bot") or []
+        if not isinstance(bots, list) or not bots:
+            return False
+
+        bot_config = bots[0]
+        if not isinstance(bot_config, dict):
+            return False
+
+        skills = bot_config.get("skills") or []
+        if not isinstance(skills, list):
+            return False
+
+        return "shell_smoke" in skills
+
+    async def _execute_shell_smoke(self) -> TaskStatus:
+        """
+        Run the shell smoke script from Skill package without calling LLM.
+        """
+        shell_type = "ClaudeCode"
+        skill_name = "shell_smoke"
+        script_path = os.path.expanduser(
+            f"~/.claude/skills/{skill_name}/shell_smoke.py"
+        )
+
+        if not os.path.exists(script_path):
+            msg = f"Shell smoke skill not deployed: missing {script_path}"
+            logger.error(msg)
+            self.report_progress(
+                100,
+                TaskStatus.FAILED.value,
+                msg,
+                result={"value": msg, "shell_type": shell_type},
+            )
+            return TaskStatus.FAILED
+
+        work_dir = self.project_path or os.path.join(
+            config.WORKSPACE_ROOT, str(self.task_id), "smoke"
+        )
+        Path(work_dir).mkdir(parents=True, exist_ok=True)
+
+        def _report(progress: int, status: str, message: str, value: str) -> None:
+            if self.state_manager:
+                self.state_manager.report_progress(
+                    progress,
+                    status,
+                    message,
+                    extra_result={"value": value, "shell_type": shell_type},
+                )
+            else:
+                self.report_progress(
+                    progress,
+                    status,
+                    message,
+                    result={"value": value, "shell_type": shell_type},
+                )
+
+        logger.info(
+            "Running shell smoke: script=%s cwd=%s task_id=%s",
+            script_path,
+            work_dir,
+            self.task_id,
+        )
+
+        content = ""
+        _report(70, TaskStatus.RUNNING.value, "Shell smoke started", content)
+
+        process = await asyncio.create_subprocess_exec(
+            "python3",
+            script_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=work_dir,
+        )
+
+        line_count = 0
+        try:
+            assert process.stdout is not None
+            while True:
+                if self.task_state_manager.is_cancelled(self.task_id):
+                    logger.info("Shell smoke cancelled: task_id=%s", self.task_id)
+                    process.terminate()
+                    await process.wait()
+                    _report(
+                        100,
+                        TaskStatus.CANCELLED.value,
+                        "Shell smoke cancelled",
+                        content,
+                    )
+                    return TaskStatus.CANCELLED
+
+                line = await process.stdout.readline()
+                if not line:
+                    break
+
+                text = line.decode("utf-8", errors="replace")
+                content += text
+                line_count += 1
+
+                progress = min(95, 70 + line_count * 5)
+                _report(
+                    progress,
+                    TaskStatus.RUNNING.value,
+                    "Shell smoke running",
+                    content,
+                )
+
+            exit_code = await process.wait()
+            if exit_code != 0:
+                msg = f"Shell smoke failed with exit_code={exit_code}"
+                logger.error(msg)
+                _report(100, TaskStatus.FAILED.value, msg, content)
+                return TaskStatus.FAILED
+
+            _report(100, TaskStatus.COMPLETED.value, "Shell smoke completed", content)
+            return TaskStatus.COMPLETED
+        finally:
+            if process.returncode is None:
+                try:
+                    process.kill()
+                    await process.wait()
+                except Exception:
+                    pass
 
     def _handle_execution_error(
         self, error: Exception, execution_type: str = "execution"
@@ -1391,137 +1523,19 @@ class ClaudeCodeAgent(Agent):
         Args:
             bot_config: Bot configuration containing skills list
         """
+        skills = bot_config.get("skills", [])
+        if not skills:
+            logger.debug("No skills configured for this bot")
+            return
+
+        logger.info("Found %s skills to deploy: %s", len(skills), skills)
+
         try:
-            # Extract skills list from bot_config (skills is at top level, not in spec)
-            skills = bot_config.get("skills", [])
-            if not skills:
-                logger.debug("No skills configured for this bot")
-                return
-
-            logger.info(f"Found {len(skills)} skills to deploy: {skills}")
-
-            # Prepare skills directory
-            skills_dir = os.path.expanduser("~/.claude/skills")
-
-            # Clear existing skills directory
-            if os.path.exists(skills_dir):
-                import shutil
-
-                shutil.rmtree(skills_dir)
-                logger.info(f"Cleared existing skills directory: {skills_dir}")
-
-            Path(skills_dir).mkdir(parents=True, exist_ok=True)
-
-            # Get API base URL and auth token from task_data
-            api_base_url = os.getenv(
-                "TASK_API_DOMAIN", "http://wegent-backend:8000"
-            ).rstrip("/")
-            auth_token = self.task_data.get("auth_token")
-
-            if not auth_token:
-                logger.warning("No auth token available, cannot download skills")
-                return
-
-            logger.info(f"Auth token available for skills download")
-
-            # Download each skill
-            import io
-            import shutil
-            import zipfile
-
-            import requests
-
-            success_count = 0
-            for skill_name in skills:
-                try:
-                    logger.info(f"Downloading skill: {skill_name}")
-
-                    # Get skill by name
-                    list_url = f"{api_base_url}/api/v1/kinds/skills?name={skill_name}"
-                    headers = {"Authorization": f"Bearer {auth_token}"}
-
-                    response = requests.get(list_url, headers=headers, timeout=30)
-                    if response.status_code != 200:
-                        logger.error(
-                            f"Failed to query skill '{skill_name}': HTTP {response.status_code}"
-                        )
-                        continue
-
-                    skills_data = response.json()
-                    skill_items = skills_data.get("items", [])
-
-                    if not skill_items:
-                        logger.error(f"Skill '{skill_name}' not found")
-                        continue
-
-                    # Extract skill ID from labels
-                    skill_item = skill_items[0]
-                    skill_id = (
-                        skill_item.get("metadata", {}).get("labels", {}).get("id")
-                    )
-
-                    if not skill_id:
-                        logger.error(f"Skill '{skill_name}' has no ID in metadata")
-                        continue
-
-                    # Download skill ZIP
-                    download_url = (
-                        f"{api_base_url}/api/v1/kinds/skills/{skill_id}/download"
-                    )
-                    response = requests.get(download_url, headers=headers, timeout=60)
-
-                    if response.status_code != 200:
-                        logger.error(
-                            f"Failed to download skill '{skill_name}': HTTP {response.status_code}"
-                        )
-                        continue
-
-                    # Extract ZIP to ~/.claude/skills/
-                    # The ZIP structure is: skill-name.zip -> skill-name/SKILL.md
-                    # We extract to skills_dir, which will create skills_dir/skill-name/
-                    import zipfile
-
-                    with zipfile.ZipFile(io.BytesIO(response.content)) as zip_file:
-                        # Security check: prevent Zip Slip attacks
-                        for file_info in zip_file.filelist:
-                            if (
-                                file_info.filename.startswith("/")
-                                or ".." in file_info.filename
-                            ):
-                                logger.error(
-                                    f"Unsafe file path in skill ZIP: {file_info.filename}"
-                                )
-                                break
-                        else:
-                            # Extract all files to skills_dir
-                            # This will create skills_dir/skill-name/ automatically
-                            zip_file.extractall(skills_dir)
-                            skill_target_dir = os.path.join(skills_dir, skill_name)
-
-                            # Verify the skill folder was created
-                            if os.path.exists(skill_target_dir) and os.path.isdir(
-                                skill_target_dir
-                            ):
-                                logger.info(
-                                    f"Deployed skill '{skill_name}' to {skill_target_dir}"
-                                )
-                                success_count += 1
-                            else:
-                                logger.error(
-                                    f"Skill folder '{skill_name}' not found after extraction"
-                                )
-
-                except Exception as e:
-                    logger.warning(f"Failed to download skill '{skill_name}': {str(e)}")
-                    continue
-
-            if success_count > 0:
-                logger.info(
-                    f"Successfully deployed {success_count}/{len(skills)} skills to {skills_dir}"
-                )
-            else:
-                logger.warning("No skills were successfully deployed")
-
+            deploy_skills_from_backend(
+                task_data=self.task_data,
+                skills=skills,
+                skills_dir=os.path.expanduser("~/.claude/skills"),
+            )
         except Exception as e:
-            logger.error(f"Error in _download_and_deploy_skills: {str(e)}")
+            logger.error("Error deploying skills: %s", e)
             # Don't raise - skills deployment failure shouldn't block task execution

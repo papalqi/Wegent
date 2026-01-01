@@ -26,6 +26,16 @@
 | 可观测性与安全 | 敏感信息脱敏；关键阶段日志/链路追踪。 | 相同行为。 | Code review：日志/结果不泄露密钥；关键阶段可定位。 |
 | 镜像校验 | Executor Manager 仅对支持的 shell 做镜像依赖检查。 | `/executor-manager/images/validate` 支持 Codex，并增加 Codex 依赖检查项。 | API：校验 Codex 镜像返回 checks + valid。 |
 
+## 推荐的端到端 Smoke 用例
+
+使用内置公共技能 `shell_smoke`，在 **不依赖真实 LLM 输出** 的情况下验证全链路：
+
+1) 为 ClaudeCode/Codex Bot 配置 skill `shell_smoke`
+2) 从前端创建任务并发送 `@shell_smoke`
+3) 验收：
+   - 流式输出能够增量展示
+   - 任务工作目录中生成 `shell_smoke_result.txt`
+
 ## 范围说明 / 明确非目标
 
 - “一比一对齐”不等于复刻上游 Codex/Claude Code 产品所有能力，而是对齐 **Wegent 内 ClaudeCode Shell 的契约**。
@@ -46,4 +56,3 @@
 - `backend/app/services/adapters/executor_kinds.py:1054`
 - `executor_manager/routers/routers.py:446`
 - `plan/2026-01-01_14-03-09-codex-shell-claude-code.md:18`
-

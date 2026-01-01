@@ -26,6 +26,16 @@ This document is the scope contract for implementing the **Codex Shell** in Wege
 | Observability & safety | Sensitive data masking; logs and spans for major phases. | Same behavior. | Code review: no secrets in logs/results; key phases logged/spanned. |
 | Image validation | Executor Manager validates images for supported shells. | Codex is accepted by `/executor-manager/images/validate` and has dependency checks. | API: validate Codex image returns checks + final valid flag. |
 
+## Recommended end-to-end smoke
+
+Use the built-in public skill `shell_smoke` to validate the full pipeline **without relying on real LLM output**:
+
+1) Configure a ClaudeCode/Codex bot with skill `shell_smoke`
+2) Start a task from the frontend and send `@shell_smoke`
+3) Verify:
+   - streaming output appears incrementally
+   - `shell_smoke_result.txt` is written in the task working directory
+
 ## Scope notes / explicit non-goals
 
 - “1:1 parity” does **not** mean reproducing every feature of the upstream Codex/Claude Code products; it means matching **Wegent’s ClaudeCode Shell contract**.
@@ -46,4 +56,3 @@ This document is considered **approved for implementation** when merged together
 - `backend/app/services/adapters/executor_kinds.py:1054`
 - `executor_manager/routers/routers.py:446`
 - `plan/2026-01-01_14-03-09-codex-shell-claude-code.md:18`
-

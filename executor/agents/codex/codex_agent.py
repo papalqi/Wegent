@@ -10,15 +10,16 @@ import asyncio
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from executor.agents.agno.thinking_step_manager import ThinkingStepManager
 from executor.agents.base import Agent
-from executor.agents.claude_code.progress_state_manager import \
-    ProgressStateManager
+from executor.agents.claude_code.progress_state_manager import ProgressStateManager
 from executor.config import config
 from executor.tasks.resource_manager import ResourceManager
 from executor.tasks.task_state_manager import TaskState, TaskStateManager
+from executor.utils.skill_deployer import deploy_skills_from_backend
 from shared.logger import setup_logger
 from shared.status import TaskStatus
 from shared.utils.sensitive_data_masker import mask_sensitive_data
@@ -58,6 +59,28 @@ class CodexAgent(Agent):
 
         # Configure OpenAI auth for Codex CLI from bot agent_config
         self._configure_openai_env(task_data)
+
+    def initialize(self) -> TaskStatus:
+        try:
+            bots = self.task_data.get("bot") or []
+            if not isinstance(bots, list) or not bots:
+                return TaskStatus.SUCCESS
+
+            bot_config = bots[0] if isinstance(bots[0], dict) else {}
+            skills = bot_config.get("skills", [])
+            if not skills:
+                return TaskStatus.SUCCESS
+
+            logger.info("Found %s skills to deploy: %s", len(skills), skills)
+            deploy_skills_from_backend(
+                task_data=self.task_data,
+                skills=skills,
+                skills_dir=os.path.expanduser("~/.codex/skills"),
+            )
+            return TaskStatus.SUCCESS
+        except Exception as e:
+            logger.warning("Codex initialize failed (skills may be unavailable): %s", e)
+            return TaskStatus.SUCCESS
 
     def _extract_codex_options(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
         bots = task_data.get("bot") or []
@@ -227,6 +250,9 @@ class CodexAgent(Agent):
             logger.info("Task %s was cancelled before Codex execution", self.task_id)
             return TaskStatus.COMPLETED
 
+        if self._should_run_shell_smoke():
+            return await self._execute_shell_smoke()
+
         self.thinking_manager.add_thinking_step_by_key(
             title_key="thinking.running", report_immediately=False
         )
@@ -381,6 +407,138 @@ class CodexAgent(Agent):
             self._process = None
             self.resource_manager.unregister_resource(
                 self.task_id, f"codex_proc_{self.session_id}"
+            )
+
+    def _should_run_shell_smoke(self) -> bool:
+        prompt = (self.prompt or "").strip()
+        if "@shell_smoke" not in prompt:
+            return False
+
+        bots = self.task_data.get("bot") or []
+        if not isinstance(bots, list) or not bots:
+            return False
+
+        bot_config = bots[0] if isinstance(bots[0], dict) else {}
+        skills = bot_config.get("skills") or []
+        if not isinstance(skills, list):
+            return False
+
+        return "shell_smoke" in skills
+
+    async def _execute_shell_smoke(self) -> TaskStatus:
+        shell_type = "Codex"
+        skill_name = "shell_smoke"
+        script_path = os.path.expanduser(f"~/.codex/skills/{skill_name}/shell_smoke.py")
+
+        if not os.path.exists(script_path):
+            msg = f"Shell smoke skill not deployed: missing {script_path}"
+            logger.error(msg)
+            if self.state_manager:
+                self.state_manager.report_progress(
+                    100,
+                    TaskStatus.FAILED.value,
+                    msg,
+                    extra_result={"value": msg, "shell_type": shell_type},
+                )
+            else:
+                self.report_progress(
+                    100,
+                    TaskStatus.FAILED.value,
+                    msg,
+                    result={"value": msg, "shell_type": shell_type},
+                )
+            return TaskStatus.FAILED
+
+        work_dir = self.project_path or os.path.join(
+            config.WORKSPACE_ROOT, str(self.task_id), "smoke"
+        )
+        Path(work_dir).mkdir(parents=True, exist_ok=True)
+
+        def _report(progress: int, status: str, message: str, value: str) -> None:
+            if self.state_manager:
+                self.state_manager.report_progress(
+                    progress,
+                    status,
+                    message,
+                    extra_result={"value": value, "shell_type": shell_type},
+                )
+            else:
+                self.report_progress(
+                    progress,
+                    status,
+                    message,
+                    result={"value": value, "shell_type": shell_type},
+                )
+
+        logger.info(
+            "Running shell smoke: script=%s cwd=%s task_id=%s",
+            script_path,
+            work_dir,
+            self.task_id,
+        )
+
+        content = ""
+        _report(70, TaskStatus.RUNNING.value, "Shell smoke started", content)
+
+        process = await asyncio.create_subprocess_exec(
+            "python3",
+            script_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=work_dir,
+        )
+        self._process = process
+        self.resource_manager.register_resource(
+            task_id=self.task_id,
+            resource_id=f"codex_smoke_proc_{self.session_id}",
+            is_async=False,
+        )
+
+        line_count = 0
+        try:
+            assert process.stdout is not None
+            while True:
+                if self.task_state_manager.is_cancelled(self.task_id):
+                    logger.info("Shell smoke cancelled: task_id=%s", self.task_id)
+                    _terminate_process(process)
+                    await process.wait()
+                    _report(
+                        100,
+                        TaskStatus.CANCELLED.value,
+                        "Shell smoke cancelled",
+                        content,
+                    )
+                    return TaskStatus.CANCELLED
+
+                line = await process.stdout.readline()
+                if not line:
+                    break
+
+                text = line.decode("utf-8", errors="replace")
+                content += text
+                line_count += 1
+
+                progress = min(95, 70 + line_count * 5)
+                _report(
+                    progress,
+                    TaskStatus.RUNNING.value,
+                    "Shell smoke running",
+                    content,
+                )
+
+            exit_code = await process.wait()
+            if exit_code != 0:
+                msg = f"Shell smoke failed with exit_code={exit_code}"
+                logger.error(msg)
+                _report(100, TaskStatus.FAILED.value, msg, content)
+                return TaskStatus.FAILED
+
+            _report(100, TaskStatus.COMPLETED.value, "Shell smoke completed", content)
+            return TaskStatus.COMPLETED
+        finally:
+            self._process = None
+            self.resource_manager.unregister_resource(
+                self.task_id, f"codex_smoke_proc_{self.session_id}"
             )
 
     def cancel_run(self) -> bool:
