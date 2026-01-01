@@ -17,6 +17,14 @@
 # Don't exit on error - we want to run all checks and report at the end
 set +e
 
+# Resolve important paths once to avoid issues when the script cd's into modules.
+HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$REPO_ROOT" ]; then
+    REPO_ROOT="$(cd "$HOOKS_DIR/../.." && pwd)"
+fi
+cd "$REPO_ROOT" || exit 1
+
 # Create temp directory for storing check outputs (reduces memory usage)
 TEMP_DIR=$(mktemp -d)
 trap "rm -rf $TEMP_DIR" EXIT
@@ -186,7 +194,7 @@ if [ "$FRONTEND_COUNT" -gt 0 ] 2>/dev/null; then
         echo -e "   ${YELLOW}   Run 'cd frontend && npm install' to install dependencies${NC}"
         WARNINGS+=("Frontend: node_modules not found, checks skipped")
     else
-        cd frontend
+        cd "$REPO_ROOT/frontend" || exit 1
         
         # ESLint (output to temp file to reduce memory usage)
         echo -e "   Running ESLint..."
@@ -230,7 +238,7 @@ if [ "$FRONTEND_COUNT" -gt 0 ] 2>/dev/null; then
         # TypeScript check above already validates type correctness.
         # Full build verification should be done in CI pipeline.
         
-        cd ..
+        cd "$REPO_ROOT" || exit 1
     fi
     echo ""
 fi
@@ -241,7 +249,7 @@ fi
 if [ "$BACKEND_COUNT" -gt 0 ] 2>/dev/null; then
     echo -e "${BLUE}🔍 Backend Checks:${NC}"
     
-    cd backend
+    cd "$REPO_ROOT/backend" || exit 1
     
     # Check if virtual environment or Python packages are available
     if ! command -v black &> /dev/null && [ ! -f "venv/bin/black" ]; then
@@ -380,7 +388,7 @@ if [ "$BACKEND_COUNT" -gt 0 ] 2>/dev/null; then
             FAILED_CHECKS+=("Backend Syntax")
             FAILED_LOGS+=("$TEMP_DIR/syntax.log")
         fi
-        cd ..
+        cd "$REPO_ROOT" || exit 1
     fi
     echo ""
 fi
@@ -391,9 +399,7 @@ fi
 if [ "$BACKEND_COUNT" -gt 0 ] 2>/dev/null; then
     echo -e "${BLUE}🔍 Settings Configuration Check:${NC}"
     
-    # Get script directory and run settings check
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    SETTINGS_CHECK_SCRIPT="$SCRIPT_DIR/check-settings-config.sh"
+    SETTINGS_CHECK_SCRIPT="$HOOKS_DIR/check-settings-config.sh"
     
     if [ -x "$SETTINGS_CHECK_SCRIPT" ]; then
         "$SETTINGS_CHECK_SCRIPT" > "$TEMP_DIR/settings.log" 2>&1
@@ -423,7 +429,7 @@ fi
 if [ "$EXECUTOR_COUNT" -gt 0 ] 2>/dev/null; then
     echo -e "${BLUE}🔍 Executor Checks:${NC}"
     
-    cd executor
+    cd "$REPO_ROOT/executor" || exit 1
     
     if ! command -v pytest &> /dev/null; then
         echo -e "   ${YELLOW}⚠️ SKIP: pytest not found${NC}"
@@ -448,7 +454,7 @@ if [ "$EXECUTOR_COUNT" -gt 0 ] 2>/dev/null; then
         fi
     fi
     
-    cd ..
+    cd "$REPO_ROOT" || exit 1
     echo ""
 fi
 
@@ -458,7 +464,7 @@ fi
 if [ "$EXECUTOR_MGR_COUNT" -gt 0 ] 2>/dev/null; then
     echo -e "${BLUE}🔍 Executor Manager Checks:${NC}"
     
-    cd executor_manager
+    cd "$REPO_ROOT/executor_manager" || exit 1
     if ! command -v pytest &> /dev/null; then
         echo -e "   ${YELLOW}⚠️ SKIP: pytest not found${NC}"
         echo -e "   ${YELLOW}   Run 'pip install pytest' to install dependencies${NC}"
@@ -485,7 +491,7 @@ if [ "$EXECUTOR_MGR_COUNT" -gt 0 ] 2>/dev/null; then
         fi
     fi
     
-    cd ..
+    cd "$REPO_ROOT" || exit 1
     echo ""
 fi
 
@@ -495,9 +501,7 @@ fi
 if [ "$BACKEND_COUNT" -gt 0 ] 2>/dev/null; then
     echo -e "${BLUE}🔍 Alembic Multi-Head Check:${NC}"
 
-    # Get script directory and run alembic check
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    ALEMBIC_CHECK_SCRIPT="$SCRIPT_DIR/check-alembic-heads.sh"
+    ALEMBIC_CHECK_SCRIPT="$HOOKS_DIR/check-alembic-heads.sh"
 
     if [ -x "$ALEMBIC_CHECK_SCRIPT" ]; then
         "$ALEMBIC_CHECK_SCRIPT" > "$TEMP_DIR/alembic.log" 2>&1
