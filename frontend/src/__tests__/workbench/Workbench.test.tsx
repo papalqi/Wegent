@@ -28,7 +28,9 @@ jest.mock('@/apis/tasks', () => ({
 
 describe('Workbench', () => {
   it('clears cached overview when switching tasks without new workbench data', () => {
-    const oldWorkbenchData = {
+    type WorkbenchDataProp = NonNullable<React.ComponentProps<typeof Workbench>['workbenchData']>;
+
+    const oldWorkbenchData: WorkbenchDataProp = {
       taskTitle: 'Old Task',
       taskNumber: '37',
       status: 'completed',
@@ -49,7 +51,7 @@ describe('Workbench', () => {
         source_branch: 'main',
         target_branch: '', // Prevent auto diff loading in test
       },
-    } as const;
+    };
 
     const { rerender } = render(
       <Workbench
