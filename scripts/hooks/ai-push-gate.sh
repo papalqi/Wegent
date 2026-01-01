@@ -7,11 +7,9 @@
 # - Runs all quality checks (lint, type, test, build)
 # - Generates a comprehensive report
 # - Blocks push if critical checks fail
-# - Documentation reminders require verification with AI_VERIFIED=1
 #
 # Usage:
 #   git push                    (runs all checks)
-#   AI_VERIFIED=1 git push      (confirm docs checked and no updates needed)
 # =============================================================================
 
 # Don't exit on error - we want to run all checks and report at the end
@@ -96,7 +94,6 @@ echo ""
 
 # Track check results
 WARNINGS=()
-DOC_REMINDERS=()
 FAILED_CHECKS=()
 FAILED_LOGS=()
 
@@ -123,52 +120,6 @@ echo -e "   ${BLUE}Modules affected:${NC}"
 [ "$EXECUTOR_MGR_COUNT" -gt 0 ] 2>/dev/null && echo -e "   - Executor Manager: $EXECUTOR_MGR_COUNT file(s)"
 [ "$SHARED_COUNT" -gt 0 ] 2>/dev/null && echo -e "   - Shared: $SHARED_COUNT file(s)"
 [ "$OTHER_COUNT" -gt 0 ] 2>/dev/null && echo -e "   - Other: $OTHER_COUNT file(s)"
-echo ""
-
-# -----------------------------------------------------------------------------
-# Check: Documentation reminders
-# -----------------------------------------------------------------------------
-echo -e "${BLUE}📝 Documentation Check:${NC}"
-
-# Backend API/Services changed → User guides (creating-bots, creating-teams, etc.)
-BACKEND_API=$(echo "$CHANGED_FILES" | grep -E "^backend/app/(api|services)/.*\.py$" || true)
-if [ -n "$BACKEND_API" ]; then
-    DOC_REMINDERS+=("Backend API/Services changed → Check docs/*/guides/user/ for user guide updates")
-fi
-
-# Backend Models/Schemas changed → YAML specification reference
-BACKEND_MODELS=$(echo "$CHANGED_FILES" | grep -E "^backend/app/(models|schemas)/.*\.py$" || true)
-if [ -n "$BACKEND_MODELS" ]; then
-    DOC_REMINDERS+=("Backend Models/Schemas changed → Check docs/*/reference/yaml-specification.md")
-fi
-
-# Executor/Agent changed → Architecture and concepts docs
-EXECUTOR_CODE=$(echo "$CHANGED_FILES" | grep -E "^executor/.*\.py$" || true)
-if [ -n "$EXECUTOR_CODE" ]; then
-    DOC_REMINDERS+=("Executor changed → Check docs/*/concepts/architecture.md")
-fi
-
-# Project config changed → Getting started and installation docs
-CONFIG_FILES=$(echo "$CHANGED_FILES" | grep -E "(docker-compose|Dockerfile|requirements\.txt|package\.json)" || true)
-if [ -n "$CONFIG_FILES" ]; then
-    DOC_REMINDERS+=("Project config changed → Check docs/*/getting-started/ for installation/setup updates")
-fi
-
-# Any code change → Consider updating AGENTS.md and README
-ANY_CODE=$(echo "$CHANGED_FILES" | grep -E "^(backend|frontend|executor|executor_manager|shared)/.*\.(py|ts|tsx)$" || true)
-if [ -n "$ANY_CODE" ]; then
-    DOC_REMINDERS+=("Code changed → Consider updating AGENTS.md and README.md/README_zh.md if needed")
-fi
-
-if [ ${#DOC_REMINDERS[@]} -eq 0 ]; then
-    echo -e "   ${GREEN}✅ No documentation updates detected${NC}"
-else
-    echo -e "   ${YELLOW}⚠️ Documentation reminders:${NC}"
-    for reminder in "${DOC_REMINDERS[@]}"; do
-        echo -e "   ${YELLOW}   - $reminder${NC}"
-        WARNINGS+=("Doc: $reminder")
-    done
-fi
 echo ""
 
 # -----------------------------------------------------------------------------
@@ -568,58 +519,6 @@ if [ ${#WARNINGS[@]} -gt 0 ]; then
     for warning in "${WARNINGS[@]}"; do
         echo -e "      ${YELLOW}- $warning${NC}"
     done
-    echo ""
-fi
-
-# -----------------------------------------------------------------------------
-# Check AI_VERIFIED for documentation reminders
-# -----------------------------------------------------------------------------
-if [ ${#DOC_REMINDERS[@]} -gt 0 ] && [ "$AI_VERIFIED" != "1" ]; then
-    echo -e "${CYAN}══════════════════════════════════════════════════════════${NC}"
-    echo ""
-    echo -e "${RED}${BOLD}🚫 PUSH BLOCKED - Documentation Update Required${NC}"
-    echo ""
-    echo -e "${RED}${BOLD}⚠️  CRITICAL: THIS IS YOUR ONLY CHANCE TO UPDATE DOCUMENTATION${NC}"
-    echo ""
-    echo -e "${YELLOW}${BOLD}Your code changes require documentation updates.${NC}"
-    echo -e "${YELLOW}After this push, there will be NO further opportunity to update docs.${NC}"
-    echo -e "${YELLOW}The documentation must be complete and accurate IN THIS COMMIT.${NC}"
-    echo ""
-    echo -e "${BLUE}Documentation reminders:${NC}"
-    for reminder in "${DOC_REMINDERS[@]}"; do
-        echo -e "   ${YELLOW}• $reminder${NC}"
-    done
-    echo ""
-    echo -e "${BOLD}You MUST either:${NC}"
-    echo ""
-    echo -e "  ${GREEN}1. Update the relevant documentation NOW${NC}"
-    echo -e "     Add doc changes to this commit, then push again."
-    echo -e "     ${CYAN}This is the recommended approach.${NC}"
-    echo ""
-    echo -e "  ${YELLOW}2. ONLY if you have THOROUGHLY VERIFIED that your changes${NC}"
-    echo -e "     ${YELLOW}do NOT require ANY documentation updates:${NC}"
-    echo ""
-    echo -e "     ${GREEN}${BOLD}AI_VERIFIED=1 git push${NC}"
-    echo -e "     ${CYAN}(This confirms you have checked all relevant docs and no updates are needed)${NC}"
-    echo ""
-    echo -e "${RED}${BOLD}════════════════════════════════════════════════════════════${NC}"
-    echo -e "${RED}${BOLD}⚠️  WARNING: INCOMPLETE DOCUMENTATION IS NOT ACCEPTABLE${NC}"
-    echo -e "${RED}${BOLD}════════════════════════════════════════════════════════════${NC}"
-    echo -e "${RED}   • Users depend on accurate documentation${NC}"
-    echo -e "${RED}   • Outdated docs cause confusion and support burden${NC}"
-    echo -e "${RED}   • You will NOT get another chance to update docs for this change${NC}"
-    echo -e "${RED}   • AI_VERIFIED=1 means you CONFIRM docs are already up-to-date${NC}"
-    echo ""
-    echo -e "${CYAN}══════════════════════════════════════════════════════════${NC}"
-    echo ""
-    exit 1
-fi
-
-# If AI_VERIFIED=1 or no doc reminders, proceed
-if [ "$AI_VERIFIED" = "1" ]; then
-    echo -e "${GREEN}══════════════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}✅ AI Verified - Proceeding with push${NC}"
-    echo -e "${GREEN}══════════════════════════════════════════════════════════${NC}"
     echo ""
 fi
 
