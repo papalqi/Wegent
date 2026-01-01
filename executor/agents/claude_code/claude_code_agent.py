@@ -12,6 +12,7 @@ import json
 import os
 import random
 import re
+import shlex
 import string
 import subprocess
 import time
@@ -808,6 +809,9 @@ class ClaudeCodeAgent(Agent):
             if self._should_run_shell_smoke():
                 return await self._execute_shell_smoke()
 
+            if self._should_run_web_ui_validator():
+                return await self._execute_web_ui_validator()
+
             progress = 65
             # Update current progress
             self._update_progress(progress)
@@ -1018,6 +1022,157 @@ class ClaudeCodeAgent(Agent):
             return False
 
         return "shell_smoke" in skills
+
+    def _should_run_web_ui_validator(self) -> bool:
+        prompt = (self.prompt or "").strip()
+        if "@web_ui_validator" not in prompt:
+            return False
+
+        bots = self.task_data.get("bot") or []
+        if not isinstance(bots, list) or not bots:
+            return False
+
+        bot_config = bots[0]
+        if not isinstance(bot_config, dict):
+            return False
+
+        skills = bot_config.get("skills") or []
+        if not isinstance(skills, list):
+            return False
+
+        return "web_ui_validator" in skills
+
+    def _extract_web_ui_validator_args(self) -> List[str]:
+        prompt = (self.prompt or "").strip()
+        token = "@web_ui_validator"
+        if token not in prompt:
+            return []
+
+        for line in prompt.splitlines():
+            idx = line.find(token)
+            if idx == -1:
+                continue
+            remainder = line[idx + len(token) :].strip()
+            if not remainder:
+                return []
+            try:
+                return shlex.split(remainder)
+            except ValueError:
+                return []
+
+        return []
+
+    async def _execute_web_ui_validator(self) -> TaskStatus:
+        shell_type = "ClaudeCode"
+        skill_name = "web_ui_validator"
+        script_path = os.path.expanduser(
+            f"~/.claude/skills/{skill_name}/web_ui_validator.py"
+        )
+
+        if not os.path.exists(script_path):
+            msg = f"Web UI validator skill not deployed: missing {script_path}"
+            logger.error(msg)
+            self.report_progress(
+                100,
+                TaskStatus.FAILED.value,
+                msg,
+                result={"value": msg, "shell_type": shell_type},
+            )
+            return TaskStatus.FAILED
+
+        work_dir = self.project_path or os.path.join(
+            config.WORKSPACE_ROOT, str(self.task_id), "web_ui_validator"
+        )
+        Path(work_dir).mkdir(parents=True, exist_ok=True)
+
+        args = self._extract_web_ui_validator_args()
+
+        def _report(progress: int, status: str, message: str, value: str) -> None:
+            if self.state_manager:
+                self.state_manager.report_progress(
+                    progress,
+                    status,
+                    message,
+                    extra_result={"value": value, "shell_type": shell_type},
+                )
+            else:
+                self.report_progress(
+                    progress,
+                    status,
+                    message,
+                    result={"value": value, "shell_type": shell_type},
+                )
+
+        logger.info(
+            "Running web ui validator: script=%s args=%s cwd=%s task_id=%s",
+            script_path,
+            args,
+            work_dir,
+            self.task_id,
+        )
+
+        content = ""
+        _report(70, TaskStatus.RUNNING.value, "Web UI validator started", content)
+
+        process = await asyncio.create_subprocess_exec(
+            "python3",
+            script_path,
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=work_dir,
+        )
+
+        line_count = 0
+        try:
+            assert process.stdout is not None
+            while True:
+                if self.task_state_manager.is_cancelled(self.task_id):
+                    logger.info("Web UI validator cancelled: task_id=%s", self.task_id)
+                    process.terminate()
+                    await process.wait()
+                    _report(
+                        100,
+                        TaskStatus.CANCELLED.value,
+                        "Web UI validator cancelled",
+                        content,
+                    )
+                    return TaskStatus.CANCELLED
+
+                line = await process.stdout.readline()
+                if not line:
+                    break
+
+                text = line.decode("utf-8", errors="replace")
+                content += text
+                line_count += 1
+
+                progress = min(95, 70 + line_count * 2)
+                _report(
+                    progress,
+                    TaskStatus.RUNNING.value,
+                    "Web UI validator running",
+                    content,
+                )
+
+            exit_code = await process.wait()
+            if exit_code != 0:
+                msg = f"Web UI validator failed with exit_code={exit_code}"
+                logger.error(msg)
+                _report(100, TaskStatus.FAILED.value, msg, content)
+                return TaskStatus.FAILED
+
+            _report(
+                100, TaskStatus.COMPLETED.value, "Web UI validator completed", content
+            )
+            return TaskStatus.COMPLETED
+        finally:
+            if process.returncode is None:
+                try:
+                    process.kill()
+                    await process.wait()
+                except Exception:
+                    pass
 
     async def _execute_shell_smoke(self) -> TaskStatus:
         """

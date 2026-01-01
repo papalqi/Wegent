@@ -1,0 +1,25 @@
+{
+  "base_url": "https://example.com",
+  "steps": [
+    {
+      "action": "open",
+      "url": "/"
+    },
+    {
+      "action": "assert_status",
+      "status": 200
+    },
+    {
+      "action": "assert_contains",
+      "text": "Example Domain"
+    },
+    {
+      "action": "click_link",
+      "text_contains": "Learn more"
+    },
+    {
+      "action": "assert_status",
+      "status": 200
+    }
+  ]
+}

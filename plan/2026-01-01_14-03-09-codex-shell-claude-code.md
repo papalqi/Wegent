@@ -32,6 +32,14 @@ created_at: 2026-01-01T14:03:09+08:00
 - **Codex 运行时不确定性**：Codex CLI/SDK 的安装方式、配置文件路径、非交互模式与流式输出接口可能变化，需要版本锁定与镜像校验。
 - **安全与合规**：OpenAI Key/组织信息等机密如何注入容器与落盘（避免写入镜像层/日志），需要复用现有加密与脱敏策略。
 - **多端兼容**：`amd64/arm64`、不同 Docker 版本、不同企业代理环境下的 npm/pip 安装可靠性。
+- **上线开关与数据初始化**：
+  - `CODEX_SHELL_ENABLED=false` 时，后端会拒绝 Codex Shell 的选择/执行（用于灰度与回滚）。
+  - 公共 Skills（如 `shell_smoke`/`web_ui_validator`）来自 `backend/init_data/skills/`，默认只在启动时初始化一次；新增 Skill 后需要通过 `INIT_DATA_FORCE=true` 触发重新初始化（或清理 Redis `wegent:startup_done`）。
+
+✅ 建议补充的 E2E 用例（可作为验收矩阵一部分）
+
+- **Shell Pipeline Smoke**：在 UI 发送 `@shell_smoke`，验证「流式输出 + 工作目录产物落盘 + MCP(click/type)模拟」全链路可用（ClaudeCode/Codex）。
+- **Web 功能回归**：在 UI 发送 `@web_ui_validator --url ... --assert-contains ...`（或 `--spec` JSON），验证站点关键路径可用，并把日志完整回显到前端消息流。
 
 📎 参考
 
