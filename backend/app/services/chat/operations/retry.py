@@ -14,10 +14,12 @@ from typing import Optional, Tuple
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session, aliased, joinedload
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.kind import Kind
 from app.models.subtask import Subtask, SubtaskRole, SubtaskStatus
 from app.models.task import TaskResource
+from app.schemas.kind import Task
 
 logger = logging.getLogger(__name__)
 
@@ -122,26 +124,48 @@ def reset_subtask_for_retry(db: Session, subtask: Subtask) -> None:
         db: Database session
         subtask: The subtask to reset
 
-    Raises:
-        Exception: If database commit fails
+    Note:
+        This function only mutates ORM objects in the current session. The caller
+        should commit/rollback as part of its transaction boundary.
     """
     subtask.status = SubtaskStatus.PENDING
     subtask.progress = 0
     subtask.error_message = ""
     subtask.result = None
+    subtask.executor_name = None
+    subtask.executor_namespace = None
     subtask.updated_at = datetime.now()
-
-    try:
-        db.commit()
-        db.refresh(subtask)
-    except Exception as e:
-        logger.error(f"Failed to reset subtask: {e}", exc_info=True)
-        db.rollback()
-        raise  # Re-raise to prevent downstream processing
 
     logger.info(
         f"Reset subtask to PENDING: id={subtask.id}, message_id={subtask.message_id}"
     )
+
+
+def reset_task_for_retry(db: Session, task: TaskResource) -> None:
+    """
+    Reset task status to PENDING so executor_manager can pick it up again.
+
+    For non-direct chat (executor-based) tasks, executor_manager polls tasks where
+    `task.status.status == 'PENDING'`. If a task remains FAILED/COMPLETED, retries
+    will appear to "do nothing" because no dispatcher will fetch it.
+
+    Note:
+        This function only mutates ORM objects in the current session. The caller
+        should commit/rollback as part of its transaction boundary.
+    """
+    now = datetime.now()
+    task_crd = Task.model_validate(task.json)
+    if task_crd.status:
+        task_crd.status.status = "PENDING"
+        task_crd.status.progress = 0
+        task_crd.status.errorMessage = ""
+        task_crd.status.result = None
+        task_crd.status.updatedAt = now
+        task_crd.status.completedAt = None
+
+    task.json = task_crd.model_dump(mode="json")
+    task.updated_at = now
+    flag_modified(task, "json")
 
 
 def extract_model_override_info(task: TaskResource) -> Tuple[Optional[str], bool]:

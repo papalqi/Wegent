@@ -13,6 +13,7 @@ from .retry import (
     extract_model_override_info,
     fetch_retry_context,
     reset_subtask_for_retry,
+    reset_task_for_retry,
 )
 
 __all__ = [
@@ -24,5 +25,6 @@ __all__ = [
     # Retry
     "fetch_retry_context",
     "reset_subtask_for_retry",
+    "reset_task_for_retry",
     "extract_model_override_info",
 ]

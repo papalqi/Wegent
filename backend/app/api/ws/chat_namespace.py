@@ -61,6 +61,7 @@ from app.services.chat.operations import (
     extract_model_override_info,
     fetch_retry_context,
     reset_subtask_for_retry,
+    reset_task_for_retry,
     update_subtask_on_cancel,
 )
 from app.services.chat.rag import process_context_and_rag
@@ -1045,8 +1046,38 @@ class ChatNamespace(socketio.AsyncNamespace):
                 f"[WS] chat:retry found user_subtask: id={user_subtask.id}, prompt={user_subtask.prompt[:50] if user_subtask.prompt else ''}..."
             )
 
-            # Reset the failed AI subtask to PENDING status using service module
+            # Reset retry state in DB. For executor-based tasks, the task itself must
+            # also be set back to PENDING so executor_manager can dispatch it again.
             reset_subtask_for_retry(db, failed_ai_subtask)
+            reset_task_for_retry(db, task)
+
+            try:
+                db.commit()
+                db.refresh(failed_ai_subtask)
+                db.refresh(task)
+            except Exception as e:
+                logger.error(
+                    f"[WS] chat:retry failed to reset state: {e}", exc_info=True
+                )
+                db.rollback()
+                return {"error": "Failed to reset retry state"}
+
+            # Emit immediate task status update for better UX (so UI doesn't feel stuck)
+            try:
+                from app.services.chat.ws_emitter import get_ws_emitter
+
+                ws_emitter = get_ws_emitter()
+                if ws_emitter:
+                    await ws_emitter.emit_task_status(
+                        user_id=task.user_id,
+                        task_id=task.id,
+                        status="PENDING",
+                        progress=0,
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"[WS] chat:retry failed to emit task:status PENDING: {e}"
+                )
 
             # Trigger AI response using unified trigger
             from app.models.user import User
