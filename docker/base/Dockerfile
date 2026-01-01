@@ -12,7 +12,7 @@ RUN dnf upgrade -y \
  && ln -sf /usr/bin/python3.12 /usr/bin/python3 \
  && ln -sf /usr/bin/pip3.12 /usr/bin/pip3 \
  && ln -sf /usr/bin/pip3.12 /usr/bin/pip \
- && npm install -g @anthropic-ai/claude-code@2.0.25 \
+ && npm install -g @anthropic-ai/claude-code@2.0.25 @openai/codex@0.77.0 \
  && dnf clean all \
  && yum clean all \
  && rm -rf /var/cache/yum/* /var/cache/dnf/*
