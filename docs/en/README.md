@@ -44,6 +44,7 @@ Technical documentation for Wegent developers:
 - [Testing](./guides/developer/testing.md) - Unit and integration testing
 - [Database Migrations](./guides/developer/database-migrations.md) - Alembic database migration management
 - [Codex Shell Parity Matrix](./guides/developer/codex-shell-parity.md) - Scope contract for Codex (vs ClaudeCode)
+- [Codex Shell Runtime Decision](./guides/developer/codex-shell-runtime.md) - Runtime and container PoC
 
 ### 📋 Reference
 

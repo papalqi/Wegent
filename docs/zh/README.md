@@ -44,6 +44,7 @@ Wegent 是一个开源的 AI 原生操作系统，使您能够大规模定义、
 - [测试](./guides/developer/testing.md) - 单元测试和集成测试
 - [数据库迁移](./guides/developer/database-migrations.md) - Alembic 数据库迁移管理
 - [Codex Shell 对齐矩阵](./guides/developer/codex-shell-parity.md) - Codex 范围合同（对齐 ClaudeCode）
+- [Codex Shell 运行时决策](./guides/developer/codex-shell-runtime.md) - 运行时选型与容器 PoC
 
 ### 📋 参考文档
 
