@@ -22,25 +22,15 @@ import requests
 from executor_manager.config.config import EXECUTOR_ENV
 from executor_manager.executors.base import Executor
 from executor_manager.executors.docker.constants import (
-    CONTAINER_OWNER,
-    DEFAULT_API_ENDPOINT,
-    DEFAULT_DOCKER_HOST,
-    DEFAULT_LOCALE,
-    DEFAULT_PROGRESS_COMPLETE,
-    DEFAULT_PROGRESS_RUNNING,
-    DEFAULT_TASK_ID,
-    DEFAULT_TIMEZONE,
-    DOCKER_SOCKET_PATH,
-    WORKSPACE_MOUNT_PATH,
-)
-from executor_manager.executors.docker.utils import (
-    build_callback_url,
-    check_container_ownership,
-    delete_container,
-    find_available_port,
-    get_container_ports,
-    get_running_task_details,
-)
+    CONTAINER_OWNER, DEFAULT_API_ENDPOINT, DEFAULT_DOCKER_HOST, DEFAULT_LOCALE,
+    DEFAULT_PROGRESS_COMPLETE, DEFAULT_PROGRESS_RUNNING, DEFAULT_TASK_ID,
+    DEFAULT_TIMEZONE, DOCKER_SOCKET_PATH, WORKSPACE_MOUNT_PATH)
+from executor_manager.executors.docker.utils import (build_callback_url,
+                                                     check_container_ownership,
+                                                     delete_container,
+                                                     find_available_port,
+                                                     get_container_ports,
+                                                     get_running_task_details)
 from executor_manager.utils.executor_name import generate_executor_name
 from shared.logger import setup_logger
 from shared.status import TaskStatus
@@ -112,7 +102,21 @@ class DockerExecutor(Executor):
         try:
             # Determine execution path based on whether container name exists
             if executor_name:
-                self._execute_in_existing_container(task, execution_status)
+                try:
+                    self._execute_in_existing_container(task, execution_status)
+                except (ValueError, requests.RequestException) as e:
+                    # The task may reference an executor container that has been cleaned up
+                    # (e.g., scheduled deletion of stale executors) or otherwise disappeared.
+                    # In this case, fall back to creating a new container so the task can
+                    # continue instead of failing immediately.
+                    logger.warning(
+                        f"Existing executor container unavailable for task {task_id} "
+                        f"(executor_name={executor_name}): {e}. Recreating container."
+                    )
+                    execution_status["executor_name"] = generate_executor_name(
+                        task_id, subtask_id, user_name
+                    )
+                    self._create_new_container(task, task_info, execution_status)
             else:
                 # Generate new container name
                 execution_status["executor_name"] = generate_executor_name(
@@ -128,6 +132,11 @@ class DockerExecutor(Executor):
         # Validation tasks don't exist in the database, so we skip the callback
         # to avoid 404 errors when trying to update non-existent task status
         if not is_validation_task:
+            callback_error_message: Optional[str] = None
+            if execution_status.get(
+                "callback_status"
+            ) == TaskStatus.FAILED.value and execution_status.get("error_msg"):
+                callback_error_message = execution_status["error_msg"]
             self._call_callback(
                 callback,
                 task_id,
@@ -135,6 +144,7 @@ class DockerExecutor(Executor):
                 execution_status["executor_name"],
                 execution_status["progress"],
                 execution_status["callback_status"],
+                error_message=callback_error_message,
             )
 
         # Return unified result structure
@@ -192,9 +202,7 @@ class DockerExecutor(Executor):
         headers = {}
         try:
             from shared.telemetry.context import (
-                get_request_id,
-                inject_trace_context_to_headers,
-            )
+                get_request_id, inject_trace_context_to_headers)
 
             # Inject W3C Trace Context headers for distributed tracing
             headers = inject_trace_context_to_headers(headers)
@@ -781,9 +789,7 @@ class DockerExecutor(Executor):
                 headers = {}
                 try:
                     from shared.telemetry.context import (
-                        get_request_id,
-                        inject_trace_context_to_headers,
-                    )
+                        get_request_id, inject_trace_context_to_headers)
 
                     # Inject W3C Trace Context headers for distributed tracing
                     headers = inject_trace_context_to_headers(headers)
@@ -866,7 +872,14 @@ class DockerExecutor(Executor):
             }
 
     def _call_callback(
-        self, callback, task_id, subtask_id, executor_name, progress, status
+        self,
+        callback,
+        task_id,
+        subtask_id,
+        executor_name,
+        progress,
+        status,
+        error_message: Optional[str] = None,
     ):
         """
         Call the provided callback function with task information.
@@ -883,13 +896,16 @@ class DockerExecutor(Executor):
             return
 
         try:
-            callback(
-                task_id=task_id,
-                subtask_id=subtask_id,
-                executor_name=executor_name,
-                progress=progress,
-                status=status,
-            )
+            payload = {
+                "task_id": task_id,
+                "subtask_id": subtask_id,
+                "executor_name": executor_name,
+                "progress": progress,
+                "status": status,
+            }
+            if error_message is not None:
+                payload["error_message"] = error_message
+            callback(**payload)
         except Exception as e:
             logger.error(f"Error in callback for task {task_id}: {e}")
 
