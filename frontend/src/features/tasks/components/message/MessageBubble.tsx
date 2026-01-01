@@ -1411,6 +1411,9 @@ const MessageBubble = memo(
                         ? t('chat:errors.request_failed_retry')
                         : t('chat:errors.model_unsupported')}
                     </p>
+                    <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-red-100/60 dark:bg-red-950/30 p-2 text-xs text-red-900 dark:text-red-100 whitespace-pre-wrap break-words">
+                      {msg.error}
+                    </pre>
                   </div>
                 </div>
 
