@@ -2,16 +2,18 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-import sys
 import os
+import sys
 from pathlib import Path
 
 # Add parent directory to Python path to allow imports
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+import logging
+from unittest.mock import MagicMock, Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
 
 
 @pytest.fixture
@@ -41,5 +43,21 @@ def mock_executor_config():
         "image": "test/executor:latest",
         "cpu_limit": "1.0",
         "memory_limit": "512m",
-        "network_mode": "bridge"
+        "network_mode": "bridge",
     }
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_logging():
+    """Clean up logging handlers and queue listeners at test session end."""
+    yield
+
+    for logger_name in list(logging.Logger.manager.loggerDict.keys()):
+        logger = logging.getLogger(logger_name)
+        if hasattr(logger, "_queue_listener"):
+            try:
+                logger._queue_listener.stop()
+            except Exception:
+                pass
+
+    logging.shutdown()

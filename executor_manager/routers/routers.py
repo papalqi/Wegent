@@ -25,11 +25,8 @@ from pydantic import BaseModel
 from shared.logger import setup_logger
 from shared.models.task import TasksRequest
 from shared.telemetry.config import get_otel_config
-from shared.telemetry.context import (
-    set_request_context,
-    set_task_context,
-    set_user_context,
-)
+from shared.telemetry.context import (set_request_context, set_task_context,
+                                      set_user_context)
 
 # Setup logger
 logger = setup_logger(__name__)
@@ -420,7 +417,7 @@ class ValidateImageRequest(BaseModel):
     """Request body for validating base image compatibility"""
 
     image: str
-    shell_type: str  # e.g., "ClaudeCode", "Agno"
+    shell_type: str  # e.g., "ClaudeCode", "Codex", "Agno"
     user_name: Optional[str] = None
     shell_name: Optional[str] = None  # Optional shell name for tracking
     validation_id: Optional[str] = None  # UUID for tracking validation status
@@ -452,6 +449,7 @@ async def validate_image(request: ValidateImageRequest, http_request: Request):
     The validation is asynchronous - results are returned via callback mechanism.
 
     For ClaudeCode: checks Node.js 20.x, claude-code CLI, SQLite 3.50+, Python 3.12
+    For Codex: checks Node.js 20.x, codex CLI, Python 3.12
     For Agno: checks Python 3.12
     For Dify: No check needed (external_api type)
 
@@ -480,7 +478,7 @@ async def validate_image(request: ValidateImageRequest, http_request: Request):
         }
 
     # Validate shell_type
-    if shell_type not in ["ClaudeCode", "Agno"]:
+    if shell_type not in ["ClaudeCode", "Codex", "Agno"]:
         return {
             "status": "error",
             "message": f"Unknown shell type: {shell_type}",
