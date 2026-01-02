@@ -587,6 +587,7 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          base: ${{ github.event.repository.default_branch }}
           commit-message: "chore: update docker-compose.yml to version ${{ needs.prepare-release.outputs.new_version }}"
           branch: weagent/update-docker-compose-${{ needs.prepare-release.outputs.new_version }}
           delete-branch: true
