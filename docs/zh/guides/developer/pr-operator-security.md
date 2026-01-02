@@ -119,3 +119,7 @@
 
 - `PR_WRITE_DISABLED` / `REPO_NOT_ALLOWED` / `BASE_NOT_ALLOWED`
 - `HEAD_BRANCH_INVALID` / `DIFF_TOO_LARGE` / `FORBIDDEN_PATH_TOUCHED` / `REQUIRED_CHECKS_FAILED`
+
+## 10. Executor 执行面收敛（参考实现）
+
+为降低注入风险，Executor 侧建议对 PR 相关流程启用受限命令白名单（例如仅允许 `git/gh/glab`），并避免 `shell=True` 拼接；同时对 stdout/stderr 进行统一脱敏后再记录日志。

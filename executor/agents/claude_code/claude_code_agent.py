@@ -23,15 +23,14 @@ from typing import Any, Dict, List, Optional
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from executor.agents.agno.thinking_step_manager import ThinkingStepManager
 from executor.agents.base import Agent
-from executor.agents.claude_code.progress_state_manager import ProgressStateManager
+from executor.agents.claude_code.progress_state_manager import \
+    ProgressStateManager
 from executor.agents.claude_code.response_processor import process_response
 from executor.config import config
 from executor.tasks.resource_manager import ResourceManager
 from executor.tasks.task_state_manager import TaskState, TaskStateManager
-from executor.utils.mcp_utils import (
-    extract_mcp_servers_config,
-    replace_mcp_server_variables,
-)
+from executor.utils.mcp_utils import (extract_mcp_servers_config,
+                                      replace_mcp_server_variables)
 from executor.utils.skill_deployer import deploy_skills_from_backend
 from shared.logger import setup_logger
 from shared.models.task import ExecutionResult, ThinkingStep
@@ -67,6 +66,8 @@ class ClaudeCodeAgent(Agent):
 
     # Static dictionary for storing hook functions
     _hooks: Dict[str, Any] = {}
+
+    _PR_ALLOWED_EXECUTABLES = {"git", "gh", "glab"}
 
     def get_name(self) -> str:
         return "ClaudeCode"
@@ -195,40 +196,72 @@ class ClaudeCodeAgent(Agent):
         self._authenticate_cli(git_domain, git_token)
 
     def _authenticate_cli(self, git_domain: str, git_token: str) -> None:
-
         is_github = "github" in git_domain.lower()
-        cmd = None
-
-        if is_github:
-            # GitHub CLI supports stdin token
-            cmd = f'echo "{git_token}" | gh auth login --with-token'
-        else:
-            # GitLab CLI uses token flag
-            cmd = f'glab auth login --hostname {git_domain} --token "{git_token}"'
 
         self._configure_repo_proxy(git_domain)
 
         try:
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
+            if is_github:
+                # GitHub CLI supports stdin token
+                result = self._run_pr_command(
+                    ["gh", "auth", "login", "--with-token"],
+                    stdin=f"{git_token}\n",
+                )
+            else:
+                result = self._run_pr_command(
+                    [
+                        "glab",
+                        "auth",
+                        "login",
+                        "--hostname",
+                        git_domain,
+                        "--token",
+                        git_token,
+                    ]
+                )
             logger.info(
                 f"{'GitHub' if is_github else 'GitLab'} CLI authenticated for {git_domain}"
             )
             if result.stdout.strip():
-                logger.debug(f"CLI output: {result.stdout.strip()}")
+                logger.debug(
+                    f"CLI output: {mask_sensitive_data(result.stdout.strip())}"
+                )
 
         except subprocess.CalledProcessError as e:
-            stderr = e.stderr.strip() if e.stderr else str(e)
-            logger.warning(f"CLI authentication failed for {git_domain}: {stderr}")
+            stderr = (e.stderr or "").strip()
+            stdout = (e.stdout or "").strip()
+            output = stderr or stdout
+            if output:
+                logger.warning(
+                    f"CLI authentication failed for {git_domain}: {mask_sensitive_data(output)}"
+                )
+            else:
+                logger.warning(
+                    f"CLI authentication failed for {git_domain} (exit_code={e.returncode})"
+                )
         except Exception as e:
             logger.warning(
-                f"Unexpected error during CLI authentication for {git_domain}: {e}"
+                f"Unexpected error during CLI authentication for {git_domain}: {mask_sensitive_data(str(e))}"
             )
+
+    def _run_pr_command(
+        self,
+        args: List[str],
+        *,
+        stdin: Optional[str] = None,
+        timeout_seconds: int = 30,
+    ) -> subprocess.CompletedProcess:
+        if not args or args[0] not in self._PR_ALLOWED_EXECUTABLES:
+            raise ValueError("Command not allowed")
+
+        return subprocess.run(
+            args,
+            input=stdin,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=timeout_seconds,
+        )
 
     def _configure_repo_proxy(self, git_domain: str) -> None:
         """
@@ -272,21 +305,25 @@ class ClaudeCodeAgent(Agent):
             return
 
         for proxy_key, proxy_value in proxy_values.items():
-            cmd = f"git config --global {proxy_key} {proxy_value}"
             try:
-                subprocess.run(
-                    cmd,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    check=True,
+                self._run_pr_command(
+                    ["git", "config", "--global", proxy_key, proxy_value]
                 )
                 logger.info(
                     f"Configured environment {proxy_key} for domain {git_domain}"
                 )
             except subprocess.CalledProcessError as e:
-                stderr = e.stderr.strip() if e.stderr else str(e)
-                logger.warning(f"Proxy configuration failed: {stderr}")
+                stderr = (e.stderr or "").strip()
+                stdout = (e.stdout or "").strip()
+                output = stderr or stdout
+                if output:
+                    logger.warning(
+                        f"Proxy configuration failed: {mask_sensitive_data(output)}"
+                    )
+                else:
+                    logger.warning(
+                        f"Proxy configuration failed (exit_code={e.returncode})"
+                    )
 
     def _get_git_token(
         self, git_domain: str, task_data: Dict[str, Any]
@@ -738,10 +775,8 @@ class ClaudeCodeAgent(Agent):
                 # Copy ContextVars before creating new event loop
                 # ContextVars don't automatically propagate to new event loops
                 try:
-                    from shared.telemetry.context import (
-                        copy_context_vars,
-                        restore_context_vars,
-                    )
+                    from shared.telemetry.context import (copy_context_vars,
+                                                          restore_context_vars)
 
                     saved_context = copy_context_vars()
                 except ImportError:
@@ -1413,9 +1448,7 @@ class ClaudeCodeAgent(Agent):
                     # Copy ContextVars before creating new event loop
                     try:
                         from shared.telemetry.context import (
-                            copy_context_vars,
-                            restore_context_vars,
-                        )
+                            copy_context_vars, restore_context_vars)
 
                         saved_context = copy_context_vars()
                     except ImportError:
@@ -1612,10 +1645,10 @@ class ClaudeCodeAgent(Agent):
             )
 
             # Import and use attachment downloader
-            from executor.services.attachment_downloader import AttachmentDownloader
-            from executor.services.attachment_prompt_processor import (
-                AttachmentPromptProcessor,
-            )
+            from executor.services.attachment_downloader import \
+                AttachmentDownloader
+            from executor.services.attachment_prompt_processor import \
+                AttachmentPromptProcessor
 
             downloader = AttachmentDownloader(
                 workspace=workspace,
