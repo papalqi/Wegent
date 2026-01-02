@@ -775,6 +775,7 @@
     "probe_check_prompt_llm": "Prompt Test",
     "probe_check_embedding": "Embedding Test",
     "probe_check_test_connection": "Connection Test",
+    "probe_cost_warning": "Note: Test/probe sends real requests to the model service and may incur costs or rate limits.",
     "create_success": "Model created successfully",
     "update_success": "Model updated successfully",
     "delete_success": "Model deleted successfully",

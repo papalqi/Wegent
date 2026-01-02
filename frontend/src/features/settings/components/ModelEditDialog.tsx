@@ -1180,6 +1180,8 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
           </div>
         )}
 
+        <div className="mb-2 text-xs text-text-muted">{t('common:models.probe_cost_warning')}</div>
+
         <DialogFooter className="flex items-center justify-between sm:justify-between">
           <Button
             variant="outline"
