@@ -315,10 +315,12 @@ class ExecutorKindsService(
                     task_id=task_id,
                     status="RUNNING",
                     progress=task_crd.status.progress if task_crd.status else 0,
-                    status_phase=task_crd.status.statusPhase if task_crd.status else None,
-                    progress_text=task_crd.status.progressText
-                    if task_crd.status
-                    else None,
+                    status_phase=(
+                        task_crd.status.statusPhase if task_crd.status else None
+                    ),
+                    progress_text=(
+                        task_crd.status.progressText if task_crd.status else None
+                    ),
                 )
 
     def _get_model_config_from_public_model(
@@ -1260,11 +1262,11 @@ class ExecutorKindsService(
 
         task_crd = Task.model_validate(task.json)
         current_task_status = task_crd.status.status if task_crd.status else "PENDING"
-
-        # Calculate task progress
-        progress = int((completed_subtasks / total_subtasks) * 100)
-        if task_crd.status:
-            task_crd.status.progress = progress
+        previous_progress = (
+            task_crd.status.progress
+            if task_crd.status and task_crd.status.progress is not None
+            else 0
+        )
 
         # Find the last non-pending subtask
         last_non_pending_subtask = None
@@ -1324,6 +1326,7 @@ class ExecutorKindsService(
                     )
                 if last_non_pending_subtask.result:
                     task_crd.status.result = last_non_pending_subtask.result
+                task_crd.status.completedAt = datetime.now()
         # Priority 4: Check if the last subtask is completed
         elif subtasks and subtasks[-1].status == SubtaskStatus.COMPLETED:
             # Get last completed subtask
@@ -1342,11 +1345,25 @@ class ExecutorKindsService(
                 "FAILED",
             ]:
                 task_crd.status.status = "RUNNING"
-                # If there is only one subtask, use the subtask's progress
+                # If there is only one subtask, surface its live result/error for better UX.
                 if total_subtasks == 1:
-                    task_crd.status.progress = subtasks[0].progress
                     task_crd.status.result = subtasks[0].result
                     task_crd.status.errorMessage = subtasks[0].error_message
+
+        running_subtask = next(
+            (s for s in reversed(subtasks) if s.status == SubtaskStatus.RUNNING),
+            None,
+        )
+        running_progress = running_subtask.progress if running_subtask else None
+
+        if task_crd.status:
+            task_crd.status.progress = self._calculate_task_progress(
+                total_subtasks=total_subtasks,
+                completed_subtasks=completed_subtasks,
+                running_progress=running_progress,
+                previous_progress=previous_progress,
+                status=task_crd.status.status,
+            )
 
         # Update timestamps
         if task_crd.status:
@@ -1496,6 +1513,60 @@ class ExecutorKindsService(
                 logger.warning(
                     f"[WS] Could not emit task:status event - no event loop available: {e}"
                 )
+
+    @staticmethod
+    def _calculate_task_progress(
+        *,
+        total_subtasks: int,
+        completed_subtasks: int,
+        running_progress: Optional[int],
+        previous_progress: Optional[int],
+        status: str,
+    ) -> int:
+        """
+        Compute task-level progress from subtasks.
+
+        Rules:
+        - When a running subtask reports progress (>0), treat each subtask as an equal-weight step:
+          (completed + running_fraction) / total * 100.
+        - When running progress is not available, increase progress slowly but cap it below completion.
+        - Final states (COMPLETED/FAILED/CANCELLED) converge to 100.
+        """
+
+        def clamp_int(value: Optional[int], minimum: int, maximum: int) -> int:
+            try:
+                v = int(value) if value is not None else 0
+            except Exception:
+                v = 0
+            return max(minimum, min(maximum, v))
+
+        prev = clamp_int(previous_progress, 0, 100)
+
+        if status in ("COMPLETED", "FAILED", "CANCELLED"):
+            return 100
+
+        if total_subtasks <= 0:
+            return min(prev, 99) if status == "RUNNING" else prev
+
+        total = float(total_subtasks)
+        completed = max(0, min(completed_subtasks, total_subtasks))
+        running_p = clamp_int(running_progress, 0, 100)
+
+        base = int((completed / total) * 100)
+
+        if status == "RUNNING" and completed < total_subtasks:
+            if running_p > 0:
+                candidate = int(((completed + (running_p / 100.0)) / total) * 100)
+                progress = max(prev, candidate)
+            else:
+                pseudo_cap = int(((completed + 0.9) / total) * 100)
+                pseudo_cap = min(99, max(base, pseudo_cap))
+                bumped = min(pseudo_cap, max(base, prev + 1))
+                progress = max(prev, bumped)
+
+            return min(progress, 99)
+
+        return max(prev, base)
 
     @staticmethod
     def _derive_status_phase_and_text(
