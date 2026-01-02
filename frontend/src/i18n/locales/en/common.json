@@ -847,6 +847,8 @@
     "base_shell_hint": "The shell type this custom shell is based on (ClaudeCode, Codex, Agno)",
     "base_image": "Base Image",
     "base_image_hint": "Docker image address (e.g., ghcr.io/your-org/your-image:latest)",
+    "create_from_public": "Create from this",
+    "base_image_copied": "Image address copied",
     "no_shells": "No shells available",
     "no_shells_hint": "Click the button above to create your first custom shell",
     "validation_success": "Image validation passed",
@@ -882,6 +884,7 @@
       "base_image_and_shell_required": "Both base image and base shell are required for validation",
       "base_shell_not_found": "Selected base shell not found",
       "image_not_compatible": "Image is not compatible with the selected shell type",
+      "copy_failed": "Failed to copy. Please copy it manually.",
       "group_required": "Group selection is required",
       "group_required_hint": "You must select a group when creating a shell"
     },

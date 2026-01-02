@@ -51,6 +51,12 @@ const STAGE_PROGRESS: Record<ValidationStage, number> = {
 interface ShellEditDialogProps {
   open: boolean;
   shell: UnifiedShell | null;
+  prefill?: {
+    name?: string;
+    displayName?: string;
+    baseShellRef?: string;
+    baseImage?: string;
+  } | null;
   onClose: () => void;
   toast: ReturnType<typeof import('@/hooks/use-toast').useToast>['toast'];
   scope?: 'personal' | 'group' | 'all';
@@ -60,6 +66,7 @@ interface ShellEditDialogProps {
 const ShellEditDialog: React.FC<ShellEditDialogProps> = ({
   open,
   shell,
+  prefill = null,
   onClose,
   toast,
   scope = 'personal',
@@ -111,10 +118,10 @@ const ShellEditDialog: React.FC<ShellEditDialogProps> = ({
         setOriginalBaseImage(shell.baseImage || '');
       } else {
         // Reset for new shell
-        setName('');
-        setDisplayName('');
-        setBaseShellRef('');
-        setBaseImage('');
+        setName(prefill?.name || '');
+        setDisplayName(prefill?.displayName || '');
+        setBaseShellRef(prefill?.baseShellRef || '');
+        setBaseImage(prefill?.baseImage || '');
         setOriginalBaseImage('');
       }
       setValidationStatus(null);
@@ -124,7 +131,7 @@ const ShellEditDialog: React.FC<ShellEditDialogProps> = ({
         pollingRef.current = null;
       }
     }
-  }, [open, shell]);
+  }, [open, shell, prefill]);
 
   // Fetch base shells
   useEffect(() => {

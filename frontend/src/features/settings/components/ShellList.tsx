@@ -10,7 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ResourceListItem } from '@/components/common/ResourceListItem';
 import { Tag } from '@/components/ui/tag';
-import { CommandLineIcon, PencilIcon, TrashIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
+import {
+  CommandLineIcon,
+  PencilIcon,
+  TrashIcon,
+  GlobeAltIcon,
+  DocumentDuplicateIcon,
+} from '@heroicons/react/24/outline';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -46,6 +52,12 @@ const ShellList: React.FC<ShellListProps> = ({
   const [shells, setShells] = useState<UnifiedShell[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingShell, setEditingShell] = useState<UnifiedShell | null>(null);
+  const [createPrefill, setCreatePrefill] = useState<{
+    name?: string;
+    displayName?: string;
+    baseShellRef?: string;
+    baseImage?: string;
+  } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteConfirmShell, setDeleteConfirmShell] = useState<UnifiedShell | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -147,17 +159,57 @@ const ShellList: React.FC<ShellListProps> = ({
     }
 
     setEditingShell(shell);
+    setCreatePrefill(null);
     setDialogOpen(true);
+  };
+
+  const toKebabCase = (input: string) => {
+    const result = input
+      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+      .replace(/[^a-zA-Z0-9-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase();
+
+    return result || 'custom-shell';
+  };
+
+  const handleCreateFromPublic = (shell: UnifiedShell) => {
+    if (shell.type !== 'public') return;
+    if (shell.executionType !== 'local_engine') return;
+
+    setEditingShell(null);
+    setCreatePrefill({
+      name: `${toKebabCase(shell.name)}-custom`,
+      baseShellRef: shell.name,
+      baseImage: shell.baseImage || '',
+    });
+    setDialogOpen(true);
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: t('common:shells.base_image_copied') });
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      toast({
+        variant: 'destructive',
+        title: t('common:shells.errors.copy_failed'),
+      });
+    }
   };
 
   const handleEditClose = () => {
     setEditingShell(null);
+    setCreatePrefill(null);
     setDialogOpen(false);
     fetchShells();
   };
 
   const handleCreate = () => {
     setEditingShell(null);
+    setCreatePrefill(null);
     setDialogOpen(true);
   };
 
@@ -235,7 +287,11 @@ const ShellList: React.FC<ShellListProps> = ({
                                       label: shell.baseImage,
                                       variant: 'default' as const,
                                       className:
-                                        'hidden md:inline-flex text-xs truncate max-w-[200px]',
+                                        'hidden md:inline-flex text-xs truncate max-w-[200px] cursor-pointer',
+                                      props: {
+                                        title: shell.baseImage,
+                                        onClick: () => copyToClipboard(shell.baseImage!),
+                                      },
                                     },
                                   ]
                                 : []),
@@ -306,7 +362,11 @@ const ShellList: React.FC<ShellListProps> = ({
                                       label: shell.baseImage,
                                       variant: 'default' as const,
                                       className:
-                                        'hidden md:inline-flex text-xs truncate max-w-[200px]',
+                                        'hidden md:inline-flex text-xs truncate max-w-[200px] cursor-pointer',
+                                      props: {
+                                        title: shell.baseImage,
+                                        onClick: () => copyToClipboard(shell.baseImage!),
+                                      },
                                     },
                                   ]
                                 : []),
@@ -388,12 +448,29 @@ const ShellList: React.FC<ShellListProps> = ({
                                       label: shell.baseImage,
                                       variant: 'default' as const,
                                       className:
-                                        'hidden md:inline-flex text-xs truncate max-w-[200px]',
+                                        'hidden md:inline-flex text-xs truncate max-w-[200px] cursor-pointer',
+                                      props: {
+                                        title: shell.baseImage,
+                                        onClick: () => copyToClipboard(shell.baseImage!),
+                                      },
                                     },
                                   ]
                                 : []),
                             ]}
                           />
+                          {shell.executionType === 'local_engine' && (
+                            <div className="flex items-center gap-1 flex-shrink-0 ml-3">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleCreateFromPublic(shell)}
+                                title={t('common:shells.create_from_public')}
+                              >
+                                <DocumentDuplicateIcon className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </Card>
                     ))}
@@ -420,6 +497,7 @@ const ShellList: React.FC<ShellListProps> = ({
       <ShellEditDialog
         open={dialogOpen}
         shell={editingShell}
+        prefill={createPrefill}
         onClose={handleEditClose}
         toast={toast}
         scope={scope}

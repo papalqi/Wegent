@@ -848,6 +848,8 @@
     "base_shell_hint": "此自定义 Shell 基于的 Shell 类型（ClaudeCode、Codex、Agno）",
     "base_image": "Base Image",
     "base_image_hint": "Docker 镜像地址（例如：ghcr.io/your-org/your-image:latest）",
+    "create_from_public": "基于此创建",
+    "base_image_copied": "镜像地址已复制",
     "no_shells": "暂无 Shell",
     "no_shells_hint": "点击上方按钮创建您的第一个自定义 Shell",
     "validation_success": "镜像验证通过",
@@ -883,6 +885,7 @@
       "base_image_and_shell_required": "验证需要同时填写 Base Image 和基础 Shell",
       "base_shell_not_found": "未找到所选基础 Shell",
       "image_not_compatible": "镜像与所选 Shell 类型不兼容",
+      "copy_failed": "复制失败，请手动复制",
       "group_required": "必须选择一个群组",
       "group_required_hint": "创建执行器时必须选择一个群组"
     },

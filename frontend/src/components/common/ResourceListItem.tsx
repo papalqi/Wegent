@@ -13,6 +13,7 @@ export interface ResourceTag {
   label: string;
   variant?: 'default' | 'info' | 'success' | 'warning' | 'error';
   className?: string;
+  props?: React.HTMLAttributes<HTMLSpanElement>;
 }
 
 /**
@@ -89,11 +90,19 @@ export function ResourceListItem({
         {/* Tags row */}
         {tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 mt-2 min-w-0">
-            {tags.map(tag => (
-              <Tag key={tag.key} variant={tag.variant || 'default'} className={tag.className}>
-                {tag.label}
-              </Tag>
-            ))}
+            {tags.map(tag => {
+              const { props, className } = tag;
+              return (
+                <Tag
+                  key={tag.key}
+                  {...props}
+                  variant={tag.variant || 'default'}
+                  className={[className, props?.className].filter(Boolean).join(' ')}
+                >
+                  {tag.label}
+                </Tag>
+              );
+            })}
           </div>
         )}
       </div>
