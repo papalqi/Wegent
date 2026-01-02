@@ -77,24 +77,22 @@ jobs:
             exit 0
           fi
 
-          if [ ! -f docker-compose.yml ]; then
-            echo "Error: docker-compose.yml not found"
+          # Fallback: bump patch from the latest git tag.
+          git fetch --tags --force
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -z "${LAST_TAG}" ]; then
+            echo "Error: No git tags found. Please provide workflow_dispatch input 'version'."
             exit 1
           fi
 
-          LINE=$(grep -E 'image:\s*ghcr\.io/[^/]+/wegent-backend:[0-9]+\.[0-9]+\.[0-9]+' docker-compose.yml | head -1 || true)
-          if [ -z "$LINE" ]; then
-            echo "Error: Could not find backend image line in docker-compose.yml"
+          if ! [[ "${LAST_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Latest tag '${LAST_TAG}' is not in vMAJOR.MINOR.PATCH format."
+            echo "Please provide workflow_dispatch input 'version'."
             exit 1
           fi
 
-          VERSION=$(echo "$LINE" | sed -E 's/.*wegent-backend:([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-          if [ -z "$VERSION" ]; then
-            echo "Error: Could not extract version from docker-compose.yml"
-            exit 1
-          fi
-
-          echo "Current version: $VERSION"
+          VERSION="${LAST_TAG#v}"
+          echo "Current version (from tag): $VERSION"
 
           IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
           if [ ${#VERSION_PARTS[@]} -ne 3 ]; then
@@ -121,6 +119,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: prepare-release
     outputs:
+      base_version: ${{ steps.compare.outputs.base_version }}
       backend: ${{ steps.final.outputs.backend }}
       executor: ${{ steps.final.outputs.executor }}
       executor_manager: ${{ steps.final.outputs.executor_manager }}
@@ -186,6 +185,12 @@ jobs:
           echo "base_ref=${BASE_REF}" >> "$GITHUB_OUTPUT"
           echo "head_ref=${HEAD_REF}" >> "$GITHUB_OUTPUT"
 
+          BASE_VERSION=""
+          if [[ "${BASE_REF}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            BASE_VERSION="${BASE_REF#v}"
+          fi
+          echo "base_version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Detect changed paths
         id: filter
         uses: dorny/paths-filter@v3.0.2
@@ -226,14 +231,6 @@ jobs:
           executor_manager="${FILTER_EXECUTOR_MANAGER:-false}"
           frontend="${FILTER_FRONTEND:-false}"
 
-          # On release tag pushes, always publish images even if the diff doesn't touch module paths.
-          if [ "${REF_TYPE}" = "tag" ]; then
-            backend=true
-            executor=true
-            executor_manager=true
-            frontend=true
-          fi
-
           if [ -n "${FORCE_MODULES}" ]; then
             force=$(echo "${FORCE_MODULES}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
             if [ "${force}" = "all" ]; then
@@ -266,7 +263,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
-    if: needs.determine-changes.outputs.backend == 'true'
+    if: github.ref_type == 'tag' || needs.determine-changes.outputs.backend == 'true'
 
     steps:
       - name: Checkout code (full history for reproducible builds)
@@ -289,6 +286,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push backend image (multi-arch)
+        if: needs.determine-changes.outputs.backend == 'true' || (github.ref_type == 'tag' && needs.determine-changes.outputs.base_version == '')
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -301,12 +299,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Retag backend image from previous release (no rebuild)
+        if: github.ref_type == 'tag' && needs.determine-changes.outputs.backend != 'true' && needs.determine-changes.outputs.base_version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_VERSION="${{ needs.determine-changes.outputs.base_version }}"
+          TARGET_VERSION="${{ needs.prepare-release.outputs.new_version }}"
+
+          docker buildx imagetools create \
+            -t "${{ env.IMAGE_PREFIX }}/wegent-backend:${TARGET_VERSION}" \
+            -t "${{ env.IMAGE_PREFIX }}/wegent-backend:latest" \
+            "${{ env.IMAGE_PREFIX }}/wegent-backend:${BASE_VERSION}"
+
   build-executor:
     needs: [prepare-release, determine-changes]
     runs-on: ubuntu-latest
     permissions:
       packages: write
-    if: needs.determine-changes.outputs.executor == 'true'
+    if: github.ref_type == 'tag' || needs.determine-changes.outputs.executor == 'true'
 
     steps:
       - name: Checkout code (full history for reproducible builds)
@@ -329,6 +340,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push executor image (multi-arch)
+        if: needs.determine-changes.outputs.executor == 'true' || (github.ref_type == 'tag' && needs.determine-changes.outputs.base_version == '')
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -343,12 +355,30 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Retag executor images from previous release (no rebuild)
+        if: github.ref_type == 'tag' && needs.determine-changes.outputs.executor != 'true' && needs.determine-changes.outputs.base_version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_VERSION="${{ needs.determine-changes.outputs.base_version }}"
+          TARGET_VERSION="${{ needs.prepare-release.outputs.new_version }}"
+
+          docker buildx imagetools create \
+            -t "${{ env.IMAGE_PREFIX }}/wegent-executor:${TARGET_VERSION}" \
+            -t "${{ env.IMAGE_PREFIX }}/wegent-executor:latest" \
+            "${{ env.IMAGE_PREFIX }}/wegent-executor:${BASE_VERSION}"
+
+          docker buildx imagetools create \
+            -t "${{ env.IMAGE_PREFIX }}/wegent-executor:${TARGET_VERSION}-codex" \
+            -t "${{ env.IMAGE_PREFIX }}/wegent-executor:latest-codex" \
+            "${{ env.IMAGE_PREFIX }}/wegent-executor:${BASE_VERSION}-codex"
+
   build-executor-manager:
     needs: [prepare-release, determine-changes]
     runs-on: ubuntu-latest
     permissions:
       packages: write
-    if: needs.determine-changes.outputs.executor_manager == 'true'
+    if: github.ref_type == 'tag' || needs.determine-changes.outputs.executor_manager == 'true'
 
     steps:
       - name: Checkout code (full history for reproducible builds)
@@ -371,6 +401,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push executor manager image (multi-arch)
+        if: needs.determine-changes.outputs.executor_manager == 'true' || (github.ref_type == 'tag' && needs.determine-changes.outputs.base_version == '')
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -383,12 +414,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Retag executor manager image from previous release (no rebuild)
+        if: github.ref_type == 'tag' && needs.determine-changes.outputs.executor_manager != 'true' && needs.determine-changes.outputs.base_version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_VERSION="${{ needs.determine-changes.outputs.base_version }}"
+          TARGET_VERSION="${{ needs.prepare-release.outputs.new_version }}"
+
+          docker buildx imagetools create \
+            -t "${{ env.IMAGE_PREFIX }}/wegent-executor-manager:${TARGET_VERSION}" \
+            -t "${{ env.IMAGE_PREFIX }}/wegent-executor-manager:latest" \
+            "${{ env.IMAGE_PREFIX }}/wegent-executor-manager:${BASE_VERSION}"
+
   build-frontend:
     needs: [prepare-release, determine-changes]
     runs-on: ubuntu-latest
     permissions:
       packages: write
-    if: needs.determine-changes.outputs.frontend == 'true'
+    if: github.ref_type == 'tag' || needs.determine-changes.outputs.frontend == 'true'
 
     steps:
       - name: Checkout code (full history for reproducible builds)
@@ -411,6 +455,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push frontend image (multi-arch)
+        if: needs.determine-changes.outputs.frontend == 'true' || (github.ref_type == 'tag' && needs.determine-changes.outputs.base_version == '')
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -422,6 +467,19 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/wegent-web:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Retag frontend image from previous release (no rebuild)
+        if: github.ref_type == 'tag' && needs.determine-changes.outputs.frontend != 'true' && needs.determine-changes.outputs.base_version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_VERSION="${{ needs.determine-changes.outputs.base_version }}"
+          TARGET_VERSION="${{ needs.prepare-release.outputs.new_version }}"
+
+          docker buildx imagetools create \
+            -t "${{ env.IMAGE_PREFIX }}/wegent-web:${TARGET_VERSION}" \
+            -t "${{ env.IMAGE_PREFIX }}/wegent-web:latest" \
+            "${{ env.IMAGE_PREFIX }}/wegent-web:${BASE_VERSION}"
 
   create-release-tag:
     needs:
@@ -523,10 +581,19 @@ jobs:
       always() &&
       needs.prepare-release.result == 'success' &&
       (
-        (needs.determine-changes.outputs.backend == 'true' && needs.build-backend.result == 'success') ||
-        (needs.determine-changes.outputs.executor == 'true' && needs.build-executor.result == 'success') ||
-        (needs.determine-changes.outputs.executor_manager == 'true' && needs.build-executor-manager.result == 'success') ||
-        (needs.determine-changes.outputs.frontend == 'true' && needs.build-frontend.result == 'success')
+        (
+          github.ref_type == 'tag' &&
+          needs.build-backend.result == 'success' &&
+          needs.build-executor.result == 'success' &&
+          needs.build-executor-manager.result == 'success' &&
+          needs.build-frontend.result == 'success'
+        ) ||
+        (
+          (needs.determine-changes.outputs.backend == 'true' && needs.build-backend.result == 'success') ||
+          (needs.determine-changes.outputs.executor == 'true' && needs.build-executor.result == 'success') ||
+          (needs.determine-changes.outputs.executor_manager == 'true' && needs.build-executor-manager.result == 'success') ||
+          (needs.determine-changes.outputs.frontend == 'true' && needs.build-frontend.result == 'success')
+        )
       )
 
     steps:
@@ -542,6 +609,7 @@ jobs:
         env:
           VERSION: ${{ needs.prepare-release.outputs.new_version }}
           IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
+          REF_TYPE: ${{ github.ref_type }}
           CHANGED_BACKEND: ${{ needs.determine-changes.outputs.backend }}
           CHANGED_EXECUTOR: ${{ needs.determine-changes.outputs.executor }}
           CHANGED_EXECUTOR_MANAGER: ${{ needs.determine-changes.outputs.executor_manager }}
@@ -568,6 +636,13 @@ jobs:
           DEPLOY_ENV_FILE=".env.defaults"
           if [ ! -f "${DEPLOY_ENV_FILE}" ]; then
             echo "Warning: ${DEPLOY_ENV_FILE} not found; creating it."
+          fi
+
+          if [ "${REF_TYPE}" = "tag" ]; then
+            CHANGED_BACKEND=true
+            CHANGED_EXECUTOR=true
+            CHANGED_EXECUTOR_MANAGER=true
+            CHANGED_FRONTEND=true
           fi
 
           echo "Updating ${DEPLOY_ENV_FILE} to IMAGE_PREFIX=${IMAGE_PREFIX} (and pin versions for changed modules)."
