@@ -25,6 +25,7 @@ Wegent 是开源的智能体团队操作系统。本文件是贡献者的中文�
 ## 基础工作流
 - 分支：`<type>/<description>`，如 `feature/ghost-import`
 - Commit：Conventional Commits，例 `feat(backend): add ghost import api`
+- PR（镜像发布）：如需触发 `publish-image.yml`，合并到 `main` 的 PR 标题必须包含 `Changeset version bump`（否则会显示为 Skipped）。
 - 必跑测试：
   - `cd backend && uv run pytest`
   - `cd executor && uv run pytest`
@@ -44,6 +45,7 @@ Wegent 是开源的智能体团队操作系统。本文件是贡献者的中文�
 
 ### Docker 镜像 CI（publish-image.yml）
 - 触发：合并到 main 的 PR（带 “Changeset version bump” 标题）、推送标签 `v*.*.*`、或手动 `workflow_dispatch`（可传 `version`、`base_ref`、`force_modules`）。
+- 注意：`pull_request: closed` 事件会触发 workflow，但若 PR 标题不包含 `Changeset version bump`，相关 job 会被条件判断跳过（在 Actions 里显示为 Skipped）。
 - 逻辑：dorny/paths-filter 检测 backend/executor/executor_manager/frontend 目录变化；按需多架构 buildx 构建并推送到 GHCR `ghcr.io/<owner>/`，同时维护 `latest` 与 `${version}`（executor 还带 `${version}-codex` 和 `latest-codex`）。
 - 无代码变更但打 tag：直接 imagetools retag 复用上一个版本；末尾自动更新 `.env.defaults` 中的镜像版本并推 PR（或在 tag 情况下尝试直接推送）。
 

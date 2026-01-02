@@ -83,6 +83,14 @@ Frontend (Next.js) → Backend (FastAPI) → Executor Manager → Executors (Cla
 
 我们欢迎贡献！详情请参阅 [贡献指南](CONTRIBUTING.md)。
 
+### CI / 镜像发布
+
+- `Publish Image` 工作流（`.github/workflows/publish-image.yml`）触发条件：
+  - 合并到 `main` 的 PR，且 **标题包含** `Changeset version bump`
+  - 推送标签 `v*.*.*`
+  - 手动 `workflow_dispatch`
+- 若 PR 合并但标题不含 `Changeset version bump`，Actions 里可能会显示为 **Skipped**（job 被 `if:` 条件跳过）。
+
 ## 📞 支持
 
 - 🐛 问题反馈：[GitHub Issues](https://github.com/wecode-ai/wegent/issues)

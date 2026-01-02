@@ -83,6 +83,14 @@ Frontend (Next.js) → Backend (FastAPI) → Executor Manager → Executors (Cla
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
+### CI / Image publishing
+
+- The `Publish Image` workflow (`.github/workflows/publish-image.yml`) runs on:
+  - PR merged into `main` **with title containing** `Changeset version bump`
+  - tag push `v*.*.*`
+  - manual `workflow_dispatch`
+- If a PR is merged without `Changeset version bump` in the title, the workflow may show as **Skipped** (jobs gated by `if:` conditions).
+
 ## 📞 Support
 
 - 🐛 Issues: [GitHub Issues](https://github.com/wecode-ai/wegent/issues)
