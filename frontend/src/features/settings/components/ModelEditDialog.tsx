@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Tag } from '@/components/ui/tag';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -35,6 +36,7 @@ import {
   modelApis,
   ModelCRD,
   ModelCategoryType,
+  ProviderProbeResponse,
   TTSConfig,
   STTConfig,
   EmbeddingConfig,
@@ -146,6 +148,7 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
   const [showApiKey, setShowApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [probeResult, setProbeResult] = useState<ProviderProbeResponse | null>(null);
   // LLM-specific config state
   const [contextWindow, setContextWindow] = useState<number | undefined>(undefined);
   const [maxOutputTokens, setMaxOutputTokens] = useState<number | undefined>(undefined);
@@ -258,6 +261,7 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
       setShowApiKey(false);
       setProviderModelIds([]);
       setProviderModelsError(null);
+      setProbeResult(null);
     }
   }, [open, model]);
 
@@ -394,6 +398,10 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
     }
   };
 
+  useEffect(() => {
+    setProbeResult(null);
+  }, [providerType, baseUrl, apiKey, modelId, customModelId]);
+
   const handleTestConnection = async () => {
     const finalModelId = modelId === 'custom' ? customModelId : modelId;
     if (!finalModelId || !apiKey) {
@@ -416,24 +424,54 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
 
     setTesting(true);
     try {
-      const result = await modelApis.testConnection({
-        provider_type: providerType as 'openai' | 'anthropic' | 'gemini',
-        model_id: finalModelId,
-        api_key: apiKey,
-        base_url: baseUrlResolvedForRequest,
-        custom_headers: Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
-        model_category_type: modelCategoryType,
-      });
+      if (providerType === 'openai' || providerType === 'openai-responses') {
+        const probeTargets =
+          modelCategoryType === 'embedding'
+            ? ['list_models', 'embedding']
+            : modelCategoryType === 'llm'
+              ? ['list_models', 'prompt_llm']
+              : ['list_models'];
 
-      if (result.success) {
+        const result = await modelApis.probeProvider({
+          provider_type: providerType,
+          model_id: finalModelId,
+          api_key: apiKey,
+          base_url: baseUrlResolvedForRequest,
+          custom_headers: Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
+          probe_targets: probeTargets,
+        });
+
+        setProbeResult(result);
         toast({
-          title: t('common:models.test_success'),
+          variant: result.success ? 'default' : 'destructive',
+          title: result.success ? t('common:models.probe_ok') : t('common:models.probe_failed'),
           description: result.message,
         });
       } else {
+        const result = await modelApis.testConnection({
+          provider_type: providerType as 'openai' | 'anthropic' | 'gemini',
+          model_id: finalModelId,
+          api_key: apiKey,
+          base_url: baseUrlResolvedForRequest,
+          custom_headers: Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
+          model_category_type: modelCategoryType,
+        });
+
+        setProbeResult({
+          success: result.success,
+          message: result.message,
+          base_url_resolved: baseUrlResolvedForDisplay || undefined,
+          checks: {
+            test_connection: {
+              ok: result.success,
+              error: result.success ? null : result.message,
+            },
+          },
+        });
+
         toast({
-          variant: 'destructive',
-          title: t('common:models.test_failed'),
+          variant: result.success ? 'default' : 'destructive',
+          title: result.success ? t('common:models.test_success') : t('common:models.test_failed'),
           description: result.message,
         });
       }
@@ -1086,11 +1124,72 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
           )}
         </div>
 
+        {probeResult && (
+          <div className="mb-3 rounded-lg border border-border bg-surface p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium text-text-primary">
+                {t('common:models.probe_results')}
+              </div>
+              <Tag variant={probeResult.success ? 'success' : 'error'}>
+                {probeResult.success
+                  ? t('common:models.probe_ok')
+                  : t('common:models.probe_failed')}
+              </Tag>
+            </div>
+
+            {probeResult.base_url_resolved && (
+              <div className="mt-2 text-xs text-text-muted">
+                {t('common:models.base_url_resolved')}:&nbsp;
+                <span className="font-mono">{probeResult.base_url_resolved}</span>
+              </div>
+            )}
+
+            <div className="mt-3 space-y-2">
+              {Object.entries(probeResult.checks || {}).map(([key, check]) => {
+                const labelMap: Record<string, string> = {
+                  list_models: t('common:models.probe_check_list_models'),
+                  prompt_llm: t('common:models.probe_check_prompt_llm'),
+                  embedding: t('common:models.probe_check_embedding'),
+                  test_connection: t('common:models.probe_check_test_connection'),
+                };
+                const label = labelMap[key] || key;
+
+                return (
+                  <div
+                    key={key}
+                    className="flex items-start justify-between gap-3 rounded-md border border-border bg-base px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm text-text-primary truncate">{label}</div>
+                      {check?.error && (
+                        <div className="text-xs text-error mt-0.5 break-words">{check.error}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {typeof check?.latency_ms === 'number' && (
+                        <span className="text-xs text-text-muted">{check.latency_ms}ms</span>
+                      )}
+                      <Tag variant={check?.ok ? 'success' : 'error'}>
+                        {check?.ok ? 'OK' : 'Fail'}
+                      </Tag>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <DialogFooter className="flex items-center justify-between sm:justify-between">
           <Button
             variant="outline"
             onClick={handleTestConnection}
-            disabled={testing || !modelId || !apiKey}
+            disabled={
+              testing ||
+              !apiKey.trim() ||
+              !modelId ||
+              (modelId === 'custom' && !customModelId.trim())
+            }
           >
             {testing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             <BeakerIcon className="w-4 h-4 mr-1" />
