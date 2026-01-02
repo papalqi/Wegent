@@ -245,6 +245,8 @@ export interface TaskDetail {
   status: TaskStatus;
   task_type?: TaskType;
   progress: number;
+  status_phase?: string | null;
+  progress_text?: string | null;
   batch: number;
   result: Record<string, unknown>;
   error_message: string;
@@ -341,6 +343,8 @@ export interface Task {
   status: TaskStatus;
   task_type?: TaskType;
   progress: number;
+  status_phase?: string | null;
+  progress_text?: string | null;
   batch: number;
   result: Record<string, unknown>;
   error_message: string;

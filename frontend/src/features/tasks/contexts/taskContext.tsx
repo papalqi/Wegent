@@ -441,6 +441,8 @@ export const TaskContextProvider = ({ children }: { children: ReactNode }) => {
           ...existingTask,
           status: data.status as TaskStatus,
           progress: data.progress ?? existingTask.progress,
+          status_phase: data.status_phase ?? existingTask.status_phase,
+          progress_text: data.progress_text ?? existingTask.progress_text,
           updated_at: now,
           ...(completedAt && { completed_at: completedAt }),
         };
@@ -478,6 +480,8 @@ export const TaskContextProvider = ({ children }: { children: ReactNode }) => {
           ...existingTask,
           status: data.status as TaskStatus,
           progress: data.progress ?? existingTask.progress,
+          status_phase: data.status_phase ?? existingTask.status_phase,
+          progress_text: data.progress_text ?? existingTask.progress_text,
           updated_at: now,
           // Update completed_at for terminal states
           ...(completedAt && { completed_at: completedAt }),
@@ -530,6 +534,8 @@ export const TaskContextProvider = ({ children }: { children: ReactNode }) => {
             ...prev,
             status: data.status as TaskStatus,
             progress: data.progress ?? prev.progress,
+            status_phase: data.status_phase ?? prev.status_phase,
+            progress_text: data.progress_text ?? prev.progress_text,
             updated_at: now,
             // Update completed_at for terminal states
             ...(completedAt && { completed_at: completedAt }),
