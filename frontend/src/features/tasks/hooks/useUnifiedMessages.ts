@@ -47,6 +47,8 @@ export interface DisplayMessage {
   content: string;
   /** Timestamp when message was created */
   timestamp: number;
+  /** Debug payload for troubleshooting */
+  debug?: Record<string, unknown>;
   /** Subtask ID from backend (set when confirmed) */
   subtaskId?: number;
   /** Message ID from backend for ordering (primary sort key) */
@@ -245,6 +247,7 @@ export function useUnifiedMessages({
         status: msg.status,
         content: msg.content,
         timestamp: msg.timestamp,
+        debug: msg.debug,
         subtaskId: msg.subtaskId,
         messageId: msg.messageId,
         error: msg.error,

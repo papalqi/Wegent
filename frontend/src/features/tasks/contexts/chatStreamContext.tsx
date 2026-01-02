@@ -83,6 +83,8 @@ export interface UnifiedMessage {
   contexts?: unknown[];
   /** Timestamp when message was created */
   timestamp: number;
+  /** Debug payload for troubleshooting (client send payload, backend subtask snapshot, etc.) */
+  debug?: Record<string, unknown>;
   /** Subtask ID from backend (set when confirmed) */
   subtaskId?: number;
   /** Message ID from backend for ordering (primary sort key) */
@@ -425,6 +427,12 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
           status: 'streaming',
           content: '',
           timestamp: Date.now(),
+          debug: {
+            kind: 'chat:start',
+            source: 'ws',
+            received_at: new Date().toISOString(),
+            ...data,
+          },
           subtaskId: subtask_id,
           messageId: message_id,
           result: initialResult, // Include shell_type from chat:start event
@@ -453,6 +461,12 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
             status: 'streaming',
             content: '',
             timestamp: Date.now(),
+            debug: {
+              kind: 'chat:start',
+              source: 'ws',
+              received_at: new Date().toISOString(),
+              ...data,
+            },
             subtaskId: subtask_id,
             messageId: message_id,
             result: initialResult, // Include shell_type from chat:start event
@@ -488,6 +502,12 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         status: 'streaming',
         content: '',
         timestamp: Date.now(),
+        debug: {
+          kind: 'chat:start',
+          source: 'ws',
+          received_at: new Date().toISOString(),
+          ...data,
+        },
         subtaskId: subtask_id,
         messageId: message_id,
       });
@@ -869,6 +889,12 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         status: 'completed',
         content: content || '',
         timestamp: created_at ? new Date(created_at).getTime() : Date.now(),
+        debug: {
+          kind: 'chat:message',
+          source: 'ws',
+          received_at: new Date().toISOString(),
+          ...data,
+        },
         subtaskId: subtask_id,
         messageId: message_id,
         senderUserName: sender?.user_name,
@@ -1157,6 +1183,31 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         localMessageId: userMessageId,
         onMessageSent: options?.onMessageSent,
       });
+
+      // Convert request to WebSocket payload (single source of truth for what we send)
+      const payload: ChatSendPayload = {
+        task_id: request.task_id,
+        team_id: request.team_id,
+        message: request.message,
+        title: request.title,
+        attachment_id: request.attachment_id,
+        attachment_ids: request.attachment_ids,
+        enable_web_search: request.enable_web_search,
+        search_engine: request.search_engine,
+        enable_clarification: request.enable_clarification,
+        enable_deep_thinking: request.enable_deep_thinking,
+        force_override_bot_model: request.model_id,
+        force_override_bot_model_type: request.force_override_bot_model ? 'user' : undefined,
+        is_group_chat: request.is_group_chat,
+        contexts: request.contexts,
+        // Repository info for code tasks
+        git_url: request.git_url,
+        git_repo: request.git_repo,
+        git_repo_id: request.git_repo_id,
+        git_domain: request.git_domain,
+        branch_name: request.branch_name,
+        task_type: request.task_type,
+      };
       const userMessage: UnifiedMessage = {
         id: userMessageId,
         type: 'user',
@@ -1166,6 +1217,17 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         attachments: options?.pendingAttachments,
         contexts: options?.pendingContexts,
         timestamp: Date.now(),
+        debug: {
+          kind: 'chat.send',
+          source: 'client',
+          created_at: new Date().toISOString(),
+          local_message_id: userMessageId,
+          immediate_task_id: immediateTaskId,
+          raw_message: options?.pendingUserMessage,
+          sent_message: request.message,
+          request,
+          wsPayload: payload,
+        },
         // Add sender info for group chat
         senderUserName: options?.currentUserName,
         senderUserId: options?.currentUserId,
@@ -1190,31 +1252,6 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         });
         return newMap;
       });
-
-      // Convert request to WebSocket payload
-      const payload: ChatSendPayload = {
-        task_id: request.task_id,
-        team_id: request.team_id,
-        message: request.message,
-        title: request.title,
-        attachment_id: request.attachment_id,
-        attachment_ids: request.attachment_ids,
-        enable_web_search: request.enable_web_search,
-        search_engine: request.search_engine,
-        enable_clarification: request.enable_clarification,
-        enable_deep_thinking: request.enable_deep_thinking,
-        force_override_bot_model: request.model_id,
-        force_override_bot_model_type: request.force_override_bot_model ? 'user' : undefined,
-        is_group_chat: request.is_group_chat,
-        contexts: request.contexts,
-        // Repository info for code tasks
-        git_url: request.git_url,
-        git_repo: request.git_repo,
-        git_repo_id: request.git_repo_id,
-        git_domain: request.git_domain,
-        branch_name: request.branch_name,
-        task_type: request.task_type,
-      };
 
       try {
         // Send message via WebSocket
@@ -1595,6 +1632,14 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
               status: 'streaming',
               content: initialContent,
               timestamp: Date.now(),
+              debug: {
+                kind: 'chat:resume',
+                source: 'ws',
+                received_at: new Date().toISOString(),
+                task_id: taskId,
+                subtask_id,
+                cached_content_length: initialContent.length,
+              },
               subtaskId: subtask_id,
             });
 
@@ -1715,6 +1760,20 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
               status: hasFrontendError ? 'error' : 'streaming', // Preserve error state if exists
               content,
               timestamp: new Date(subtask.created_at).getTime(),
+              debug: {
+                kind: 'subtask.snapshot',
+                source: 'backend',
+                task_id: subtask.task_id,
+                team_id: subtask.team_id,
+                subtask_id: subtask.id,
+                message_id: subtask.message_id,
+                role: subtask.role,
+                status: subtask.status,
+                error_message: subtask.error_message,
+                prompt: subtask.prompt,
+                bots: subtask.bots,
+                result: subtask.result,
+              },
               subtaskId: subtask.id,
               messageId: subtask.message_id,
               attachments: subtask.attachments,
@@ -1757,6 +1816,20 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
             status,
             content,
             timestamp: new Date(subtask.created_at).getTime(),
+            debug: {
+              kind: 'subtask.snapshot',
+              source: 'backend',
+              task_id: subtask.task_id,
+              team_id: subtask.team_id,
+              subtask_id: subtask.id,
+              message_id: subtask.message_id,
+              role: subtask.role,
+              status: subtask.status,
+              error_message: subtask.error_message,
+              prompt: subtask.prompt,
+              bots: subtask.bots,
+              result: subtask.result,
+            },
             subtaskId: subtask.id,
             messageId: subtask.message_id,
             attachments: subtask.attachments,

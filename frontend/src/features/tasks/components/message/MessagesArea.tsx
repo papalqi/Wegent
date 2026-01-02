@@ -93,6 +93,7 @@ function StreamingMessageBubble({
     isRecovered: false,
     isIncomplete: false,
     subtaskId: message.subtaskId,
+    debug: message.debug,
     // Pass thinking data for executor tasks (Claude Code, etc.)
     thinking: message.thinking as Message['thinking'],
     // Pass result with shell_type for component selection
@@ -710,6 +711,7 @@ export default function MessagesArea({
         botName: msg.botName,
         subtaskStatus: msg.subtaskStatus,
         subtaskId: msg.subtaskId,
+        debug: msg.debug,
         attachments: msg.attachments,
         contexts: msg.contexts, // Add contexts for unified context system
         senderUserName: msg.senderUserName,

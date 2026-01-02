@@ -39,6 +39,7 @@ import StreamingWaitIndicator from './StreamingWaitIndicator';
 import BubbleTools, { CopyButton } from './BubbleTools';
 import { SourceReferences } from '../chat/SourceReferences';
 import CollapsibleMessage from './CollapsibleMessage';
+import MessageDebugPanel, { type MessageDebugPayload } from './MessageDebugPanel';
 import type { ClarificationData, FinalPromptData, ClarificationAnswer } from '@/types/api';
 import type { SourceReference } from '@/types/socket';
 import { useTraceAction } from '@/hooks/useTraceAction';
@@ -49,6 +50,8 @@ export interface Message {
   type: 'user' | 'ai';
   content: string;
   timestamp: number;
+  /** Debug payload for troubleshooting (sanitized on render) */
+  debug?: MessageDebugPayload;
   botName?: string;
   subtaskStatus?: string;
   subtaskId?: number;
@@ -1437,6 +1440,8 @@ const MessageBubble = memo(
                 )}
               </div>
             )}
+
+            <MessageDebugPanel data={msg.debug} t={t} />
 
             {/* Show copy button for user messages - visible on hover */}
             {isUserTypeMessage && (
