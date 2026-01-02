@@ -520,6 +520,7 @@ jobs:
       pull-requests: write
     if: >
       always() &&
+      github.ref_type != 'tag' &&
       needs.prepare-release.result == 'success' &&
       (
         (needs.determine-changes.outputs.backend == 'true' && needs.build-backend.result == 'success') ||
