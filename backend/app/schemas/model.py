@@ -5,7 +5,7 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ModelBase(BaseModel):
@@ -87,3 +87,17 @@ class ModelBulkCreateResponse(BaseModel):
 
     created: List["ModelInDB"]
     skipped: List[dict]
+
+
+class ProviderModelsRequest(BaseModel):
+    provider_type: str
+    base_url: Optional[str] = None
+    api_key: str
+    custom_headers: Optional[dict[str, str]] = None
+
+
+class ProviderModelsResponse(BaseModel):
+    success: bool
+    message: str
+    base_url_resolved: Optional[str] = None
+    model_ids: list[str] = Field(default_factory=list)

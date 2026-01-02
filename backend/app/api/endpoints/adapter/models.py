@@ -4,7 +4,9 @@
 
 import logging
 from typing import List, Optional
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
@@ -19,12 +21,41 @@ from app.schemas.model import (
     ModelInDB,
     ModelListResponse,
     ModelUpdate,
+    ProviderModelsRequest,
+    ProviderModelsResponse,
 )
 from app.services.adapters import public_model_service
 from app.services.model_aggregation_service import ModelType, model_aggregation_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+_DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+
+def _normalize_openai_base_url(base_url: Optional[str]) -> str:
+    if not base_url:
+        return _DEFAULT_OPENAI_BASE_URL
+    normalized = base_url.strip().rstrip("/")
+    if normalized.endswith("/v1"):
+        return normalized
+    return f"{normalized}/v1"
+
+
+def _validate_http_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _merge_headers(api_key: str, custom_headers: Optional[dict]) -> dict[str, str]:
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if isinstance(custom_headers, dict):
+        for k, v in custom_headers.items():
+            if isinstance(k, str) and isinstance(v, str):
+                headers[k] = v
+    if "Authorization" not in headers and api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return headers
 
 
 @router.get("", response_model=ModelListResponse)
@@ -364,6 +395,83 @@ def test_model_connection(
     except Exception as e:
         logger.error(f"Model connection test failed: {str(e)}")
         return {"success": False, "message": f"Connection failed: {str(e)}"}
+
+
+@router.post("/provider-models", response_model=ProviderModelsResponse)
+async def list_provider_models(
+    req: ProviderModelsRequest,
+    current_user: User = Depends(security.get_current_user),
+):
+    """
+    Proxy provider /models endpoint to list upstream model IDs.
+
+    Notes:
+    - This endpoint intentionally runs on the backend to avoid CORS and API key leakage.
+    - Currently supported providers: openai, openai-responses (OpenAI-compatible).
+    """
+    provider_type = (req.provider_type or "").strip()
+    if provider_type not in {"openai", "openai-responses"}:
+        return ProviderModelsResponse(
+            success=False,
+            message=f"Unsupported provider_type: {provider_type}",
+            model_ids=[],
+        )
+
+    base_url_resolved = _normalize_openai_base_url(req.base_url)
+    if not _validate_http_url(base_url_resolved):
+        return ProviderModelsResponse(
+            success=False,
+            message="Invalid base_url",
+            base_url_resolved=base_url_resolved,
+            model_ids=[],
+        )
+
+    headers = _merge_headers(req.api_key, req.custom_headers)
+    url = f"{base_url_resolved}/models"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            payload = resp.json()
+
+        data = payload.get("data", []) if isinstance(payload, dict) else []
+        model_ids: list[str] = []
+        for item in data if isinstance(data, list) else []:
+            if isinstance(item, dict):
+                model_id = item.get("id") or item.get("name")
+                if isinstance(model_id, str) and model_id:
+                    model_ids.append(model_id)
+
+        unique_model_ids = sorted(set(model_ids))
+        return ProviderModelsResponse(
+            success=True,
+            message="OK",
+            base_url_resolved=base_url_resolved,
+            model_ids=unique_model_ids,
+        )
+    except httpx.TimeoutException:
+        return ProviderModelsResponse(
+            success=False,
+            message="Request timed out",
+            base_url_resolved=base_url_resolved,
+            model_ids=[],
+        )
+    except httpx.HTTPStatusError as e:
+        status_code = getattr(e.response, "status_code", None)
+        return ProviderModelsResponse(
+            success=False,
+            message=f"Upstream returned HTTP {status_code}",
+            base_url_resolved=base_url_resolved,
+            model_ids=[],
+        )
+    except httpx.RequestError as e:
+        return ProviderModelsResponse(
+            success=False,
+            message=f"Upstream request failed: {type(e).__name__}",
+            base_url_resolved=base_url_resolved,
+            model_ids=[],
+        )
 
 
 def _test_llm_connection(
