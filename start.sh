@@ -29,10 +29,34 @@ ENABLE_RAG="${WEGENT_ENABLE_RAG:-false}"
 EXECUTOR_WORKSPACE="${WEGENT_EXECUTOR_WORKSPACE:-${HOME}/wecode-bot}"
 
 # Docker image overrides (useful for forks publishing to GHCR)
-IMAGE_PREFIX="${WEGENT_IMAGE_PREFIX:-ghcr.io/wecode-ai}"
-EXECUTOR_MANAGER_IMAGE="${WEGENT_EXECUTOR_MANAGER_IMAGE:-${IMAGE_PREFIX}/wegent-executor-manager:${WEGENT_EXECUTOR_MANAGER_VERSION:-1.0.25}}"
-# Note: fork CI tags Codex-enabled executor as <version>-codex (e.g. 1.0.32-codex).
-EXECUTOR_IMAGE="${WEGENT_EXECUTOR_IMAGE:-${IMAGE_PREFIX}/wegent-executor:${WEGENT_EXECUTOR_VERSION:-1.0.28}}"
+detect_image_prefix() {
+  if [ -n "${WEGENT_IMAGE_PREFIX:-}" ]; then
+    echo "${WEGENT_IMAGE_PREFIX}"
+    return 0
+  fi
+
+  # Best-effort: infer GHCR owner from git origin remote.
+  if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local origin_url=""
+    origin_url="$(git remote get-url origin 2>/dev/null || true)"
+    if [ -n "${origin_url}" ]; then
+      local owner=""
+      owner="$(echo "${origin_url}" | sed -nE 's#^(git@github\.com:|https://github\.com/)([^/]+)/Wegent(\.git)?$#\\2#p')"
+      if [ -n "${owner}" ]; then
+        echo "ghcr.io/${owner}"
+        return 0
+      fi
+    fi
+  fi
+
+  echo "ghcr.io/wecode-ai"
+}
+
+IMAGE_PREFIX="$(detect_image_prefix)"
+
+EXECUTOR_MANAGER_IMAGE="${WEGENT_EXECUTOR_MANAGER_IMAGE:-${IMAGE_PREFIX}/wegent-executor-manager:${WEGENT_EXECUTOR_MANAGER_VERSION:-latest}}"
+# Default to Codex-enabled tag to avoid per-release version bumps.
+EXECUTOR_IMAGE="${WEGENT_EXECUTOR_IMAGE:-${IMAGE_PREFIX}/wegent-executor:${WEGENT_EXECUTOR_VERSION:-latest-codex}}"
 
 BACKEND_PGID=""
 FRONTEND_PGID=""
@@ -60,6 +84,7 @@ Environment variables (optional):
   WEGENT_MYSQL_PORT, WEGENT_REDIS_PORT, WEGENT_ELASTICSEARCH_PORT (must match docker-compose.yml port mapping)
   WEGENT_ENABLE_RAG, WEGENT_EXECUTOR_WORKSPACE
   WEGENT_IMAGE_PREFIX, WEGENT_EXECUTOR_MANAGER_IMAGE, WEGENT_EXECUTOR_IMAGE
+  WEGENT_EXECUTOR_MANAGER_VERSION, WEGENT_EXECUTOR_VERSION
 EOF
 }
 
@@ -371,7 +396,16 @@ main() {
     die "Failed to detect gateway IP for docker network 'wegent-network'."
   fi
 
-  docker run -d \
+  # If using floating tags (latest*), always pull before starting to avoid stale images.
+  local pull_flag=()
+  if [[ "${EXECUTOR_MANAGER_IMAGE}" == *":latest"* ]]; then
+    pull_flag=(--pull=always)
+  fi
+  if [[ "${EXECUTOR_IMAGE}" == *":latest"* ]]; then
+    docker pull "${EXECUTOR_IMAGE}" >/dev/null 2>&1 || true
+  fi
+
+  docker run -d "${pull_flag[@]}" \
     --name wegent-executor-manager \
     --network wegent-network \
     --network-alias executor_manager \
