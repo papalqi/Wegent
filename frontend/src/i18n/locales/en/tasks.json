@@ -54,6 +54,8 @@
     "deletions": "Deletions",
     "expand_all": "Expand All",
     "collapse_all": "Collapse All",
+    "filter_files_placeholder": "Filter files...",
+    "no_matching_files": "No matching files",
     "changes": "Changes",
     "loading_diff_message": "Loading diff...",
     "no_changes_between_branches": "No changes found between branches",
