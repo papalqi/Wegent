@@ -46,8 +46,9 @@ Wegent 是开源的智能体团队操作系统。本文件是贡献者的中文�
 - 处理方式：启动前 `unset WEGENT_EXECUTOR_IMAGE WEGENT_EXECUTOR_VERSION WEGENT_IMAGE_PREFIX`，或显式设为 `export WEGENT_EXECUTOR_IMAGE=ghcr.io/papalqi/wegent-executor:1.0.33-codex`，再运行 `./start.sh --no-rag`。
 
 ### Docker 镜像 CI（publish-image.yml）
-- 触发：合并到 main 的 PR（带 “Changeset version bump” 标题）、推送标签 `v*.*.*`、或手动 `workflow_dispatch`（可传 `version`、`base_ref`、`force_modules`）。
-- 注意：`pull_request: closed` 事件会触发 workflow，但若 PR 标题不包含 `Changeset version bump`，相关 job 会被条件判断跳过（在 Actions 里显示为 Skipped）。
+- 触发：合并到 main 的 PR（标题必须含 “Changeset version bump”）、推送标签 **`v*.*.*`（三段式版本）**、或手动 `workflow_dispatch`（可传 `version`、`base_ref`、`force_modules`）。
+- 注意：`pull_request: closed` 会触发 workflow，但 PR 标题不含 “Changeset version bump” 时 Job 会被条件跳过（显示 Skipped）。
+- 标签要求：只有 `vMAJOR.MINOR.PATCH` 形如 `v1.35.0` 才会被识别；`v1.35` 这类两段式不会触发构建。
 - 逻辑：dorny/paths-filter 检测 backend/executor/executor_manager/frontend 目录变化；按需多架构 buildx 构建并推送到 GHCR `ghcr.io/<owner>/`，同时维护 `latest` 与 `${version}`（executor 还带 `${version}-codex` 和 `latest-codex`）。
 - 无代码变更但打 tag：直接 imagetools retag 复用上一个版本；末尾自动更新 `.env.defaults` 中的镜像版本并推 PR（或在 tag 情况下尝试直接推送）。
 

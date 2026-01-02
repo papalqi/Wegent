@@ -1,0 +1,38 @@
+# Exclude VCS and local env
+.git
+.gitignore
+.github
+.venv
+**/.venv
+node_modules
+**/node_modules
+.cache
+.pytest_cache
+.next
+coverage
+dist
+build
+.turbo
+*.log
+*.tmp
+*.swp
+*.swo
+*.DS_Store
+
+# Editor/IDE
+.vscode
+.idea
+
+# Output and artifacts
+*.tar.gz
+*.tgz
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+
+# Misc
+tmp
+temp
+

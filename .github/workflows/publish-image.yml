@@ -298,6 +298,8 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/wegent-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Retag backend image from previous release (no rebuild)
         if: github.ref_type == 'tag' && needs.determine-changes.outputs.backend != 'true' && needs.determine-changes.outputs.base_version != ''
@@ -352,6 +354,8 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/wegent-executor:${{ needs.prepare-release.outputs.new_version }}-codex
             ${{ env.IMAGE_PREFIX }}/wegent-executor:latest
             ${{ env.IMAGE_PREFIX }}/wegent-executor:latest-codex
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -413,6 +417,8 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/wegent-executor-manager:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Retag executor manager image from previous release (no rebuild)
         if: github.ref_type == 'tag' && needs.determine-changes.outputs.executor_manager != 'true' && needs.determine-changes.outputs.base_version != ''
@@ -465,6 +471,8 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/wegent-web:${{ needs.prepare-release.outputs.new_version }}
             ${{ env.IMAGE_PREFIX }}/wegent-web:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
