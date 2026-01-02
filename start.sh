@@ -14,6 +14,55 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Load env files (lowest precedence first):
+# - .env.defaults (tracked, safe defaults for deployment)
+# - .env (local overrides, gitignored)
+# - .env.local (local overrides, gitignored)
+load_env_file() {
+  local file="$1"
+  if [ ! -f "$file" ]; then
+    return 0
+  fi
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    # Ignore comments and empty lines.
+    if [[ "$line" =~ ^[[:space:]]*# ]] || [[ "$line" =~ ^[[:space:]]*$ ]]; then
+      continue
+    fi
+    # Only support KEY=VALUE lines.
+    if [[ "$line" != *"="* ]]; then
+      continue
+    fi
+
+    local key="${line%%=*}"
+    local value="${line#*=}"
+
+    # Trim surrounding whitespace.
+    key="$(echo "$key" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    value="$(echo "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+    if [ -z "$key" ]; then
+      continue
+    fi
+
+    # Remove single/double quotes around the value, if present.
+    if [[ "$value" =~ ^\".*\"$ ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "$value" =~ ^\'.*\'$ ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+
+    # Do not override variables already present in the process environment.
+    if [ -z "${!key+x}" ]; then
+      export "${key}=${value}"
+    fi
+  done <"$file"
+}
+
+load_env_file "${WEGENT_ENV_DEFAULTS_FILE:-${ROOT_DIR}/.env.defaults}"
+load_env_file "${WEGENT_ENV_FILE:-${ROOT_DIR}/.env}"
+load_env_file "${WEGENT_ENV_LOCAL_FILE:-${ROOT_DIR}/.env.local}"
+
 # Default ports
 FRONTEND_PORT="${WEGENT_FRONTEND_PORT:-3000}"
 BACKEND_PORT="${WEGENT_BACKEND_PORT:-8000}"
@@ -70,6 +119,11 @@ NC='\033[0m'
 usage() {
   cat <<EOF
 Usage: ./start.sh [OPTIONS]
+
+This script reads env files automatically (lowest precedence first):
+  - .env.defaults (tracked)
+  - .env (gitignored)
+  - .env.local (gitignored)
 
 Options:
   --frontend-port PORT           Frontend port (default: ${FRONTEND_PORT})

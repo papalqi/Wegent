@@ -515,12 +515,12 @@ jobs:
       - build-executor-manager
       - build-frontend
     runs-on: ubuntu-latest
+    continue-on-error: ${{ github.ref_type == 'tag' }}
     permissions:
       contents: write
       pull-requests: write
     if: >
       always() &&
-      github.ref_type != 'tag' &&
       needs.prepare-release.result == 'success' &&
       (
         (needs.determine-changes.outputs.backend == 'true' && needs.build-backend.result == 'success') ||
@@ -549,51 +549,71 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ ! -f docker-compose.yml ]; then
-            echo "Error: docker-compose.yml not found"
-            exit 1
+          update_env_kv() {
+            local file="$1"
+            local key="$2"
+            local value="$3"
+
+            if [ ! -f "$file" ]; then
+              touch "$file"
+            fi
+
+            if grep -q "^${key}=" "$file"; then
+              sed -i -E "s|^${key}=.*|${key}=${value}|g" "$file"
+            else
+              echo "${key}=${value}" >> "$file"
+            fi
+          }
+
+          DEPLOY_ENV_FILE=".env.defaults"
+          if [ ! -f "${DEPLOY_ENV_FILE}" ]; then
+            echo "Warning: ${DEPLOY_ENV_FILE} not found; creating it."
           fi
 
-          if [ "${CHANGED_BACKEND}" = "true" ]; then
-            echo "Updating backend image version to ${VERSION}"
-            sed -i -E "s|(image:\\s*)ghcr\\.io/[^/]+/wegent-backend:[0-9]+\\.[0-9]+\\.[0-9]+|\\1${IMAGE_PREFIX}/wegent-backend:${VERSION}|g" docker-compose.yml
-          else
-            echo "Backend unchanged, skip updating backend image tag"
-          fi
+          echo "Updating ${DEPLOY_ENV_FILE} to IMAGE_PREFIX=${IMAGE_PREFIX} (and pin versions for changed modules)."
+          update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_IMAGE_PREFIX" "${IMAGE_PREFIX}"
 
           if [ "${CHANGED_EXECUTOR}" = "true" ]; then
             echo "Updating executor image version to ${VERSION}"
-            # executor image is referenced via executor_manager's EXECUTOR_IMAGE env var
-            sed -i -E "s|(EXECUTOR_IMAGE=)ghcr\\.io/[^/]+/wegent-executor:[0-9]+\\.[0-9]+\\.[0-9]+(-codex)?|\\1${IMAGE_PREFIX}/wegent-executor:${VERSION}-codex|g" docker-compose.yml
+            update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_EXECUTOR_VERSION" "${VERSION}-codex"
+            update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_EXECUTOR_IMAGE" "${IMAGE_PREFIX}/wegent-executor:${VERSION}-codex"
           else
             echo "Executor unchanged, skip updating executor image tag"
           fi
 
           if [ "${CHANGED_EXECUTOR_MANAGER}" = "true" ]; then
             echo "Updating executor manager image version to ${VERSION}"
-            sed -i -E "s|(image:\\s*)ghcr\\.io/[^/]+/wegent-executor-manager:[0-9]+\\.[0-9]+\\.[0-9]+|\\1${IMAGE_PREFIX}/wegent-executor-manager:${VERSION}|g" docker-compose.yml
+            update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_EXECUTOR_MANAGER_VERSION" "${VERSION}"
+            update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_EXECUTOR_MANAGER_IMAGE" "${IMAGE_PREFIX}/wegent-executor-manager:${VERSION}"
           else
             echo "Executor manager unchanged, skip updating executor manager image tag"
           fi
 
           if [ "${CHANGED_FRONTEND}" = "true" ]; then
             echo "Updating frontend image version to ${VERSION}"
-            sed -i -E "s|(image:\\s*)ghcr\\.io/[^/]+/wegent-web:[0-9]+\\.[0-9]+\\.[0-9]+|\\1${IMAGE_PREFIX}/wegent-web:${VERSION}|g" docker-compose.yml
+            update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_FRONTEND_VERSION" "${VERSION}"
           else
             echo "Frontend unchanged, skip updating frontend image tag"
           fi
 
-      - name: Create Pull Request for docker-compose bump
+          if [ "${CHANGED_BACKEND}" = "true" ]; then
+            echo "Updating backend image version to ${VERSION}"
+            update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_BACKEND_VERSION" "${VERSION}"
+          else
+            echo "Backend unchanged, skip updating backend image tag"
+          fi
+
+      - name: Create Pull Request for deploy env bump
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: ${{ github.event.repository.default_branch }}
-          commit-message: "chore: update docker-compose.yml to version ${{ needs.prepare-release.outputs.new_version }}"
-          branch: weagent/update-docker-compose-${{ needs.prepare-release.outputs.new_version }}
+          commit-message: "chore: update deploy env to version ${{ needs.prepare-release.outputs.new_version }}"
+          branch: weagent/update-deploy-env-${{ needs.prepare-release.outputs.new_version }}
           delete-branch: true
-          title: "chore: update docker-compose.yml to version ${{ needs.prepare-release.outputs.new_version }}"
+          title: "chore: update deploy env to version ${{ needs.prepare-release.outputs.new_version }}"
           body: |
-            This PR updates Docker image versions in docker-compose.yml to version ${{ needs.prepare-release.outputs.new_version }}.
+            This PR updates `.env.defaults` to pin Docker image versions to ${{ needs.prepare-release.outputs.new_version }}.
 
             ## Changes
             The following images have been built and pushed to GHCR with version ${{ needs.prepare-release.outputs.new_version }} (only modules with changes were updated):
