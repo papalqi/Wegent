@@ -7,10 +7,19 @@ name: Publish Image
 on:
   pull_request:
     types: [closed]
+  push:
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.29). Leave empty to bump patch from docker-compose.yml.'
+        required: false
 
 env:
-  GIT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || 'main' }}
+  GIT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
+  REF_TYPE: ${{ github.ref_type }}
+  REF_NAME: ${{ github.ref_name }}
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
 
@@ -28,6 +37,7 @@ jobs:
         github.event.pull_request.base.ref == 'main' &&
         github.event.pull_request.merged == true &&
         contains(github.event.pull_request.title, 'Changeset version bump') ) ||
+      github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch'
 
     outputs:
@@ -46,18 +56,32 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ "${REF_TYPE}" = "tag" ]; then
+            VERSION="${REF_NAME#v}"
+            echo "Using tag version: ${VERSION}"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "${{ inputs.version || '' }}" ]; then
+            VERSION="${{ inputs.version }}"
+            echo "Using workflow_dispatch input version: ${VERSION}"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if [ ! -f docker-compose.yml ]; then
             echo "Error: docker-compose.yml not found"
             exit 1
           fi
 
-          LINE=$(grep -E 'ghcr.io/wecode-ai/wegent-backend:[0-9]+\.[0-9]+\.[0-9]+' docker-compose.yml | head -1 || true)
+          LINE=$(grep -E 'image:\s*ghcr\.io/[^/]+/wegent-backend:[0-9]+\.[0-9]+\.[0-9]+' docker-compose.yml | head -1 || true)
           if [ -z "$LINE" ]; then
             echo "Error: Could not find backend image line in docker-compose.yml"
             exit 1
           fi
 
-          VERSION=$(echo "$LINE" | sed -E 's/.*ghcr.io\/wecode-ai\/wegent-backend:([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          VERSION=$(echo "$LINE" | sed -E 's/.*wegent-backend:([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
           if [ -z "$VERSION" ]; then
             echo "Error: Could not extract version from docker-compose.yml"
             exit 1
@@ -111,7 +135,23 @@ jobs:
           git fetch --tags --force
 
           HEAD_REF=$(git rev-parse HEAD)
+          CURRENT_TAG=""
+          if [ "${REF_TYPE}" = "tag" ]; then
+            CURRENT_TAG="${REF_NAME}"
+          fi
+
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+
+          if [ -n "${CURRENT_TAG}" ] && [ "${LAST_TAG}" = "${CURRENT_TAG}" ]; then
+            # On tag pushes, `git describe --abbrev=0` returns the current tag.
+            # We need the previous release tag for an accurate diff.
+            PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${CURRENT_TAG}$" | head -n 1 || true)
+            if [ -n "${PREV_TAG}" ]; then
+              LAST_TAG="${PREV_TAG}"
+            else
+              LAST_TAG=""
+            fi
+          fi
 
           if [ -n "${LAST_TAG}" ]; then
             BASE_REF="${LAST_TAG}"
@@ -228,7 +268,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ${{ env.IMAGE_PREFIX }}/wegent-executor:${{ needs.prepare-release.outputs.new_version }}
+            ${{ env.IMAGE_PREFIX }}/wegent-executor:${{ needs.prepare-release.outputs.new_version }}-codex
             ${{ env.IMAGE_PREFIX }}/wegent-executor:latest
+            ${{ env.IMAGE_PREFIX }}/wegent-executor:latest-codex
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -325,6 +367,7 @@ jobs:
       contents: write
     if: >
       always() &&
+      github.ref_type != 'tag' &&
       needs.prepare-release.result == 'success' &&
       (
         (needs.determine-changes.outputs.backend == 'true' && needs.build-backend.result == 'success') ||
@@ -428,6 +471,7 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ needs.prepare-release.outputs.new_version }}
+          IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
           CHANGED_BACKEND: ${{ needs.determine-changes.outputs.backend }}
           CHANGED_EXECUTOR: ${{ needs.determine-changes.outputs.executor }}
           CHANGED_EXECUTOR_MANAGER: ${{ needs.determine-changes.outputs.executor_manager }}
@@ -442,28 +486,29 @@ jobs:
 
           if [ "${CHANGED_BACKEND}" = "true" ]; then
             echo "Updating backend image version to ${VERSION}"
-            sed -i -E "s|(ghcr.io/wecode-ai/wegent-backend:)[0-9]+\.[0-9]+\.[0-9]+|\1${VERSION}|g" docker-compose.yml
+            sed -i -E "s|(image:\\s*)ghcr\\.io/[^/]+/wegent-backend:[0-9]+\\.[0-9]+\\.[0-9]+|\\1${IMAGE_PREFIX}/wegent-backend:${VERSION}|g" docker-compose.yml
           else
             echo "Backend unchanged, skip updating backend image tag"
           fi
 
           if [ "${CHANGED_EXECUTOR}" = "true" ]; then
             echo "Updating executor image version to ${VERSION}"
-            sed -i -E "s|(ghcr.io/wecode-ai/wegent-executor:)[0-9]+\.[0-9]+\.[0-9]+|\1${VERSION}|g" docker-compose.yml
+            # executor image is referenced via executor_manager's EXECUTOR_IMAGE env var
+            sed -i -E "s|(EXECUTOR_IMAGE=)ghcr\\.io/[^/]+/wegent-executor:[0-9]+\\.[0-9]+\\.[0-9]+(-codex)?|\\1${IMAGE_PREFIX}/wegent-executor:${VERSION}-codex|g" docker-compose.yml
           else
             echo "Executor unchanged, skip updating executor image tag"
           fi
 
           if [ "${CHANGED_EXECUTOR_MANAGER}" = "true" ]; then
             echo "Updating executor manager image version to ${VERSION}"
-            sed -i -E "s|(ghcr.io/wecode-ai/wegent-executor-manager:)[0-9]+\.[0-9]+\.[0-9]+|\1${VERSION}|g" docker-compose.yml
+            sed -i -E "s|(image:\\s*)ghcr\\.io/[^/]+/wegent-executor-manager:[0-9]+\\.[0-9]+\\.[0-9]+|\\1${IMAGE_PREFIX}/wegent-executor-manager:${VERSION}|g" docker-compose.yml
           else
             echo "Executor manager unchanged, skip updating executor manager image tag"
           fi
 
           if [ "${CHANGED_FRONTEND}" = "true" ]; then
             echo "Updating frontend image version to ${VERSION}"
-            sed -i -E "s|(ghcr.io/wecode-ai/wegent-web:)[0-9]+\.[0-9]+\.[0-9]+|\1${VERSION}|g" docker-compose.yml
+            sed -i -E "s|(image:\\s*)ghcr\\.io/[^/]+/wegent-web:[0-9]+\\.[0-9]+\\.[0-9]+|\\1${IMAGE_PREFIX}/wegent-web:${VERSION}|g" docker-compose.yml
           else
             echo "Frontend unchanged, skip updating frontend image tag"
           fi
@@ -482,10 +527,10 @@ jobs:
             ## Changes
             The following images have been built and pushed to GHCR with version ${{ needs.prepare-release.outputs.new_version }} (only modules with changes were updated):
 
-            - Backend image: `ghcr.io/wecode-ai/wegent-backend:${{ needs.prepare-release.outputs.new_version }}` (changed: ${{ needs.determine-changes.outputs.backend }})
-            - Executor image: `ghcr.io/wecode-ai/wegent-executor:${{ needs.prepare-release.outputs.new_version }}` (changed: ${{ needs.determine-changes.outputs.executor }})
-            - Executor Manager image: `ghcr.io/wecode-ai/wegent-executor-manager:${{ needs.prepare-release.outputs.new_version }}` (changed: ${{ needs.determine-changes.outputs.executor_manager }})
-            - Frontend image: `ghcr.io/wecode-ai/wegent-web:${{ needs.prepare-release.outputs.new_version }}` (changed: ${{ needs.determine-changes.outputs.frontend }})
+            - Backend image: `${{ env.IMAGE_PREFIX }}/wegent-backend:${{ needs.prepare-release.outputs.new_version }}` (changed: ${{ needs.determine-changes.outputs.backend }})
+            - Executor image: `${{ env.IMAGE_PREFIX }}/wegent-executor:${{ needs.prepare-release.outputs.new_version }}-codex` (changed: ${{ needs.determine-changes.outputs.executor }})
+            - Executor Manager image: `${{ env.IMAGE_PREFIX }}/wegent-executor-manager:${{ needs.prepare-release.outputs.new_version }}` (changed: ${{ needs.determine-changes.outputs.executor_manager }})
+            - Frontend image: `${{ env.IMAGE_PREFIX }}/wegent-web:${{ needs.prepare-release.outputs.new_version }}` (changed: ${{ needs.determine-changes.outputs.frontend }})
 
             ## Release Tag
             Git tag `v${{ needs.prepare-release.outputs.new_version }}` has been created and pushed (if at least one component changed).
