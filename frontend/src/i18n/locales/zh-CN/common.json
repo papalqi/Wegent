@@ -751,6 +751,7 @@
     "api_key": "API Key",
     "base_url": "Base URL",
     "base_url_hint": "使用默认端点留空，使用代理或自定义端点时填写",
+    "base_url_resolved": "最终地址",
     "model_id": "模型 ID",
     "select_model_id": "选择模型 ID",
     "custom_model_id_placeholder": "输入自定义模型 ID",

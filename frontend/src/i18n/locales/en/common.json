@@ -750,6 +750,7 @@
     "api_key": "API Key",
     "base_url": "Base URL",
     "base_url_hint": "Leave empty for default endpoint, fill in for proxy or custom endpoint",
+    "base_url_resolved": "Resolved URL",
     "model_id": "Model ID",
     "select_model_id": "Select Model ID",
     "custom_model_id_placeholder": "Enter custom model ID",

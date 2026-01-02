@@ -27,6 +27,10 @@ import { Loader2 } from 'lucide-react';
 import { EyeIcon, EyeSlashIcon, BeakerIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from '@/hooks/useTranslation';
 import {
+  getProviderBaseUrlResolvedForDisplay,
+  normalizeProviderBaseUrl,
+} from '@/features/settings/utils/provider-base-url';
+import {
   modelApis,
   ModelCRD,
   ModelCategoryType,
@@ -298,20 +302,21 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
       }
     }
   }, [model, modelOptions]);
+
+  const baseUrlResolvedForDisplay = React.useMemo(() => {
+    return getProviderBaseUrlResolvedForDisplay(providerType, baseUrl);
+  }, [providerType, baseUrl]);
+
+  const baseUrlResolvedForRequest = React.useMemo(() => {
+    if (!baseUrl.trim()) return undefined;
+    const resolved = normalizeProviderBaseUrl(providerType, baseUrl);
+    return resolved || undefined;
+  }, [providerType, baseUrl]);
   const handleProviderChange = (value: string) => {
     setProviderType(value);
     setModelId('');
     setCustomModelId('');
-    // Only set default base URL for LLM models
-    if (modelCategoryType === 'llm') {
-      if (value === 'openai' || value === 'openai-responses') {
-        setBaseUrl('https://api.openai.com/v1');
-      } else if (value === 'gemini') {
-        setBaseUrl('https://generativelanguage.googleapis.com');
-      } else {
-        setBaseUrl('https://api.anthropic.com');
-      }
-    }
+    setBaseUrl('');
   };
 
   const handleTestConnection = async () => {
@@ -340,7 +345,7 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
         provider_type: providerType as 'openai' | 'anthropic' | 'gemini',
         model_id: finalModelId,
         api_key: apiKey,
-        base_url: baseUrl || undefined,
+        base_url: baseUrlResolvedForRequest,
         custom_headers: Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
         model_category_type: modelCategoryType,
       });
@@ -514,7 +519,7 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
               model: modelFieldValue,
               model_id: finalModelId,
               api_key: apiKey,
-              ...(baseUrl && { base_url: baseUrl }),
+              ...(baseUrlResolvedForRequest && { base_url: baseUrlResolvedForRequest }),
               ...(parsedHeaders &&
                 Object.keys(parsedHeaders).length > 0 && { custom_headers: parsedHeaders }),
             },
@@ -569,7 +574,7 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
         : 'sk-ant-...';
   const baseUrlPlaceholder =
     providerType === 'openai' || providerType === 'openai-responses'
-      ? 'https://api.openai.com/v1'
+      ? 'https://api.openai.com'
       : providerType === 'gemini'
         ? 'https://generativelanguage.googleapis.com'
         : 'https://api.anthropic.com';
@@ -736,6 +741,12 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
               className="bg-base"
             />
             <p className="text-xs text-text-muted">{t('common:models.base_url_hint')}</p>
+            {baseUrlResolvedForDisplay && (
+              <p className="text-xs text-text-muted">
+                {t('common:models.base_url_resolved')}:&nbsp;
+                <span className="font-mono">{baseUrlResolvedForDisplay}</span>
+              </p>
+            )}
           </div>
 
           {/* Custom Headers */}
