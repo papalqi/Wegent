@@ -1285,22 +1285,26 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             )
             team = db.query(Kind).filter(Kind.id == team_id).first()
             if team:
-                # For both owner and group members, use the task owner's user_id to get team info
-                # This ensures group members can see the team's bots and configuration
-                task_owner_id = task_member_service.get_task_owner_id(db, task_id)
+                # Use the team's owner user_id as the conversion context.
+                #
+                # For non-group Teams (namespace=default), `_convert_to_team_dict` filters Bots by
+                # `user_id`. If the Task was created with a shared Team, the task owner user_id
+                # differs from `team.user_id`, and converting with the task owner would return an
+                # empty bots list (thus an empty system prompt in the UI).
+                team_owner_id = team.user_id
                 logger.info(
-                    f"[get_task_detail] task_owner_id={task_owner_id}, team found: {team is not None}"
+                    f"[get_task_detail] team_owner_id={team_owner_id}, team found: {team is not None}"
                 )
-                if task_owner_id:
+                if team_owner_id:
                     team = team_kinds_service._convert_to_team_dict(
-                        team, db, task_owner_id
+                        team, db, team_owner_id
                     )
                     logger.info(
                         f"[get_task_detail] after _convert_to_team_dict, team: {team is not None}"
                     )
                 else:
                     logger.warning(
-                        f"[get_task_detail] task_owner_id is None for task_id={task_id}"
+                        f"[get_task_detail] team_owner_id is None for task_id={task_id}, team_id={team_id}"
                     )
                     team = None
             else:
