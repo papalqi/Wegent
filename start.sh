@@ -482,7 +482,9 @@ main() {
     -v /var/run/docker.sock:/var/run/docker.sock \
     "${EXECUTOR_MANAGER_IMAGE}" >/dev/null
 
-  if ! wait_for_http "http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/health" 60; then
+  # Executor Manager performs a one-time executor binary extraction which can take ~2 minutes
+  # on first run (docker pull + copy). Extend health wait to avoid false negatives.
+  if ! wait_for_http "http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/health" 200; then
     die "Executor Manager did not become healthy on port ${EXECUTOR_MANAGER_PORT}."
   fi
   echo -e "${GREEN}✓ Executor Manager is healthy${NC}"

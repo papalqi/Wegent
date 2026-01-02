@@ -37,6 +37,16 @@ Wegent 是开源的智能体团队操作系统。本文件是贡献者的中文�
   - Frontend 格式：`npm run format && npm run lint`
   - 迁移：`uv run alembic revision --autogenerate -m "<msg>" && uv run alembic upgrade head`
 
+### 本地 start.sh 环境注意
+- start.sh 读取顺序：`.env.defaults` < `.env` < `.env.local` < 现有环境变量；已有环境变量不会被文件覆盖。
+- 若环境提前设置了 `WEGENT_EXECUTOR_IMAGE/WEGENT_EXECUTOR_VERSION/WEGENT_IMAGE_PREFIX`，可能指向不存在的 `ghcr.io/wecode-ai/wegent-executor:latest-codex`，导致 Executor Manager 健康检查超时。
+- 处理方式：启动前 `unset WEGENT_EXECUTOR_IMAGE WEGENT_EXECUTOR_VERSION WEGENT_IMAGE_PREFIX`，或显式设为 `export WEGENT_EXECUTOR_IMAGE=ghcr.io/papalqi/wegent-executor:1.0.33-codex`，再运行 `./start.sh --no-rag`。
+
+### Docker 镜像 CI（publish-image.yml）
+- 触发：合并到 main 的 PR（带 “Changeset version bump” 标题）、推送标签 `v*.*.*`、或手动 `workflow_dispatch`（可传 `version`、`base_ref`、`force_modules`）。
+- 逻辑：dorny/paths-filter 检测 backend/executor/executor_manager/frontend 目录变化；按需多架构 buildx 构建并推送到 GHCR `ghcr.io/<owner>/`，同时维护 `latest` 与 `${version}`（executor 还带 `${version}-codex` 和 `latest-codex`）。
+- 无代码变更但打 tag：直接 imagetools retag 复用上一个版本；末尾自动更新 `.env.defaults` 中的镜像版本并推 PR（或在 tag 情况下尝试直接推送）。
+
 ## 必知编码规则
 - 高内聚、低耦合；复杂模块优先拆分。
 - 单文件 ≤ 1000 行；函数建议 ≤ 50 行。
