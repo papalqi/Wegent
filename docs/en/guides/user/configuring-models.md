@@ -463,28 +463,26 @@ In the model creation/edit dialog, configure the following:
 - **Display Name**: Optional human-readable name shown in the UI
 
 **Provider Configuration**:
-- **Provider Type**: Select `OpenAI` or `Anthropic`
-- **Model ID**: Choose from preset models or enter a custom model ID
-  - OpenAI presets: `gpt-4`, `gpt-4-turbo`, `gpt-3.5-turbo`, `gpt-4o`, `gpt-4o-mini`
-  - Anthropic presets: `claude-sonnet-4-20250514`, `claude-3-7-sonnet-20250219`, `claude-3-5-haiku-20241022`
+- **Provider Type**: Select a protocol (OpenAI / OpenAI Responses / Anthropic / Gemini, etc.)
+  - OpenAI protocol also works for OpenAI-compatible endpoints
+- **Model ID**: Fetch from the provider `/models` endpoint and select one, or choose **Custom...** and enter manually
 
 **Authentication**:
 - **API Key**: Enter your API key from the provider
   - Use the visibility toggle (👁️) to show/hide the key
 - **Base URL**: Optional custom API endpoint (for proxies or self-hosted services)
+  - For OpenAI-compatible endpoints, you can input the host without `/v1` (e.g. `http://localhost:8000`) and the UI will show the resolved URL (e.g. `http://localhost:8000/v1`)
 
 #### Step 3: Test Connection
 
 Before saving, use the **Test Connection** feature to verify your configuration:
 
 1. Click the **Test Connection** button
-2. The system will send a minimal test request to verify:
-   - API Key validity
-   - Model availability
-   - Network connectivity
+2. The system will send real probe requests (e.g. list models, prompt test, embeddings) and show per-check status/latency
+   - Note: this may incur costs or rate limits, and it only runs when you click the button
 3. Results:
-   - ✅ "Successfully connected to {model}" - Configuration is valid
-   - ❌ Error message - Check your API key or network settings
+   - ✅ Per-check **OK** - Configuration is valid for the tested endpoints
+   - ❌ Per-check **Fail** - Check your API key, model ID, base URL, or endpoint compatibility
 
 #### Step 4: Save Configuration
 
