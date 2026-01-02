@@ -38,3 +38,8 @@
 - 少用阴影，多用分隔线和留白。
 - 控件圆角统一 `var(--radius)`。
 - 交互动画少量、有目的（加载、分步进入），避免花哨微动效。
+
+## Chat / Workbench 组件实践
+- **任务状态与进度**：优先用 `status_phase/progress/progress_text` 驱动展示；组件参考 `frontend/src/features/tasks/components/chat/TaskExecutionStatusBanner.tsx`。
+- **系统提示词展示**：默认折叠 + 可滚动 + 复制按钮，避免混入消息流；组件参考 `frontend/src/features/tasks/components/chat/SystemPromptPanel.tsx`。
+- **文件变更 Diff**：避免硬编码 Tailwind 色值（如 `text-green-600/bg-red-50`），优先用 tokens（`text-success/bg-success/10` 等）与 UI 组件（`Card/Input/Tag/Button`）；实现参考 `frontend/src/features/tasks/components/message/DiffViewer.tsx`。

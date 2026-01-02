@@ -40,6 +40,18 @@ const exportMessages = messages
 - `progress_text`：用于 UI 展示的阶段文案（可由后端或前端映射生成）
 - `completed_at`：终态时间戳
 
+#### 示例 payload
+```json
+{
+  "task_id": 123,
+  "status": "RUNNING",
+  "progress": 42,
+  "status_phase": "loading_skills",
+  "progress_text": "加载技能/模型",
+  "completed_at": null
+}
+```
+
 | 阶段键 | 展示文案 | 触发条件 | 来源信号 | 结束/降级条件 |
 | --- | --- | --- | --- | --- |
 | `queued` | 等待分配 | `TaskStatus=PENDING` 且 executor 未下发 phase | `task:status.status` 或 REST `TaskDetail.status` | 收到 RUNNING/FAILED/CANCELLED 即退出 |
@@ -57,3 +69,9 @@ const exportMessages = messages
 - **兜底规则**：缺少 `status_phase` 时，前端用 `TaskStatus + progress` 按表格分段映射，最小化回退到旧 UI 仅显示“执行中”。
 - **观测**：所有 phase 变化应伴随日志/埋点，便于对齐后端实际触发点。
 - **REST 对齐**：`TaskDetail`/任务列表返回同名字段 `status_phase`、`progress_text`（可为空），旧客户端忽略即可。
+
+### 后端进度计算（推荐策略）
+- **真实进度优先**：当 executor 持续上报子任务 `progress` 时，后端按“步骤等权”合成任务进度：
+  `progress = (completed_steps + running_step_fraction) / total_steps * 100`。
+- **伪进度兜底**：当 RUNNING 但无真实进度（例如长期为 0）时，后端允许缓慢推进但 **不超过 99%**，并在终态（COMPLETED/FAILED/CANCELLED）统一收敛到 100%。
+- **前端映射入口**：前端展示侧优先用 `status_phase`；缺失时可参考 `frontend/src/utils/task-execution-phase.ts` 的分段兜底实现。
