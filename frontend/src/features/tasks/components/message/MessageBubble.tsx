@@ -40,6 +40,7 @@ import BubbleTools, { CopyButton } from './BubbleTools';
 import { SourceReferences } from '../chat/SourceReferences';
 import CollapsibleMessage from './CollapsibleMessage';
 import MessageDebugPanel, { type MessageDebugPayload } from './MessageDebugPanel';
+import CodexEventStreamPanel from './CodexEventStreamPanel';
 import type { ClarificationData, FinalPromptData, ClarificationAnswer } from '@/types/api';
 import type { SourceReference } from '@/types/socket';
 import { useTraceAction } from '@/hooks/useTraceAction';
@@ -71,6 +72,8 @@ export interface Message {
     thinking?: unknown[];
     workbench?: Record<string, unknown>;
     shell_type?: string; // Shell type (Chat, ClaudeCode, Agno, etc.)
+    /** Raw Codex `codex exec --json` event stream (persisted on backend for refresh replay) */
+    codex_events?: unknown[];
     sources?: SourceReference[]; // RAG knowledge base sources
   };
   /** @deprecated Use contexts instead */
@@ -1356,11 +1359,7 @@ const MessageBubble = memo(
         >
           {/* Show thinking display for AI messages */}
           {!isUserTypeMessage && msg.thinking && (
-            <ThinkingDisplay
-              thinking={msg.thinking}
-              taskStatus={msg.subtaskStatus}
-              shellType={msg.result?.shell_type}
-            />
+            <ThinkingDisplay thinking={msg.thinking} taskStatus={msg.subtaskStatus} />
           )}
           <div
             className={`${bubbleBaseClasses} ${bubbleTypeClasses}`}
@@ -1442,6 +1441,9 @@ const MessageBubble = memo(
             )}
 
             <MessageDebugPanel data={msg.debug} t={t} />
+            {msg.type === 'ai' && msg.result?.shell_type === 'Codex' && (
+              <CodexEventStreamPanel events={msg.result.codex_events} t={t} />
+            )}
 
             {/* Show copy button for user messages - visible on hover */}
             {isUserTypeMessage && (

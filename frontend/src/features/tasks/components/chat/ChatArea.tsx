@@ -23,7 +23,6 @@ import { useScrollManagement } from '../hooks/useScrollManagement';
 import { useFloatingInput } from '../hooks/useFloatingInput';
 import { useTeamPreferences } from '../hooks/useTeamPreferences';
 import { useAttachmentUpload } from '../hooks/useAttachmentUpload';
-import { TaskExecutionStatusBanner } from './TaskExecutionStatusBanner';
 import SystemPromptPanel from './SystemPromptPanel';
 
 /**
@@ -168,25 +167,6 @@ export default function ChatArea({
     streamHandlers.localPendingMessage,
     streamHandlers.currentStreamState?.messages,
   ]);
-
-  const lastRetryableErrorMessage = useMemo(() => {
-    const messages = streamHandlers.currentStreamState?.messages;
-    if (!messages) return null;
-
-    const candidates = Array.from(messages.values())
-      .filter(m => m.status === 'error' && Boolean(m.subtaskId))
-      .sort((a, b) => b.timestamp - a.timestamp);
-
-    const msg = candidates[0];
-    if (!msg || !msg.subtaskId) return null;
-
-    return {
-      content: msg.content,
-      type: msg.type,
-      error: msg.error,
-      subtaskId: msg.subtaskId,
-    };
-  }, [streamHandlers.currentStreamState?.messages]);
 
   // Use team preferences hook - consolidates team preference logic
   // Note: Model selection is now handled by useModelSelection hook in ModelSelector
@@ -410,11 +390,6 @@ export default function ChatArea({
           style={{ paddingBottom: hasMessages ? `${inputHeight + 16}px` : '0' }}
         >
           <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 pt-12">
-            <TaskExecutionStatusBanner
-              task={selectedTaskDetail}
-              retryMessage={lastRetryableErrorMessage}
-              onRetry={streamHandlers.handleRetry}
-            />
             <SystemPromptPanel team={selectedTaskDetail?.team || chatState.selectedTeam} />
             <MessagesArea
               selectedTeam={chatState.selectedTeam}
