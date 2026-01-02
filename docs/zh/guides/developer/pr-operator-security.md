@@ -128,3 +128,48 @@
 ## 10. Executor 执行面收敛（参考实现）
 
 为降低注入风险，Executor 侧建议对 PR 相关流程启用受限命令白名单（例如仅允许 `git/gh/glab`），并避免 `shell=True` 拼接；同时对 stdout/stderr 进行统一脱敏后再记录日志。
+
+## 11. 上线开关与降级回滚 Runbook
+
+本节给出“只读 → 写入 → 降级回滚”的推荐配置与操作步骤，目标是：**默认只读**、**显式开启写能力**、以及出现异常时**一键回滚到只读**且**审计仍可追溯**。
+
+### 11.1 默认只读（推荐默认态）
+
+- Backend（PR Action Gateway / Policy）
+  - `PR_ACTION_WRITE_ENABLED=false`（默认值即为 false；未配置也会保持只读）
+  - `PR_ACTION_REPO_ALLOWLIST` 留空或仅填允许 repo（建议先填 allowlist，再开启写）
+  - `PR_ACTION_BASE_BRANCH_ALLOWLIST` 留空或仅填允许 base（例如 `main,release/*`）
+- GitHub MCP（如使用 `ghcr.io/github/github-mcp-server`）
+  - `GITHUB_READ_ONLY=true`
+  - `GITHUB_TOOLSETS` 显式枚举为只读查询所需（例如 `repos,pulls`）
+
+验证要点：
+- 对 `/api/pr/actions/create-pr`、`/api/pr/actions/update-pr` 的请求必须被拒绝（`detail.code=PR_WRITE_DISABLED`），且返回 `audit_id` 便于追溯。
+
+### 11.2 逐步放量开启写入（灰度）
+
+推荐顺序（降低风险，避免一次性开放过大范围）：
+1. 先收敛 allowlist：配置 `PR_ACTION_REPO_ALLOWLIST` 与 `PR_ACTION_BASE_BRANCH_ALLOWLIST`
+2. 再开启写能力：设置 `PR_ACTION_WRITE_ENABLED=true`
+3. 最小化 token 权限与 scope（优先 GitHub App installation token）
+
+验证要点（建议用同一个 `Idempotency-Key` 重试验证幂等）：
+- allowlist repo/base 的请求应返回 200，并落审计为 `allowed`
+- 非 allowlist repo/base 的请求应返回 403，并落审计为 `denied`（含稳定 `detail.code` 与 `audit_id`）
+
+### 11.3 一键降级回滚到只读（紧急）
+
+当出现异常（误写、越权风险、上游不稳定、审计告警异常等）时：
+1. 将 `PR_ACTION_WRITE_ENABLED=false`（或直接移除该环境变量）
+2. 若 MCP 曾开启写：将 `GITHUB_READ_ONLY=true`（必要时进一步收敛 `GITHUB_TOOLSETS`）
+3. 对相关服务做滚动重启/重启以加载新配置（Backend / Executor / MCP 容器）
+
+回滚验证要点：
+- 写请求应立即被拒绝（`detail.code=PR_WRITE_DISABLED`），并持续产生可查询的审计记录（`audit_id` 不为空）。
+
+### 11.4 快速排障与审计定位
+
+- 后端返回体中包含 `audit_id` 时，优先用该 id 查询审计表（例如 `pr_action_audits`）定位：
+  - `decision=denied`：看 `policy_code/policy_message` 是否符合预期
+  - `decision=error`：排查上游（Git provider）错误与网络/超时配置
+- 降级后仍需保留审计与拒绝码稳定性，便于告警与回溯；不要依赖提示词“自觉不写”作为唯一控制。
