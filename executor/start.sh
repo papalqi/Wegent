@@ -289,6 +289,8 @@ echo ""
 export PORT="$PORT"
 export WORKSPACE_ROOT="$WORKSPACE_ROOT"
 export CALLBACK_URL="$CALLBACK_URL"
+# Optional: persist raw `codex exec --json` stdout/stderr under $WORKSPACE_ROOT/<task_id>/.
+# Enable with: CODEX_PERSIST_EVENT_STREAM=true
 
 # Create workspace directory if it doesn't exist
 if [ ! -d "$WORKSPACE_ROOT" ]; then

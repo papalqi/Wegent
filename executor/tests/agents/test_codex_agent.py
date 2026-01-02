@@ -196,6 +196,17 @@ class TestCodexAgent:
     @pytest.mark.asyncio
     async def test_async_execute_streams_and_completes(self, tmp_path, monkeypatch):
         monkeypatch.setattr(codex_agent_module.config, "WORKSPACE_ROOT", str(tmp_path))
+        monkeypatch.setattr(
+            codex_agent_module.config, "CODEX_PERSIST_EVENT_STREAM", True
+        )
+        monkeypatch.setattr(
+            codex_agent_module.config,
+            "CODEX_EVENT_STREAM_FILENAME",
+            "codex-events.jsonl",
+        )
+        monkeypatch.setattr(
+            codex_agent_module.config, "CODEX_STDERR_FILENAME", "codex-stderr.log"
+        )
         task_data = {
             "task_id": 123,
             "subtask_id": 1,
@@ -246,6 +257,9 @@ class TestCodexAgent:
         status = await agent._async_execute()
 
         assert status == TaskStatus.COMPLETED
+        events_path = tmp_path / "123" / "codex-events.jsonl"
+        assert events_path.exists() is True
+        assert json.dumps(event) in events_path.read_text(encoding="utf-8")
         assert any(
             p[0] == 100 and p[1] == TaskStatus.COMPLETED.value
             for p in agent.state_manager.progress_calls

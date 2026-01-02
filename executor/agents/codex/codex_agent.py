@@ -12,7 +12,7 @@ import os
 import shlex
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from executor.agents.agno.thinking_step_manager import ThinkingStepManager
 from executor.agents.base import Agent
@@ -324,6 +324,22 @@ class CodexAgent(Agent):
         cmd.append("-")
         return cmd
 
+    def _open_event_stream_files(
+        self,
+    ) -> Tuple[Optional[Path], Optional[Path], Optional[Any], Optional[Any]]:
+        if not config.CODEX_PERSIST_EVENT_STREAM:
+            return None, None, None, None
+
+        task_root = Path(config.WORKSPACE_ROOT) / str(self.task_id)
+        task_root.mkdir(parents=True, exist_ok=True)
+
+        stdout_path = task_root / config.CODEX_EVENT_STREAM_FILENAME
+        stderr_path = task_root / config.CODEX_STDERR_FILENAME
+
+        stdout_fp = stdout_path.open("ab")
+        stderr_fp = stderr_path.open("ab")
+        return stdout_path, stderr_path, stdout_fp, stderr_fp
+
     async def _async_execute(self) -> TaskStatus:
         if self.task_state_manager.is_cancelled(self.task_id):
             logger.info("Task %s was cancelled before Codex execution", self.task_id)
@@ -371,10 +387,34 @@ class CodexAgent(Agent):
 
         accumulated = ""
         stderr_lines: list[str] = []
+        stdout_path: Optional[Path] = None
+        stderr_path: Optional[Path] = None
+        stdout_fp = None
+        stderr_fp = None
+
+        try:
+            stdout_path, stderr_path, stdout_fp, stderr_fp = (
+                self._open_event_stream_files()
+            )
+            if stdout_path and stderr_path:
+                logger.info(
+                    "Persisting Codex event stream for task %s to %s (stderr: %s)",
+                    self.task_id,
+                    stdout_path,
+                    stderr_path,
+                )
+        except Exception as e:
+            logger.warning("Failed to open Codex event stream files: %s", e)
 
         async def _drain_stderr() -> None:
             assert process.stderr is not None
             async for raw in process.stderr:
+                if stderr_fp is not None:
+                    try:
+                        stderr_fp.write(raw)
+                        stderr_fp.flush()
+                    except Exception:
+                        pass
                 line = raw.decode("utf-8", errors="replace").rstrip("\n")
                 if line:
                     stderr_lines.append(line)
@@ -387,6 +427,12 @@ class CodexAgent(Agent):
         cancelled = False
         try:
             async for raw in process.stdout:
+                if stdout_fp is not None:
+                    try:
+                        stdout_fp.write(raw)
+                        stdout_fp.flush()
+                    except Exception:
+                        pass
                 if self.task_state_manager.is_cancelled(self.task_id):
                     logger.info(
                         "Task %s cancelled during Codex execution", self.task_id
@@ -487,6 +533,12 @@ class CodexAgent(Agent):
             )
             return TaskStatus.FAILED
         finally:
+            try:
+                if stdout_fp is not None:
+                    stdout_fp.close()
+            finally:
+                if stderr_fp is not None:
+                    stderr_fp.close()
             self._process = None
             self.resource_manager.unregister_resource(
                 self.task_id, f"codex_proc_{self.session_id}"
