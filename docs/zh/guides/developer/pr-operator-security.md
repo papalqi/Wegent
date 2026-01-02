@@ -104,3 +104,18 @@
 5. **密钥零落盘**：token 不得持久化；任务结束后执行环境清理；日志与输出必须脱敏
 6. **幂等与重试边界**：同一 intent 重试不能产生重复 PR；对外请求必须设置超时与上限重试
 7. **可回滚/降级**：存在一键降级到只读的开关；降级后写操作立即不可用
+
+## 9. 策略引擎（Policy Engine）配置与拒绝码
+
+后端策略评估建议在“执行前”完成，且不依赖外部网络调用（性能与稳定性更可控）。当前实现以环境变量/配置为输入，支持组合以下规则：
+
+- 开关与 allowlist：`PR_ACTION_WRITE_ENABLED`、`PR_ACTION_REPO_ALLOWLIST`、`PR_ACTION_BASE_BRANCH_ALLOWLIST`
+- 分支命名：`PR_POLICY_HEAD_BRANCH_REGEX`
+- Diff 阈值：`PR_POLICY_MAX_CHANGED_FILES`、`PR_POLICY_MAX_DIFF_LINES`
+- 禁止路径：`PR_POLICY_FORBIDDEN_PATH_PATTERNS`
+- 必须通过检查项：`PR_POLICY_REQUIRED_CHECKS`
+
+常见拒绝码（`detail.code`）：
+
+- `PR_WRITE_DISABLED` / `REPO_NOT_ALLOWED` / `BASE_NOT_ALLOWED`
+- `HEAD_BRANCH_INVALID` / `DIFF_TOO_LARGE` / `FORBIDDEN_PATH_TOUCHED` / `REQUIRED_CHECKS_FAILED`

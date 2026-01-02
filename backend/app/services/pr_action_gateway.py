@@ -145,6 +145,7 @@ def create_pull_request_action(
     decision = evaluate_create_pr_policy(
         repo_full_name=action.repo_full_name,
         base_branch=action.base_branch,
+        head_branch=action.head_branch,
     )
     if not decision.allowed:
         audit.decision = "denied"
