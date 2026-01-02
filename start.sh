@@ -28,6 +28,12 @@ ENABLE_RAG="${WEGENT_ENABLE_RAG:-false}"
 # Runtime workspace for executor containers (host path)
 EXECUTOR_WORKSPACE="${WEGENT_EXECUTOR_WORKSPACE:-${HOME}/wecode-bot}"
 
+# Docker image overrides (useful for forks publishing to GHCR)
+IMAGE_PREFIX="${WEGENT_IMAGE_PREFIX:-ghcr.io/wecode-ai}"
+EXECUTOR_MANAGER_IMAGE="${WEGENT_EXECUTOR_MANAGER_IMAGE:-${IMAGE_PREFIX}/wegent-executor-manager:${WEGENT_EXECUTOR_MANAGER_VERSION:-1.0.25}}"
+# Note: fork CI tags Codex-enabled executor as <version>-codex (e.g. 1.0.32-codex).
+EXECUTOR_IMAGE="${WEGENT_EXECUTOR_IMAGE:-${IMAGE_PREFIX}/wegent-executor:${WEGENT_EXECUTOR_VERSION:-1.0.28}}"
+
 BACKEND_PGID=""
 FRONTEND_PGID=""
 
@@ -53,6 +59,7 @@ Environment variables (optional):
   WEGENT_FRONTEND_PORT, WEGENT_BACKEND_PORT, WEGENT_EXECUTOR_MANAGER_PORT
   WEGENT_MYSQL_PORT, WEGENT_REDIS_PORT, WEGENT_ELASTICSEARCH_PORT (must match docker-compose.yml port mapping)
   WEGENT_ENABLE_RAG, WEGENT_EXECUTOR_WORKSPACE
+  WEGENT_IMAGE_PREFIX, WEGENT_EXECUTOR_MANAGER_IMAGE, WEGENT_EXECUTOR_IMAGE
 EOF
 }
 
@@ -379,13 +386,13 @@ main() {
     -e CALLBACK_PORT="8001" \
     -e NETWORK=wegent-network \
     -e DOCKER_HOST_ADDR="host.docker.internal" \
-    -e EXECUTOR_IMAGE="ghcr.io/wecode-ai/wegent-executor:1.0.28" \
+    -e EXECUTOR_IMAGE="${EXECUTOR_IMAGE}" \
     -e EXECUTOR_PORT_RANGE_MIN=10001 \
     -e EXECUTOR_PORT_RANGE_MAX=10100 \
     -e EXECUTOR_WORKSPACE="${EXECUTOR_WORKSPACE}" \
     -e EXECUTOR_WORKSPCE="${EXECUTOR_WORKSPACE}" \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    ghcr.io/wecode-ai/wegent-executor-manager:1.0.25 >/dev/null
+    "${EXECUTOR_MANAGER_IMAGE}" >/dev/null
 
   if ! wait_for_http "http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/health" 60; then
     die "Executor Manager did not become healthy on port ${EXECUTOR_MANAGER_PORT}."
