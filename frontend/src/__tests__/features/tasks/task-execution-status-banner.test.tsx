@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 
 import { TaskExecutionStatusBanner } from '@/features/tasks/components/chat/TaskExecutionStatusBanner';
 
@@ -32,10 +32,8 @@ describe('TaskExecutionStatusBanner', () => {
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
   });
 
-  it('should render retry and view error actions for failed tasks', () => {
-    const onRetry = jest.fn();
-
-    render(
+  it('should render nothing for failed tasks', () => {
+    const { container } = render(
       <TaskExecutionStatusBanner
         task={{
           status: 'FAILED',
@@ -45,15 +43,10 @@ describe('TaskExecutionStatusBanner', () => {
           error_message: 'boom',
         }}
         retryMessage={{ content: 'x', type: 'ai', error: 'boom', subtaskId: 1 }}
-        onRetry={onRetry}
+        onRetry={jest.fn()}
       />
     );
 
-    expect(screen.getByRole('alert')).toBeInTheDocument();
-    expect(screen.getByText('chat:actions.retry')).toBeInTheDocument();
-    expect(screen.getByText('chat:actions.view_error')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('chat:actions.retry'));
-    expect(onRetry).toHaveBeenCalled();
+    expect(container).toBeEmptyDOMElement();
   });
 });

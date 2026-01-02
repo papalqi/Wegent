@@ -58,7 +58,7 @@ export function TaskExecutionStatusBanner({
   const { t } = useTranslation();
 
   const [isErrorDialogOpen, setIsErrorDialogOpen] = useState(false);
-  const shouldShow = Boolean(task && (isTaskActiveStatus(task.status) || task.status === 'FAILED'));
+  const shouldShow = Boolean(task && isTaskActiveStatus(task.status));
   if (!shouldShow || !task) return null;
 
   const display = getTaskExecutionDisplay({
