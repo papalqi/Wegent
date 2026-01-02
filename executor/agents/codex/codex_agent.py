@@ -16,8 +16,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from executor.agents.agno.thinking_step_manager import ThinkingStepManager
 from executor.agents.base import Agent
-from executor.agents.claude_code.progress_state_manager import \
-    ProgressStateManager
+from executor.agents.claude_code.progress_state_manager import ProgressStateManager
 from executor.config import config
 from executor.tasks.resource_manager import ResourceManager
 from executor.tasks.task_state_manager import TaskState, TaskStateManager
@@ -425,6 +424,31 @@ class CodexAgent(Agent):
 
         assert process.stdout is not None
         cancelled = False
+        codex_event_buffer: list[dict[str, Any]] = []
+        last_event_flush = time.monotonic()
+
+        async def _flush_codex_events() -> None:
+            nonlocal last_event_flush, codex_event_buffer
+            if not codex_event_buffer:
+                return
+            # Emit as a batch to avoid overwhelming the callback channel.
+            batch = codex_event_buffer
+            codex_event_buffer = []
+            last_event_flush = time.monotonic()
+            try:
+                self.state_manager.report_progress(
+                    70,
+                    TaskStatus.RUNNING.value,
+                    "${{thinking.running}}",
+                    extra_result={
+                        "codex_event": batch,
+                        "shell_type": "Codex",
+                    },
+                )
+            except Exception:
+                # Best-effort: event streaming should not fail the task.
+                pass
+
         try:
             async for raw in process.stdout:
                 if stdout_fp is not None:
@@ -451,6 +475,15 @@ class CodexAgent(Agent):
                     logger.debug("Non-JSON line from Codex: %s", line[:200])
                     continue
 
+                if isinstance(event, dict):
+                    codex_event_buffer.append(event)
+                    # Flush frequently enough for "like chat" UX, but bounded to reduce load.
+                    if (
+                        len(codex_event_buffer) >= 5
+                        or (time.monotonic() - last_event_flush) >= 0.2
+                    ):
+                        await _flush_codex_events()
+
                 event_type = event.get("type")
                 if event_type == "item.completed":
                     item = event.get("item") or {}
@@ -475,6 +508,9 @@ class CodexAgent(Agent):
                         "message"
                     ) or "Codex turn failed"
                     raise RuntimeError(error_msg)
+
+            # Flush any remaining buffered events before process exit handling.
+            await _flush_codex_events()
 
             # Wait for process to exit
             try:

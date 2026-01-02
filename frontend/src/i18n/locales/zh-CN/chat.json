@@ -28,6 +28,7 @@
     "thinking": "执行中",
     "thinking_completed": "执行完成",
     "thinking_process": "执行过程",
+    "codex_event_stream": "Codex 事件流",
     "result": "结果",
     "reasoning": "推理",
     "confidence": "置信度",
@@ -103,6 +104,7 @@
   "thinking": {
     "initialize_agent": "初始化代理",
     "initialize_failed": "初始化agent失败",
+    "running": "执行中",
     "execution_completed": "执行完成",
     "system_message_received": "⚙️ 系统消息",
     "assistant_message_received": "🤖 助手消息",

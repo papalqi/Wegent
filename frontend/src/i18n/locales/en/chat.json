@@ -28,6 +28,7 @@
     "thinking": "In execution",
     "thinking_completed": "Execution completed.",
     "thinking_process": "Execution process",
+    "codex_event_stream": "Codex event stream",
     "result": "Result",
     "reasoning": "Reasoning",
     "confidence": "Confidence",
@@ -103,6 +104,7 @@
   "thinking": {
     "initialize_agent": "Initialize Agent",
     "initialize_failed": "Initialize Agno Agent Failed",
+    "running": "Running",
     "execution_completed": "Execution Completed",
     "system_message_received": "⚙️ System Message",
     "assistant_message_received": "🤖 Assistant Message",

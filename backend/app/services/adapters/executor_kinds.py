@@ -1162,6 +1162,34 @@ class ExecutorKindsService(
         update_data = subtask_update.model_dump(
             exclude={"subtask_title", "task_title"}, exclude_unset=True
         )
+
+        # Merge Codex event stream into stored result for persistence and refresh replay.
+        # Executor may stream a single `codex_event` per callback; we append it into `codex_events` list.
+        if isinstance(update_data.get("result"), dict):
+            incoming_result = update_data["result"]
+            codex_event = incoming_result.get("codex_event")
+            if codex_event is not None:
+                merged_result: Dict[str, Any] = {}
+                if isinstance(subtask.result, dict):
+                    merged_result.update(subtask.result)
+
+                existing_events = merged_result.get("codex_events")
+                if not isinstance(existing_events, list):
+                    existing_events = []
+
+                if isinstance(codex_event, list):
+                    existing_events.extend(codex_event)
+                else:
+                    existing_events.append(codex_event)
+                merged_result["codex_events"] = existing_events
+
+                # Keep the latest event for live streaming payloads while avoiding unbounded growth
+                # in per-callback result; the persisted list above is the source of truth.
+                incoming_result = dict(incoming_result)
+                incoming_result.pop("codex_event", None)
+                merged_result.update(incoming_result)
+                update_data["result"] = merged_result
+
         for field, value in update_data.items():
             setattr(subtask, field, value)
 
@@ -1190,11 +1218,12 @@ class ExecutorKindsService(
                 # Check if there's any meaningful data to send (thinking or workbench)
                 has_thinking = bool(subtask_update.result.get("thinking"))
                 has_workbench = bool(subtask_update.result.get("workbench"))
+                has_codex_event = "codex_event" in subtask_update.result
                 has_new_content = new_content and len(new_content) > len(
                     previous_content
                 )
 
-                if has_thinking or has_workbench or has_new_content:
+                if has_thinking or has_workbench or has_codex_event or has_new_content:
                     # Calculate chunk content for text streaming
                     chunk_content = ""
                     if has_new_content:

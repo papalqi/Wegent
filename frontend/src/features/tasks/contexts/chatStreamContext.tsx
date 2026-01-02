@@ -107,6 +107,8 @@ export interface UnifiedMessage {
     thinking?: unknown[];
     workbench?: Record<string, unknown>;
     shell_type?: string; // Shell type for frontend display (Chat, ClaudeCode, Agno, etc.)
+    /** Raw Codex `codex exec --json` event stream (persisted on backend for refresh replay) */
+    codex_events?: unknown[];
     sources?: Array<{
       index: number;
       title: string;
@@ -569,10 +571,29 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         // If result is provided (executor tasks), merge it with existing result
         // This prevents losing thinking data when result is partially updated
         if (result) {
-          const newResult = result as UnifiedMessage['result'];
+          const newResult = result as NonNullable<UnifiedMessage['result']>;
           updatedMessage.result = {
             ...existingMessage.result,
             ...newResult,
+            codex_events: (() => {
+              const existing = existingMessage.result?.codex_events;
+              const incomingBatch = (() => {
+                if (!result || typeof result !== 'object') return undefined;
+                return (result as Record<string, unknown>).codex_event;
+              })();
+              const persisted = newResult.codex_events;
+
+              const base = Array.isArray(existing) ? existing : [];
+              if (Array.isArray(persisted) && persisted.length > 0) {
+                // If backend sent full persisted list, prefer it (refresh/replay cases).
+                return persisted;
+              }
+              if (incomingBatch === undefined) return base.length > 0 ? base : undefined;
+              const appended = base.slice();
+              if (Array.isArray(incomingBatch)) appended.push(...incomingBatch);
+              else appended.push(incomingBatch);
+              return appended;
+            })(),
             // Special handling for thinking array:
             // If new result has thinking, use it (backend sends full array)
             // Otherwise keep existing thinking to prevent data loss
@@ -685,7 +706,17 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
           result: result
             ? {
                 ...existingMessage.result,
-                ...(result as UnifiedMessage['result']),
+                ...(result as NonNullable<UnifiedMessage['result']>),
+                codex_events: (() => {
+                  const existing = existingMessage.result?.codex_events;
+                  const persisted = (() => {
+                    if (!result || typeof result !== 'object') return undefined;
+                    const v = (result as Record<string, unknown>).codex_events;
+                    return Array.isArray(v) ? (v as unknown[]) : undefined;
+                  })();
+                  if (Array.isArray(persisted) && persisted.length > 0) return persisted;
+                  return existing;
+                })(),
               }
             : existingMessage.result,
         });

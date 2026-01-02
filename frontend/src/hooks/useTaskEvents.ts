@@ -57,47 +57,49 @@ interface UseTaskEventsOptions {
  */
 export function useTaskEvents(options: UseTaskEventsOptions = {}): void {
   const { socket, isConnected } = useSocket();
+  const { onTaskCreated, onTaskDeleted, onTaskRenamed, onTaskStatus, onTaskShared, onUnreadCount } =
+    options;
 
   const handleTaskCreated = useCallback(
     (data: TaskCreatedPayload) => {
-      options.onTaskCreated?.(data);
+      onTaskCreated?.(data);
     },
-    [options.onTaskCreated]
+    [onTaskCreated]
   );
 
   const handleTaskDeleted = useCallback(
     (data: TaskDeletedPayload) => {
-      options.onTaskDeleted?.(data);
+      onTaskDeleted?.(data);
     },
-    [options.onTaskDeleted]
+    [onTaskDeleted]
   );
 
   const handleTaskRenamed = useCallback(
     (data: TaskRenamedPayload) => {
-      options.onTaskRenamed?.(data);
+      onTaskRenamed?.(data);
     },
-    [options.onTaskRenamed]
+    [onTaskRenamed]
   );
 
   const handleTaskStatus = useCallback(
     (data: TaskStatusPayload) => {
-      options.onTaskStatus?.(data);
+      onTaskStatus?.(data);
     },
-    [options.onTaskStatus]
+    [onTaskStatus]
   );
 
   const handleTaskShared = useCallback(
     (data: TaskSharedPayload) => {
-      options.onTaskShared?.(data);
+      onTaskShared?.(data);
     },
-    [options.onTaskShared]
+    [onTaskShared]
   );
 
   const handleUnreadCount = useCallback(
     (data: UnreadCountPayload) => {
-      options.onUnreadCount?.(data);
+      onUnreadCount?.(data);
     },
-    [options.onUnreadCount]
+    [onUnreadCount]
   );
 
   useEffect(() => {

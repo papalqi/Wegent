@@ -77,6 +77,8 @@ export interface DisplayMessage {
     thinking?: unknown[];
     workbench?: Record<string, unknown>;
     shell_type?: string; // Shell type for frontend display (Chat, ClaudeCode, Agno, etc.)
+    /** Raw Codex `codex exec --json` event stream (persisted on backend for refresh replay) */
+    codex_events?: unknown[];
     sources?: SourceReference[]; // RAG knowledge base sources
   };
   /** Knowledge base source references (for RAG citations) - top-level for backward compatibility */

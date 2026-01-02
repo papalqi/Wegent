@@ -159,6 +159,12 @@ export interface ChatChunkPayload {
     value?: string;
     thinking?: unknown[];
     workbench?: Record<string, unknown>;
+    /** Shell type for frontend display (Chat, ClaudeCode, Agno, etc.) */
+    shell_type?: string;
+    /** Single Codex event (or batch) streamed during execution */
+    codex_event?: unknown;
+    /** Raw Codex event stream list (persisted on backend for refresh replay) */
+    codex_events?: unknown[];
     sources?: SourceReference[];
   };
   /** Knowledge base source references (for RAG citations) */
