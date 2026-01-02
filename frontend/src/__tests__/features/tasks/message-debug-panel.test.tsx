@@ -13,23 +13,24 @@ describe('MessageDebugPanel', () => {
 
     const t = (key: string) => key;
 
-    const { container } = render(
+    render(
       <TooltipProvider>
         <MessageDebugPanel data={data} t={t} />
       </TooltipProvider>
     );
 
-    expect(screen.getByText(/调试/)).toBeInTheDocument();
-    expect(screen.getByText(/model=gpt-test/)).toBeInTheDocument();
-    expect(screen.getByText(/subtask=12/)).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: /调试（model=gpt-test · subtask=12）/ });
+    expect(button).toBeInTheDocument();
 
-    const summary = container.querySelector('summary');
-    expect(summary).not.toBeNull();
-    fireEvent.click(summary as Element);
+    fireEvent.click(button);
 
-    const pre = container.querySelector('pre');
-    expect(pre).not.toBeNull();
-    const text = (pre as HTMLElement).textContent || '';
+    const compactPre = screen.getByText(/Key Fields/).parentElement?.querySelector('pre');
+    expect(compactPre).not.toBeNull();
+    expect(compactPre?.textContent).toContain('"model_id": "gpt-test"');
+    expect(compactPre?.textContent).toContain('"subtask_id": 12');
+
+    const fullJsonPre = screen.getByText(/Full JSON/).parentElement?.querySelector('pre');
+    const text = fullJsonPre?.textContent || '';
 
     expect(text).toContain('"model_id": "gpt-test"');
     expect(text).toContain('"subtask_id": 12');

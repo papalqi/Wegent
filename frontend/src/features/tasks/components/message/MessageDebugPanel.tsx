@@ -5,6 +5,10 @@
 'use client';
 
 import React, { useMemo } from 'react';
+import { Bug } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { CopyButton } from './BubbleTools';
 import { sanitizeDebugPayload, safePrettyJson } from '@/utils/debug-sanitize';
 
@@ -38,6 +42,57 @@ function getSummaryLabel(data: MessageDebugPayload | undefined): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
+function summarizeTokens(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const obj = value as Record<string, unknown>;
+  const prompt = obj.prompt ?? obj.input ?? obj.input_tokens;
+  const completion = obj.completion ?? obj.output ?? obj.output_tokens;
+  const total = obj.total ?? obj.total_tokens ?? obj.all ?? obj.usage;
+
+  const summary: Record<string, unknown> = {};
+  if (prompt !== undefined) summary.prompt = prompt;
+  if (completion !== undefined) summary.completion = completion;
+  if (total !== undefined) summary.total = total;
+
+  return Object.keys(summary).length > 0 ? summary : value;
+}
+
+function buildCompactDebug(data: MessageDebugPayload | undefined): Record<string, unknown> | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const source = data as Record<string, unknown>;
+
+  const compact: Record<string, unknown> = {};
+  const pick = (key: string, value: unknown) => {
+    if (value !== undefined && value !== null) {
+      compact[key] = value;
+    }
+  };
+
+  pick('model_id', source.model_id ?? source.modelId ?? source.model);
+  pick('subtask_id', source.subtask_id ?? source.subtaskId);
+  pick(
+    'request_id',
+    source.request_id ?? (source.request as Record<string, unknown> | undefined)?.id
+  );
+  pick(
+    'trace_id',
+    source.trace_id ?? (source.request as Record<string, unknown> | undefined)?.trace_id
+  );
+  pick('status', source.status ?? source.state);
+  pick(
+    'latency_ms',
+    source.latency_ms ?? source.latency ?? source.duration_ms ?? source.elapsed_ms
+  );
+  pick('error', source.error);
+
+  const tokens = source.tokens ?? source.token_usage ?? source.usage;
+  if (tokens !== undefined) {
+    pick('tokens', summarizeTokens(tokens));
+  }
+
+  return Object.keys(compact).length > 0 ? compact : null;
+}
+
 export default function MessageDebugPanel({
   data,
   t,
@@ -55,30 +110,70 @@ export default function MessageDebugPanel({
     return safePrettyJson(sanitized);
   }, [sanitized]);
 
+  const compactData = useMemo(() => buildCompactDebug(sanitized || undefined), [sanitized]);
+  const compactJson = useMemo(
+    () => (compactData ? safePrettyJson(compactData) : ''),
+    [compactData]
+  );
   const summary = useMemo(() => getSummaryLabel(data), [data]);
 
   if (!data) return null;
 
   const debugLabel = translateOrDefault(t, 'common:debug', '调试');
   const copyLabel = translateOrDefault(t, 'chat:actions.copy', 'Copy');
+  const summaryLabel = summary ? `${debugLabel}（${summary}）` : debugLabel;
 
   return (
-    <details className="mt-3 rounded-lg border border-border bg-surface/40">
-      <summary className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-text-muted cursor-pointer select-none">
-        <span className="min-w-0 truncate">
-          {debugLabel} {summary ? `（${summary}）` : ''}
-        </span>
-        <CopyButton
-          content={jsonText}
-          className="h-[26px] w-[26px] !rounded-full bg-fill-tert hover:!bg-fill-sec"
-          tooltip={copyLabel}
-        />
-      </summary>
-      <div className="px-3 pb-3">
-        <pre className="max-h-80 overflow-auto rounded-md bg-muted/40 p-2 text-xs text-text-primary whitespace-pre-wrap break-words">
-          {jsonText}
-        </pre>
-      </div>
-    </details>
+    <div className="mt-2 flex justify-end">
+      <Popover>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={summaryLabel}
+                className="h-8 w-8 rounded-full text-text-muted hover:text-text-primary"
+              >
+                <Bug className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent>{summaryLabel}</TooltipContent>
+        </Tooltip>
+        <PopoverContent className="w-[420px] max-w-[90vw] space-y-2" align="end">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 text-sm font-medium text-text-primary truncate">
+              {summaryLabel}
+            </div>
+            <CopyButton
+              content={jsonText}
+              className="h-8 w-8 !rounded-full bg-fill-tert hover:!bg-fill-sec"
+              tooltip={copyLabel}
+            />
+          </div>
+
+          {compactJson && (
+            <div className="rounded-md border border-border/60 bg-muted/40 p-2">
+              <div className="mb-1 text-[11px] uppercase tracking-wide text-text-muted">
+                Key Fields
+              </div>
+              <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words text-xs text-text-primary">
+                {compactJson}
+              </pre>
+            </div>
+          )}
+
+          <div className="rounded-md border border-dashed border-border/60 bg-muted/30 p-2">
+            <div className="mb-1 text-[11px] uppercase tracking-wide text-text-muted">
+              Full JSON
+            </div>
+            <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words text-xs text-text-primary">
+              {jsonText}
+            </pre>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
