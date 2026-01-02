@@ -99,6 +99,56 @@ class GitHubProvider(RepositoryProvider):
             # Custom GitHub Enterprise domain (may include http:// protocol)
             return build_url(git_domain, "/api/v3")
 
+    def create_pull_request(
+        self,
+        *,
+        user: User,
+        git_domain: str,
+        repo_full_name: str,
+        base_branch: str,
+        head_branch: str,
+        title: str,
+        body: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        git_info = self._pick_git_info(user, git_domain)
+        git_token = git_info["git_token"]
+        git_domain = git_info["git_domain"]
+        api_base_url = self._get_api_base_url(git_domain)
+
+        headers = {
+            "Authorization": f"token {git_token}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        payload: Dict[str, Any] = {
+            "title": title,
+            "head": head_branch,
+            "base": base_branch,
+        }
+        if body is not None:
+            payload["body"] = body
+
+        try:
+            resp = requests.post(
+                f"{api_base_url}/repos/{repo_full_name}/pulls",
+                headers=headers,
+                json=payload,
+                timeout=settings.PR_ACTION_HTTP_TIMEOUT_SECONDS,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.exceptions.RequestException as e:
+            self.logger.error(
+                "Failed to create github pull request: %s", mask_string(str(e))
+            )
+            raise HTTPException(status_code=502, detail="GitHub request failed")
+        except ValueError:
+            raise HTTPException(status_code=502, detail="GitHub response invalid")
+
+        if not isinstance(data, dict) or "number" not in data or "html_url" not in data:
+            raise HTTPException(status_code=502, detail="GitHub response invalid")
+
+        return data
+
     async def get_repositories(
         self, user: User, page: int = 1, limit: int = 100
     ) -> List[Dict[str, Any]]:

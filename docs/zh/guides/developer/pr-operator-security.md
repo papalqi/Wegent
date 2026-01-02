@@ -61,6 +61,15 @@
 - pr_number / pr_url（PR 相关动作时）
 - created_at（ISO8601）
 
+## 5.1 后端 PR Action Gateway（参考实现）
+
+平台侧建议提供统一写操作入口并强制执行策略与审计（提示词不作为安全控制）。当前后端参考路由：
+
+- `POST /api/pr/actions/create-pr`
+  - Header：`Idempotency-Key: <string>`
+  - Body：`{ repo_full_name, base_branch, head_branch, title, body, ... }`
+  - 失败返回：HTTP 403 且 `detail` 为结构化对象（`code/message/audit_id`），便于前端与审计查询。
+
 ## 6. 密钥与敏感信息
 
 - 禁止将任何 token/私钥写入日志、PR 描述、comment 或提交内容

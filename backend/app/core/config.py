@@ -82,6 +82,15 @@ class Settings(BaseSettings):
     REPO_CACHE_EXPIRED_TIME: int = 7200  # 2 hour in seconds
     REPO_UPDATE_INTERVAL_SECONDS: int = 3600  # 1 hour in seconds
 
+    # PR operator / PR Action Gateway (write operations are disabled by default)
+    PR_ACTION_WRITE_ENABLED: bool = False
+    # Comma-separated allowlist of repo full names: "owner/repo,org/repo2"
+    PR_ACTION_REPO_ALLOWLIST: str = ""
+    # Comma-separated allowlist of base branches: "main,master,release/*" (exact match for now)
+    PR_ACTION_BASE_BRANCH_ALLOWLIST: str = ""
+    # External provider HTTP timeout in seconds (bounded, no infinite waits)
+    PR_ACTION_HTTP_TIMEOUT_SECONDS: float = 10.0
+
     # Task limits
     MAX_RUNNING_TASKS_PER_USER: int = 10
 
