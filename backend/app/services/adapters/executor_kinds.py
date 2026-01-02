@@ -1386,6 +1386,8 @@ class ExecutorKindsService(
         task_id: int,
         status: str,
         progress: Optional[int] = None,
+        status_phase: Optional[str] = None,
+        progress_text: Optional[str] = None,
     ) -> None:
         """
         Emit task:status WebSocket event to notify frontend of task status changes.
@@ -1398,6 +1400,8 @@ class ExecutorKindsService(
             task_id: Task ID
             status: New task status
             progress: Optional progress percentage
+            status_phase: Optional fine-grained phase name
+            progress_text: Optional human-readable progress text
         """
         logger.info(
             f"[WS] _emit_task_status_ws_event called for task={task_id} status={status} progress={progress} user_id={user_id}"
@@ -1414,6 +1418,8 @@ class ExecutorKindsService(
                         task_id=task_id,
                         status=status,
                         progress=progress,
+                        status_phase=status_phase,
+                        progress_text=progress_text,
                     )
                     logger.info(
                         f"[WS] Successfully emitted task:status event for task={task_id} status={status} progress={progress}"

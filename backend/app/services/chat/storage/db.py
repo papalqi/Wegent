@@ -26,7 +26,12 @@ T = TypeVar("T")
 
 
 async def emit_task_status_update(
-    user_id: int, task_id: int, status: str, progress: Optional[int] = None
+    user_id: int,
+    task_id: int,
+    status: str,
+    progress: Optional[int] = None,
+    status_phase: Optional[str] = None,
+    progress_text: Optional[str] = None,
 ) -> None:
     """
     Emit task:status WebSocket event to notify frontend of task status changes.
@@ -36,6 +41,8 @@ async def emit_task_status_update(
         task_id: Task ID
         status: New task status
         progress: Optional progress percentage
+        status_phase: Optional fine-grained phase name
+        progress_text: Optional human-readable progress text
     """
     try:
         from app.services.chat.ws_emitter import get_ws_emitter
@@ -47,6 +54,8 @@ async def emit_task_status_update(
                 task_id=task_id,
                 status=status,
                 progress=progress,
+                status_phase=status_phase,
+                progress_text=progress_text,
             )
             logger.debug(
                 f"[WS] Emitted task:status event for task={task_id} status={status}"

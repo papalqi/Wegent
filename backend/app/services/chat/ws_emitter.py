@@ -393,6 +393,8 @@ class WebSocketEmitter:
         task_id: int,
         status: str,
         progress: Optional[int] = None,
+        status_phase: Optional[str] = None,
+        progress_text: Optional[str] = None,
         completed_at: Optional[str] = None,
     ) -> None:
         """
@@ -403,12 +405,16 @@ class WebSocketEmitter:
             task_id: Task ID
             status: New status
             progress: Optional progress percentage
+            status_phase: Optional fine-grained phase name (e.g., booting_executor)
+            progress_text: Optional human-readable progress text
             completed_at: Optional completion timestamp (for terminal states)
         """
         payload = {
             "task_id": task_id,
             "status": status,
             "progress": progress,
+            "status_phase": status_phase,
+            "progress_text": progress_text,
         }
         # Include completed_at for terminal states
         if completed_at is not None:

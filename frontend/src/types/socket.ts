@@ -266,6 +266,8 @@ export interface TaskStatusPayload {
   task_id: number;
   status: string;
   progress?: number;
+  status_phase?: string;
+  progress_text?: string;
   completed_at?: string;
 }
 

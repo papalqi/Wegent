@@ -33,6 +33,13 @@ const exportMessages = messages
 
 前后端统一使用下表作为“细粒度执行状态”枚举。后端优先下发 `status_phase` 字段；缺省时前端可按 `TaskStatus` + `progress` 分段兜底（详见兼容策略）。
 
+### task:status 事件载荷（增量字段）
+- `status`：原有任务状态（PENDING/RUNNING/COMPLETED/FAILED/CANCELLED/CANCELLING）
+- `progress`：进度百分比（0–100）
+- `status_phase`：细粒度阶段键，取值参见下表
+- `progress_text`：用于 UI 展示的阶段文案（可由后端或前端映射生成）
+- `completed_at`：终态时间戳
+
 | 阶段键 | 展示文案 | 触发条件 | 来源信号 | 结束/降级条件 |
 | --- | --- | --- | --- | --- |
 | `queued` | 等待分配 | `TaskStatus=PENDING` 且 executor 未下发 phase | `task:status.status` 或 REST `TaskDetail.status` | 收到 RUNNING/FAILED/CANCELLED 即退出 |
@@ -49,3 +56,4 @@ const exportMessages = messages
 - **优先字段**：当后端下发 `status_phase`（WebSocket `task:status` 或 REST），前端直接使用并忽略 progress 分段。
 - **兜底规则**：缺少 `status_phase` 时，前端用 `TaskStatus + progress` 按表格分段映射，最小化回退到旧 UI 仅显示“执行中”。
 - **观测**：所有 phase 变化应伴随日志/埋点，便于对齐后端实际触发点。
+- **REST 对齐**：`TaskDetail`/任务列表返回同名字段 `status_phase`、`progress_text`（可为空），旧客户端忽略即可。

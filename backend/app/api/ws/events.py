@@ -322,6 +322,8 @@ class TaskStatusPayload(BaseModel):
     task_id: int
     status: str
     progress: Optional[int] = None
+    status_phase: Optional[str] = None
+    progress_text: Optional[str] = None
     completed_at: Optional[str] = None
 
 
