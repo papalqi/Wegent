@@ -120,6 +120,12 @@ export function deriveTaskExecutionPhase(input: {
   if (status === 'FAILED') return 'failed';
   if (status === 'CANCELLED' || status === 'CANCELLING') return 'cancelled';
   if (status === 'COMPLETED') return 'completed';
+  if (
+    (status === 'RUNNING' || status === 'DELETE') &&
+    (input.progress === null || input.progress === undefined)
+  ) {
+    return 'executing';
+  }
 
   const p = clampProgress(input.progress);
   if (p < 20) return 'booting_executor';

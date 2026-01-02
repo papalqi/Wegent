@@ -10,7 +10,8 @@
     "copy": "Copy",
     "regenerate": "Regenerate",
     "stop": "Stop",
-    "retry": "Retry"
+    "retry": "Retry",
+    "view_error": "View error"
   },
   "status": {
     "typing": "AI is typing...",
