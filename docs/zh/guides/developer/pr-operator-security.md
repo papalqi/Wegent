@@ -70,6 +70,11 @@
   - Body：`{ repo_full_name, base_branch, head_branch, title, body, ... }`
   - 失败返回：HTTP 403 且 `detail` 为结构化对象（`code/message/audit_id`），便于前端与审计查询。
 
+默认工具链建议：
+
+- **读**：GitHub MCP `READ_ONLY` 模式（显式枚举 `GITHUB_TOOLSETS`）
+- **写**：后端 PR Action Gateway（策略门禁 + 审计 + 幂等）
+
 ## 6. 密钥与敏感信息
 
 - 禁止将任何 token/私钥写入日志、PR 描述、comment 或提交内容

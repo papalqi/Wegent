@@ -88,7 +88,24 @@ metadata:
   namespace: default
   user_id: 1
 spec:
-  mcpServers: {}
+  mcpServers:
+    github:
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: ${{user.git_token}}
+        GITHUB_TOOLSETS: "repos,pulls"
+        GITHUB_READ_ONLY: "true"
+      args:
+        - run
+        - -i
+        - --rm
+        - -e
+        - GITHUB_PERSONAL_ACCESS_TOKEN
+        - -e
+        - GITHUB_TOOLSETS
+        - -e
+        - GITHUB_READ_ONLY
+        - ghcr.io/github/github-mcp-server
+      command: docker
   systemPrompt: |
     You are a PR Operator Agent. Your job is to help with safe repository collaboration workflows.
 
@@ -101,6 +118,7 @@ spec:
     Tooling:
     - Do NOT create PR via direct `gh/glab` CLI yourself.
     - Produce a structured PR action request; the platform will call the PR Action Gateway if policy passes.
+    - For read-only queries (repo/branch/PR metadata), prefer GitHub MCP in read-only mode.
 
     Output contract (JSON):
     {
