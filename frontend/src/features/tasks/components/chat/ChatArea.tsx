@@ -23,6 +23,7 @@ import { useScrollManagement } from '../hooks/useScrollManagement';
 import { useFloatingInput } from '../hooks/useFloatingInput';
 import { useTeamPreferences } from '../hooks/useTeamPreferences';
 import { useAttachmentUpload } from '../hooks/useAttachmentUpload';
+import { TaskExecutionStatusBanner } from './TaskExecutionStatusBanner';
 
 /**
  * Threshold in pixels for determining when to collapse selectors.
@@ -389,6 +390,7 @@ export default function ChatArea({
           style={{ paddingBottom: hasMessages ? `${inputHeight + 16}px` : '0' }}
         >
           <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 pt-12">
+            <TaskExecutionStatusBanner task={selectedTaskDetail} />
             <MessagesArea
               selectedTeam={chatState.selectedTeam}
               selectedRepo={chatState.selectedRepo}
