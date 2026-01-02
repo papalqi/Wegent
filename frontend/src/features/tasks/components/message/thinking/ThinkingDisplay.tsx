@@ -15,6 +15,9 @@ import DetailedThinkingView from './DetailedThinkingView';
 const ThinkingDisplay = memo(function ThinkingDisplay({
   thinking,
   taskStatus,
+  taskPhase,
+  taskProgress,
+  taskProgressText,
 }: ThinkingDisplayProps) {
   // Early return if no thinking data
   if (!thinking || thinking.length === 0) {
@@ -22,7 +25,15 @@ const ThinkingDisplay = memo(function ThinkingDisplay({
   }
 
   // Always render detailed view (timeline + tool calls + results)
-  return <DetailedThinkingView thinking={thinking} taskStatus={taskStatus} />;
+  return (
+    <DetailedThinkingView
+      thinking={thinking}
+      taskStatus={taskStatus}
+      taskPhase={taskPhase}
+      taskProgress={taskProgress}
+      taskProgressText={taskProgressText}
+    />
+  );
 });
 
 export default ThinkingDisplay;

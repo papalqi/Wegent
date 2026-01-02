@@ -1359,7 +1359,13 @@ const MessageBubble = memo(
         >
           {/* Show thinking display for AI messages */}
           {!isUserTypeMessage && msg.thinking && (
-            <ThinkingDisplay thinking={msg.thinking} taskStatus={msg.subtaskStatus} />
+            <ThinkingDisplay
+              thinking={msg.thinking}
+              taskStatus={msg.subtaskStatus}
+              taskPhase={selectedTaskDetail?.status_phase}
+              taskProgress={selectedTaskDetail?.progress}
+              taskProgressText={selectedTaskDetail?.progress_text}
+            />
           )}
           <div
             className={`${bubbleBaseClasses} ${bubbleTypeClasses}`}

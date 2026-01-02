@@ -100,9 +100,10 @@ export default function MessageDebugPanel({
   data?: MessageDebugPayload;
   t: (key: string) => string;
 }) {
-  const sanitized = useMemo(() => {
-    if (!data) return null;
-    return sanitizeDebugPayload(data);
+  const sanitized = useMemo<MessageDebugPayload | undefined>(() => {
+    if (!data) return undefined;
+    const cleaned = sanitizeDebugPayload(data);
+    return (cleaned as MessageDebugPayload) || undefined;
   }, [data]);
 
   const jsonText = useMemo(() => {
@@ -110,7 +111,7 @@ export default function MessageDebugPanel({
     return safePrettyJson(sanitized);
   }, [sanitized]);
 
-  const compactData = useMemo(() => buildCompactDebug(sanitized || undefined), [sanitized]);
+  const compactData = useMemo(() => buildCompactDebug(sanitized), [sanitized]);
   const compactJson = useMemo(
     () => (compactData ? safePrettyJson(compactData) : ''),
     [compactData]

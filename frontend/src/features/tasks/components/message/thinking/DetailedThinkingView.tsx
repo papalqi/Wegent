@@ -26,10 +26,15 @@ import TodoListDisplay from './components/TodoListDisplay';
 import SystemInfoDisplay from './components/SystemInfoDisplay';
 import ErrorDisplay from './components/ErrorDisplay';
 import ScrollToBottom from './components/ScrollToBottom';
+import { Progress } from '@/components/ui/progress';
+import { getTaskExecutionDisplay } from '@/utils/task-execution-phase';
 
 interface DetailedThinkingViewProps {
   thinking: ThinkingStep[] | null;
   taskStatus?: string;
+  taskPhase?: string | null;
+  taskProgress?: number | null;
+  taskProgressText?: string | null;
 }
 
 /**
@@ -39,6 +44,9 @@ interface DetailedThinkingViewProps {
 const DetailedThinkingView = memo(function DetailedThinkingView({
   thinking,
   taskStatus,
+  taskPhase,
+  taskProgress,
+  taskProgressText,
 }: DetailedThinkingViewProps) {
   const { t } = useTranslation();
 
@@ -341,6 +349,36 @@ const DetailedThinkingView = memo(function DetailedThinkingView({
 
   return (
     <div className="w-full relative" data-thinking-inline>
+      {/* Task-level phase strip so users see pulling image/loading model inside bubble */}
+      {taskStatus && (
+        <div className="mb-2 rounded-lg border border-border/60 bg-surface/70 p-3">
+          {(() => {
+            const display = getTaskExecutionDisplay({
+              status: taskStatus as never,
+              progress: taskProgress ?? undefined,
+              statusPhase: taskPhase ?? undefined,
+            });
+            const label =
+              (taskStatus === 'CANCELLING'
+                ? t('chat:messages.status_cancelling')
+                : t(display.labelKey)) ||
+              taskProgressText ||
+              t('chat:messages.status_running');
+            const progressValue = display.showProgress
+              ? Math.max(display.progress, 3)
+              : display.progress;
+            return (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-text-primary">{label}</div>
+                {display.showProgress && (
+                  <Progress value={progressValue} className="h-1.5" aria-label={label} />
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       <ThinkingHeader
         title={getTitle()}
         isOpen={isOpen}
