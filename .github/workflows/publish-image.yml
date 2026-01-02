@@ -656,10 +656,27 @@ jobs:
           echo "Updating ${DEPLOY_ENV_FILE} to IMAGE_PREFIX=${IMAGE_PREFIX} (and pin versions for changed modules)."
           update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_IMAGE_PREFIX" "${IMAGE_PREFIX}"
 
+          update_compose_var() {
+            local file="$1"
+            local key="$2"
+            local value="$3"
+            # update default fallback like ${KEY:-old}
+            sed -i -E "s|\\\${${key}:-[^}]+}|\\\${${key}:-${value}}|g" "$file"
+          }
+
+          COMPOSE_FILE="docker-compose.yml"
+          if [ ! -f "${COMPOSE_FILE}" ]; then
+            echo "Warning: ${COMPOSE_FILE} not found; creating placeholder."
+            echo "version: '3.9'" > "${COMPOSE_FILE}"
+            echo "services: {}" >> "${COMPOSE_FILE}"
+          fi
+
           if [ "${CHANGED_EXECUTOR}" = "true" ]; then
             echo "Updating executor image version to ${VERSION}"
             update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_EXECUTOR_VERSION" "${VERSION}-codex"
             update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_EXECUTOR_IMAGE" "${IMAGE_PREFIX}/wegent-executor:${VERSION}-codex"
+            update_compose_var "${COMPOSE_FILE}" "WEGENT_EXECUTOR_VERSION" "${VERSION}-codex"
+            update_compose_var "${COMPOSE_FILE}" "WEGENT_EXECUTOR_IMAGE" "${IMAGE_PREFIX}/wegent-executor:${VERSION}-codex"
           else
             echo "Executor unchanged, skip updating executor image tag"
           fi
@@ -668,6 +685,8 @@ jobs:
             echo "Updating executor manager image version to ${VERSION}"
             update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_EXECUTOR_MANAGER_VERSION" "${VERSION}"
             update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_EXECUTOR_MANAGER_IMAGE" "${IMAGE_PREFIX}/wegent-executor-manager:${VERSION}"
+            update_compose_var "${COMPOSE_FILE}" "WEGENT_EXECUTOR_MANAGER_VERSION" "${VERSION}"
+            update_compose_var "${COMPOSE_FILE}" "WEGENT_EXECUTOR_MANAGER_IMAGE" "${IMAGE_PREFIX}/wegent-executor-manager:${VERSION}"
           else
             echo "Executor manager unchanged, skip updating executor manager image tag"
           fi
@@ -675,6 +694,7 @@ jobs:
           if [ "${CHANGED_FRONTEND}" = "true" ]; then
             echo "Updating frontend image version to ${VERSION}"
             update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_FRONTEND_VERSION" "${VERSION}"
+            update_compose_var "${COMPOSE_FILE}" "WEGENT_FRONTEND_VERSION" "${VERSION}"
           else
             echo "Frontend unchanged, skip updating frontend image tag"
           fi
@@ -682,6 +702,7 @@ jobs:
           if [ "${CHANGED_BACKEND}" = "true" ]; then
             echo "Updating backend image version to ${VERSION}"
             update_env_kv "${DEPLOY_ENV_FILE}" "WEGENT_BACKEND_VERSION" "${VERSION}"
+            update_compose_var "${COMPOSE_FILE}" "WEGENT_BACKEND_VERSION" "${VERSION}"
           else
             echo "Backend unchanged, skip updating backend image tag"
           fi
