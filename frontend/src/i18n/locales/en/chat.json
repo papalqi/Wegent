@@ -90,7 +90,8 @@
     "model": "Model",
     "temperature": "Temperature",
     "max_tokens": "Max Tokens",
-    "system_prompt": "System Prompt"
+    "system_prompt": "System Prompt",
+    "system_prompt_empty": "No system prompt"
   },
   "history": {
     "title": "Chat History",

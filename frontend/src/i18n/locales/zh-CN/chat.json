@@ -90,7 +90,8 @@
     "model": "模型",
     "temperature": "温度",
     "max_tokens": "最大 Token 数",
-    "system_prompt": "系统提示"
+    "system_prompt": "系统提示",
+    "system_prompt_empty": "暂无系统提示词"
   },
   "history": {
     "title": "聊天历史",

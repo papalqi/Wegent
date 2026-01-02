@@ -24,6 +24,7 @@ import { useFloatingInput } from '../hooks/useFloatingInput';
 import { useTeamPreferences } from '../hooks/useTeamPreferences';
 import { useAttachmentUpload } from '../hooks/useAttachmentUpload';
 import { TaskExecutionStatusBanner } from './TaskExecutionStatusBanner';
+import SystemPromptPanel from './SystemPromptPanel';
 
 /**
  * Threshold in pixels for determining when to collapse selectors.
@@ -414,6 +415,7 @@ export default function ChatArea({
               retryMessage={lastRetryableErrorMessage}
               onRetry={streamHandlers.handleRetry}
             />
+            <SystemPromptPanel team={selectedTaskDetail?.team || chatState.selectedTeam} />
             <MessagesArea
               selectedTeam={chatState.selectedTeam}
               selectedRepo={chatState.selectedRepo}
@@ -448,6 +450,7 @@ export default function ChatArea({
                 autoFocus={!hasMessages}
                 inputControlsRef={inputControlsRef}
               />
+              <SystemPromptPanel team={chatState.selectedTeam} />
               <QuickAccessCards
                 teams={teams}
                 selectedTeam={chatState.selectedTeam}
