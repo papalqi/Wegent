@@ -53,6 +53,8 @@ jobs:
       - name: Get version from docker-compose (and bump patch)
         id: get_version
         shell: bash
+        env:
+          VERSION_INPUT: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
 
@@ -63,10 +65,9 @@ jobs:
             exit 0
           fi
 
-          if [ -n "${{ inputs.version || '' }}" ]; then
-            VERSION="${{ inputs.version }}"
-            echo "Using workflow_dispatch input version: ${VERSION}"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          if [ -n "${VERSION_INPUT}" ]; then
+            echo "Using workflow_dispatch input version: ${VERSION_INPUT}"
+            echo "version=${VERSION_INPUT}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
