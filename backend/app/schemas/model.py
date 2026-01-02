@@ -101,3 +101,25 @@ class ProviderModelsResponse(BaseModel):
     message: str
     base_url_resolved: Optional[str] = None
     model_ids: list[str] = Field(default_factory=list)
+
+
+class ProviderProbeRequest(BaseModel):
+    provider_type: str
+    base_url: Optional[str] = None
+    api_key: str
+    model_id: Optional[str] = None
+    custom_headers: Optional[dict[str, str]] = None
+    probe_targets: Optional[list[str]] = None
+
+
+class ProviderProbeCheck(BaseModel):
+    ok: bool
+    latency_ms: Optional[int] = None
+    error: Optional[str] = None
+
+
+class ProviderProbeResponse(BaseModel):
+    success: bool
+    message: str
+    base_url_resolved: Optional[str] = None
+    checks: dict[str, ProviderProbeCheck] = Field(default_factory=dict)

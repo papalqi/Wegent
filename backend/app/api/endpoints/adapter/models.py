@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
+import time
 from typing import List, Optional
 from urllib.parse import urlparse
 
@@ -23,6 +24,9 @@ from app.schemas.model import (
     ModelUpdate,
     ProviderModelsRequest,
     ProviderModelsResponse,
+    ProviderProbeCheck,
+    ProviderProbeRequest,
+    ProviderProbeResponse,
 )
 from app.services.adapters import public_model_service
 from app.services.model_aggregation_service import ModelType, model_aggregation_service
@@ -56,6 +60,76 @@ def _merge_headers(api_key: str, custom_headers: Optional[dict]) -> dict[str, st
     if "Authorization" not in headers and api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     return headers
+
+
+def _extract_openai_chat_completions_text(payload: object) -> Optional[str]:
+    if not isinstance(payload, dict):
+        return None
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    first = choices[0]
+    if not isinstance(first, dict):
+        return None
+    message = first.get("message")
+    if not isinstance(message, dict):
+        return None
+    content = message.get("content")
+    return content if isinstance(content, str) else None
+
+
+def _extract_openai_responses_text(payload: object) -> Optional[str]:
+    if not isinstance(payload, dict):
+        return None
+    output_text = payload.get("output_text")
+    if isinstance(output_text, str) and output_text:
+        return output_text
+    output = payload.get("output")
+    if not isinstance(output, list):
+        return None
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        if not isinstance(content, list):
+            continue
+        for c in content:
+            if not isinstance(c, dict):
+                continue
+            if c.get("type") == "output_text" and isinstance(c.get("text"), str):
+                return c["text"]
+    return None
+
+
+def _is_ok_text(text: Optional[str]) -> bool:
+    if not text:
+        return False
+    return text.strip().upper() == "OK"
+
+
+async def _request_json(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    json_body: Optional[dict] = None,
+) -> tuple[Optional[object], Optional[int], Optional[str]]:
+    start = time.perf_counter()
+    try:
+        resp = await client.request(method, url, headers=headers, json=json_body)
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        resp.raise_for_status()
+        return resp.json(), latency_ms, None
+    except httpx.TimeoutException:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        return None, latency_ms, "timeout"
+    except httpx.HTTPStatusError as e:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        status_code = getattr(e.response, "status_code", None)
+        return None, latency_ms, f"http_status:{status_code}"
+    except httpx.RequestError as e:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        return None, latency_ms, f"request_error:{type(e).__name__}"
 
 
 @router.get("", response_model=ModelListResponse)
@@ -472,6 +546,137 @@ async def list_provider_models(
             base_url_resolved=base_url_resolved,
             model_ids=[],
         )
+
+
+@router.post("/provider-probe", response_model=ProviderProbeResponse)
+async def probe_provider(
+    req: ProviderProbeRequest,
+    current_user: User = Depends(security.get_current_user),
+):
+    """
+    Perform a structured provider probe using real upstream requests.
+
+    Supported checks (probe_targets):
+    - list_models: GET /models
+    - prompt_llm: POST /chat/completions (openai) or POST /responses (openai-responses)
+    - embedding: POST /embeddings
+    """
+    provider_type = (req.provider_type or "").strip()
+    probe_targets = req.probe_targets or ["list_models", "prompt_llm", "embedding"]
+
+    checks: dict[str, ProviderProbeCheck] = {}
+
+    if provider_type not in {"openai", "openai-responses"}:
+        for target in probe_targets:
+            checks[target] = ProviderProbeCheck(ok=False, error="unsupported_provider")
+        return ProviderProbeResponse(
+            success=False,
+            message=f"Unsupported provider_type: {provider_type}",
+            base_url_resolved=req.base_url,
+            checks=checks,
+        )
+
+    base_url_resolved = _normalize_openai_base_url(req.base_url)
+    if not _validate_http_url(base_url_resolved):
+        for target in probe_targets:
+            checks[target] = ProviderProbeCheck(ok=False, error="invalid_base_url")
+        return ProviderProbeResponse(
+            success=False,
+            message="Invalid base_url",
+            base_url_resolved=base_url_resolved,
+            checks=checks,
+        )
+
+    headers = _merge_headers(req.api_key, req.custom_headers)
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        if "list_models" in probe_targets:
+            _payload, latency_ms, err = await _request_json(
+                client, "GET", f"{base_url_resolved}/models", headers
+            )
+            checks["list_models"] = ProviderProbeCheck(
+                ok=err is None, latency_ms=latency_ms, error=err
+            )
+
+        if "prompt_llm" in probe_targets:
+            if not req.model_id:
+                checks["prompt_llm"] = ProviderProbeCheck(
+                    ok=False, error="model_id_required"
+                )
+            else:
+                if provider_type == "openai-responses":
+                    url = f"{base_url_resolved}/responses"
+                    body = {
+                        "model": req.model_id,
+                        "input": "Reply with exactly OK. Ping.",
+                        "max_output_tokens": 8,
+                        "temperature": 0,
+                    }
+                    payload, latency_ms, err = await _request_json(
+                        client, "POST", url, headers, json_body=body
+                    )
+                    text = _extract_openai_responses_text(payload)
+                else:
+                    url = f"{base_url_resolved}/chat/completions"
+                    body = {
+                        "model": req.model_id,
+                        "messages": [
+                            {"role": "system", "content": "Reply with exactly OK."},
+                            {"role": "user", "content": "Ping."},
+                        ],
+                        "temperature": 0,
+                        "max_tokens": 8,
+                    }
+                    payload, latency_ms, err = await _request_json(
+                        client, "POST", url, headers, json_body=body
+                    )
+                    text = _extract_openai_chat_completions_text(payload)
+
+                if err is None and not _is_ok_text(text):
+                    err = "unexpected_response"
+                checks["prompt_llm"] = ProviderProbeCheck(
+                    ok=err is None, latency_ms=latency_ms, error=err
+                )
+
+        if "embedding" in probe_targets:
+            if not req.model_id:
+                checks["embedding"] = ProviderProbeCheck(
+                    ok=False, error="model_id_required"
+                )
+            else:
+                url = f"{base_url_resolved}/embeddings"
+                body = {"model": req.model_id, "input": "test"}
+                payload, latency_ms, err = await _request_json(
+                    client, "POST", url, headers, json_body=body
+                )
+                if err is None:
+                    try:
+                        data = (
+                            payload.get("data") if isinstance(payload, dict) else None
+                        )
+                        emb = (
+                            data[0].get("embedding")
+                            if isinstance(data, list)
+                            and data
+                            and isinstance(data[0], dict)
+                            else None
+                        )
+                        if not isinstance(emb, list) or not emb:
+                            err = "unexpected_response"
+                    except Exception:
+                        err = "unexpected_response"
+
+                checks["embedding"] = ProviderProbeCheck(
+                    ok=err is None, latency_ms=latency_ms, error=err
+                )
+
+    success = bool(checks) and all(c.ok for c in checks.values())
+    return ProviderProbeResponse(
+        success=success,
+        message="OK" if success else "Probe failed",
+        base_url_resolved=base_url_resolved,
+        checks=checks,
+    )
 
 
 def _test_llm_connection(
