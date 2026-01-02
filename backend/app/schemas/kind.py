@@ -428,6 +428,8 @@ class TaskStatus(Status):
     state: str = "Available"  # Available, Unavailable
     status: str = "PENDING"  # PENDING, RUNNING, COMPLETED, FAILED, CANCELLED, DELETE
     progress: int = 0
+    statusPhase: Optional[str] = None  # fine-grained phase, e.g., booting_executor
+    progressText: Optional[str] = None  # human-readable phase text
     result: Optional[Dict[str, Any]] = None
     errorMessage: Optional[str] = None
     createdAt: Optional[datetime] = None

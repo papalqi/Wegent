@@ -51,3 +51,12 @@ def test_task_status_payload_accepts_new_optional_fields():
     )
     assert payload.status_phase == "booting_executor"
     assert payload.progress_text == "Docker 启动中"
+
+
+def test_derive_phase_and_text_from_progress():
+    from app.services.adapters.executor_kinds import ExecutorKindsService
+
+    svc = ExecutorKindsService(None)
+    phase, text = svc._derive_status_phase_and_text(status="RUNNING", progress=45)
+    assert phase == "loading_skills"
+    assert "加载" in text

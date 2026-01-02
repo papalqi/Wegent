@@ -292,28 +292,34 @@ class ExecutorKindsService(
         )
 
         if task:
-            if task:
-                task_crd = Task.model_validate(task.json)
-                current_status = (
-                    task_crd.status.status if task_crd.status else "PENDING"
-                )
+            task_crd = Task.model_validate(task.json)
+            current_status = task_crd.status.status if task_crd.status else "PENDING"
 
-                # Ensure only PENDING status can be updated
-                if current_status == "PENDING":
-                    if task_crd.status:
-                        task_crd.status.status = "RUNNING"
-                        task_crd.status.updatedAt = datetime.now()
-                    task.json = task_crd.model_dump(mode="json")
-                    task.updated_at = datetime.now()
-                    flag_modified(task, "json")
-
-                    # Send WebSocket event for task status update (PENDING -> RUNNING)
-                    self._emit_task_status_ws_event(
-                        user_id=task.user_id,
-                        task_id=task_id,
-                        status="RUNNING",
-                        progress=task_crd.status.progress if task_crd.status else 0,
+            # Ensure only PENDING status can be updated
+            if current_status == "PENDING":
+                if task_crd.status:
+                    task_crd.status.status = "RUNNING"
+                    task_crd.status.updatedAt = datetime.now()
+                    phase, text = self._derive_status_phase_and_text(
+                        status="RUNNING", progress=task_crd.status.progress
                     )
+                    task_crd.status.statusPhase = phase
+                    task_crd.status.progressText = text
+                task.json = task_crd.model_dump(mode="json")
+                task.updated_at = datetime.now()
+                flag_modified(task, "json")
+
+                # Send WebSocket event for task status update (PENDING -> RUNNING)
+                self._emit_task_status_ws_event(
+                    user_id=task.user_id,
+                    task_id=task_id,
+                    status="RUNNING",
+                    progress=task_crd.status.progress if task_crd.status else 0,
+                    status_phase=task_crd.status.statusPhase if task_crd.status else None,
+                    progress_text=task_crd.status.progressText
+                    if task_crd.status
+                    else None,
+                )
 
     def _get_model_config_from_public_model(
         self, db: Session, agent_config: Any
@@ -1345,6 +1351,11 @@ class ExecutorKindsService(
         # Update timestamps
         if task_crd.status:
             task_crd.status.updatedAt = datetime.now()
+            phase, text = self._derive_status_phase_and_text(
+                status=task_crd.status.status, progress=task_crd.status.progress
+            )
+            task_crd.status.statusPhase = phase
+            task_crd.status.progressText = text
         task.json = task_crd.model_dump(mode="json")
         task.updated_at = datetime.now()
         flag_modified(task, "json")
@@ -1362,6 +1373,8 @@ class ExecutorKindsService(
                 task_id=task_id,
                 status=task_crd.status.status,
                 progress=task_crd.status.progress,
+                status_phase=task_crd.status.statusPhase,
+                progress_text=task_crd.status.progressText,
             )
 
         # Send chat:done WebSocket event for completed/failed subtasks
@@ -1389,6 +1402,12 @@ class ExecutorKindsService(
         status_phase: Optional[str] = None,
         progress_text: Optional[str] = None,
     ) -> None:
+        # Derive phase/text when backend pipeline未提供细粒度字段，以保证事件总是包含可用信息
+        derived_phase, derived_text = self._derive_status_phase_and_text(
+            status=status, progress=progress
+        )
+        status_phase = status_phase or derived_phase
+        progress_text = progress_text or derived_text
         """
         Emit task:status WebSocket event to notify frontend of task status changes.
 
@@ -1477,6 +1496,32 @@ class ExecutorKindsService(
                 logger.warning(
                     f"[WS] Could not emit task:status event - no event loop available: {e}"
                 )
+
+    @staticmethod
+    def _derive_status_phase_and_text(
+        status: str, progress: Optional[int]
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Map coarse status/progress to fine-grained phase and display text."""
+        if status == "PENDING":
+            return "queued", "等待分配"
+        if status in ("FAILED",):
+            return "failed", "执行失败"
+        if status in ("CANCELLED", "CANCELLING"):
+            return "cancelled", "已取消"
+        if status == "COMPLETED":
+            return "completed", "已完成"
+        p = progress if progress is not None else 0
+        if p < 20:
+            return "booting_executor", "Docker 启动中"
+        if p < 40:
+            return "pulling_image", "拉取镜像中"
+        if p < 60:
+            return "loading_skills", "加载技能/模型"
+        if p < 90:
+            return "executing", "执行中"
+        if p < 100:
+            return "syncing", "收尾/同步中"
+        return "completed", "已完成"
 
     def _emit_chat_start_ws_event(
         self,
