@@ -32,8 +32,7 @@ function shouldMaskKey(key: string, keyPatterns: RegExp[]): boolean {
   return keyPatterns.some(p => p.test(key));
 }
 
-function shouldMaskValue(value: unknown, valuePatterns: RegExp[]): boolean {
-  if (typeof value !== 'string') return false;
+function shouldMaskValue(value: string, valuePatterns: RegExp[]): boolean {
   return valuePatterns.some(p => p.test(value));
 }
 
@@ -65,12 +64,11 @@ export function sanitizeDebugPayload(
   const walk = (input: unknown, depth: number, parentKey?: string): JsonValue => {
     if (depth > maxDepth) return '[truncated: maxDepth]' as unknown as JsonValue;
 
-    if (
-      input === null ||
-      typeof input === 'boolean' ||
-      typeof input === 'number' ||
-      typeof input === 'string'
-    ) {
+    if (input === null || typeof input === 'boolean' || typeof input === 'number') {
+      return input;
+    }
+
+    if (typeof input === 'string') {
       if (!parentKey || !skipValueMaskKeys.has(parentKey)) {
         if (shouldMaskValue(input, valuePatterns)) return maskString(input);
       }
