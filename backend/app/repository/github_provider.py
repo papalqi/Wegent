@@ -149,6 +149,56 @@ class GitHubProvider(RepositoryProvider):
 
         return data
 
+    def update_pull_request(
+        self,
+        *,
+        user: User,
+        git_domain: str,
+        repo_full_name: str,
+        pr_number: int,
+        title: Optional[str] = None,
+        body: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        git_info = self._pick_git_info(user, git_domain)
+        git_token = git_info["git_token"]
+        git_domain = git_info["git_domain"]
+        api_base_url = self._get_api_base_url(git_domain)
+
+        headers = {
+            "Authorization": f"token {git_token}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        payload: Dict[str, Any] = {}
+        if title is not None:
+            payload["title"] = title
+        if body is not None:
+            payload["body"] = body
+
+        if not payload:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        try:
+            resp = requests.patch(
+                f"{api_base_url}/repos/{repo_full_name}/pulls/{pr_number}",
+                headers=headers,
+                json=payload,
+                timeout=settings.PR_ACTION_HTTP_TIMEOUT_SECONDS,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.exceptions.RequestException as e:
+            self.logger.error(
+                "Failed to update github pull request: %s", mask_string(str(e))
+            )
+            raise HTTPException(status_code=502, detail="GitHub request failed")
+        except ValueError:
+            raise HTTPException(status_code=502, detail="GitHub response invalid")
+
+        if not isinstance(data, dict) or "number" not in data or "html_url" not in data:
+            raise HTTPException(status_code=502, detail="GitHub response invalid")
+
+        return data
+
     async def get_repositories(
         self, user: User, page: int = 1, limit: int = 100
     ) -> List[Dict[str, Any]]:

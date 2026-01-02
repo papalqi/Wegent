@@ -2,15 +2,27 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import os
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from shared.utils.git_util import clone_repo_with_token, is_gerrit_url
+from shared.utils.git_util import (
+    _redact_url_credentials,
+    clone_repo_with_token,
+    is_gerrit_url,
+    setup_git_hooks,
+)
 
 
 class TestGitUtil:
     """Test cases for git_util module"""
+
+    def test_redact_url_credentials(self):
+        url = "https://user:ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@github.com/test/repo.git"
+        redacted = _redact_url_credentials(url)
+        assert "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" not in redacted
+        assert "user:***@" in redacted
 
     def test_is_gerrit_url_github(self):
         """Test that GitHub URLs are not identified as Gerrit"""
@@ -191,3 +203,43 @@ class TestGitUtil:
         # Verify failure
         assert success is False
         assert "Clone failed" in error
+
+    @patch("shared.utils.git_util.subprocess.run")
+    def test_clone_repo_with_token_called_process_error_masks_token(
+        self, mock_subprocess
+    ):
+        token = "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        mock_subprocess.side_effect = subprocess.CalledProcessError(
+            128,
+            ["git", "clone"],
+            stderr=f"fatal: Authentication failed for 'https://user:{token}@github.com/test/repo.git'\n",
+        )
+
+        success, error = clone_repo_with_token(
+            "https://github.com/test/repo.git",
+            "main",
+            "/tmp/test-repo",
+            "user",
+            token,
+        )
+
+        assert success is False
+        assert error is not None
+        assert token not in error
+
+    @patch("shared.utils.git_util.subprocess.run")
+    def test_setup_git_hooks_installs_default_pre_push(self, mock_subprocess, tmp_path):
+        mock_subprocess.return_value = MagicMock()
+        ok, err = setup_git_hooks(str(tmp_path))
+        assert ok is True
+        assert err is None
+
+        pre_push_path = tmp_path / ".githooks" / "pre-push"
+        assert pre_push_path.exists()
+
+        script = pre_push_path.read_text(encoding="utf-8")
+        assert "protected_refs_regex" in script
+        assert "refs/heads/(main|master|release/.*)" in script
+
+        mode = os.stat(pre_push_path).st_mode
+        assert mode & 0o111
