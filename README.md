@@ -10,7 +10,7 @@ English | [简体中文](README_zh.md)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://docker.com)
 [![Claude](https://img.shields.io/badge/Claude-Code-orange.svg)](https://claude.ai)
 [![Gemini](https://img.shields.io/badge/Gemini-supported-4285F4.svg)](https://ai.google.dev)
-[![Version](https://img.shields.io/badge/version-1.0.20-brightgreen.svg)](https://github.com/wecode-ai/wegent/releases)
+[![Version](https://img.shields.io/badge/version-1.35.2-brightgreen.svg)](https://github.com/wecode-ai/wegent/releases)
 
 <div align="center">
 
@@ -81,15 +81,33 @@ Frontend (Next.js) → Backend (FastAPI) → Executor Manager → Executors (Cla
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) and [中文贡献指南 (AGENTS.md)](AGENTS.md) for details.
 
-### CI / Image publishing
+### Git Branch Strategy
 
-- The `Publish Image` workflow (`.github/workflows/publish-image.yml`) runs on:
+**⚠️ Important Branch Protection Rules:**
+
+- **main branch**: Production-ready code only. **NO direct commits allowed**. Only accepts Pull Requests from `develop` branch.
+- **develop branch**: Development integration branch. Accepts PRs from `feature/*`, `fix/*`, `hotfix/*` branches.
+- **Feature branches**: Create from `develop`, PR back to `develop`.
+
+**Workflow:**
+```bash
+git checkout develop && git pull origin develop
+git checkout -b feature/your-feature develop
+# ... do your work ...
+git push origin feature/your-feature
+# Create PR: feature/your-feature → develop
+```
+
+### CI / Image Publishing
+
+- **Publish Image workflow** (`.github/workflows/publish-image.yml`) triggers on:
   - PR merged into `main` **with title containing** `Changeset version bump`
-  - tag push `v*.*.*`
+  - tag push `v*.*.*` (e.g., `v1.35.2`)
   - manual `workflow_dispatch`
 - If a PR is merged without `Changeset version bump` in the title, the workflow may show as **Skipped** (jobs gated by `if:` conditions).
+- **Tests workflow** (`.github/workflows/test.yml`) runs on all pushes to `main`/`develop` and all PRs.
 
 ## 📞 Support
 

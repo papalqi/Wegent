@@ -10,7 +10,7 @@
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://docker.com)
 [![Claude](https://img.shields.io/badge/Claude-Code-orange.svg)](https://claude.ai)
 [![Gemini](https://img.shields.io/badge/Gemini-支持-4285F4.svg)](https://ai.google.dev)
-[![Version](https://img.shields.io/badge/版本-1.0.20-brightgreen.svg)](https://github.com/wecode-ai/wegent/releases)
+[![Version](https://img.shields.io/badge/版本-1.35.2-brightgreen.svg)](https://github.com/wecode-ai/wegent/releases)
 
 <div align="center">
 
@@ -81,15 +81,33 @@ Frontend (Next.js) → Backend (FastAPI) → Executor Manager → Executors (Cla
 
 ## 🤝 贡献
 
-我们欢迎贡献！详情请参阅 [贡献指南](CONTRIBUTING.md)。
+我们欢迎贡献！详情请参阅 [贡献指南 (CONTRIBUTING.md)](CONTRIBUTING.md) 和 [中文速查指南 (AGENTS.md)](AGENTS.md)。
+
+### Git 分支策略
+
+**⚠️ 重要分支保护规则：**
+
+- **main 分支**：仅限生产就绪代码。**禁止直接提交**。只接受来自 `develop` 分支的 Pull Request。
+- **develop 分支**：开发集成分支。接受来自 `feature/*`、`fix/*`、`hotfix/*` 分支的 PR。
+- **功能分支**：从 `develop` 创建，PR 回 `develop`。
+
+**工作流程：**
+```bash
+git checkout develop && git pull origin develop
+git checkout -b feature/your-feature develop
+# ... 开发 ...
+git push origin feature/your-feature
+# 创建 PR: feature/your-feature → develop
+```
 
 ### CI / 镜像发布
 
-- `Publish Image` 工作流（`.github/workflows/publish-image.yml`）触发条件：
+- **Publish Image 工作流**（`.github/workflows/publish-image.yml`）触发条件：
   - 合并到 `main` 的 PR，且 **标题包含** `Changeset version bump`
-  - 推送标签 `v*.*.*`
+  - 推送标签 `v*.*.*`（如 `v1.35.2`）
   - 手动 `workflow_dispatch`
 - 若 PR 合并但标题不含 `Changeset version bump`，Actions 里可能会显示为 **Skipped**（job 被 `if:` 条件跳过）。
+- **Tests 工作流**（`.github/workflows/test.yml`）在所有推送到 `main`/`develop` 和所有 PR 时运行。
 
 ## 📞 支持
 
