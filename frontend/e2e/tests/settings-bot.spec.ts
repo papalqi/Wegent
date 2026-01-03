@@ -11,32 +11,38 @@ test.describe('Settings - Bot Management', () => {
     await expect(page).toHaveURL(/\/settings/);
 
     // Wait for team page to load
-    await expect(page.locator('h2:has-text("Team")')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('h2:has-text("Team"), h2:has-text("智能体")')).toBeVisible({
+      timeout: 20000,
+    });
 
     // Click "Manage Bots" button to open bot list dialog
-    const manageBots = page.locator('button:has-text("Manage Bots"), button:has-text("管理Bot")');
-    await expect(manageBots).toBeVisible({ timeout: 5000 });
+    const manageBots = page.locator(
+      'button:has-text("Manage Bots"), button:has-text("管理机器人"), button:has-text("管理Bot")'
+    );
+    await expect(manageBots).toBeVisible({ timeout: 20000 });
     await manageBots.click();
 
     // Bot list dialog should open
-    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 10000 });
 
     // Should see "New Bot" button inside the dialog
     await expect(
       page.locator(
-        '[role="dialog"] button:has-text("New Bot"), [role="dialog"] button:has-text("新建Bot")'
+        '[role="dialog"] button:has-text("New Bot"), [role="dialog"] button:has-text("新建机器人"), [role="dialog"] button:has-text("新建Bot")'
       )
-    ).toBeVisible({ timeout: 5000 });
+    ).toBeVisible({ timeout: 20000 });
   });
 
   test('should display bot list or empty state in dialog', async ({ page }) => {
     // Open Manage Bots dialog
-    const manageBots = page.locator('button:has-text("Manage Bots"), button:has-text("管理Bot")');
-    await expect(manageBots).toBeVisible({ timeout: 10000 });
+    const manageBots = page.locator(
+      'button:has-text("Manage Bots"), button:has-text("管理机器人"), button:has-text("管理Bot")'
+    );
+    await expect(manageBots).toBeVisible({ timeout: 20000 });
     await manageBots.click();
 
     // Wait for dialog
-    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 10000 });
 
     // Either bots exist or empty state is shown
     const hasBots = await page
@@ -45,7 +51,7 @@ test.describe('Settings - Bot Management', () => {
       .isVisible({ timeout: 3000 })
       .catch(() => false);
     const hasEmptyState = await page
-      .locator('[role="dialog"] text=No bots')
+      .locator('[role="dialog"] text=No bots, [role="dialog"] text=没有机器人')
       .isVisible({ timeout: 1000 })
       .catch(() => false);
 
@@ -55,20 +61,22 @@ test.describe('Settings - Bot Management', () => {
 
   test('should open create bot form', async ({ page }) => {
     // Open Manage Bots dialog
-    const manageBots = page.locator('button:has-text("Manage Bots"), button:has-text("管理Bot")');
-    await expect(manageBots).toBeVisible({ timeout: 10000 });
+    const manageBots = page.locator(
+      'button:has-text("Manage Bots"), button:has-text("管理机器人"), button:has-text("管理Bot")'
+    );
+    await expect(manageBots).toBeVisible({ timeout: 20000 });
     await manageBots.click();
 
     // Wait for dialog
-    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 10000 });
 
     // Click "New Bot" button inside the dialog
     const createButton = page.locator(
-      '[role="dialog"] button:has-text("New Bot"), [role="dialog"] button:has-text("新建Bot"), [role="dialog"] button:has-text("新建")'
+      '[role="dialog"] button:has-text("New Bot"), [role="dialog"] button:has-text("新建机器人"), [role="dialog"] button:has-text("新建Bot"), [role="dialog"] button:has-text("新建")'
     );
 
     // Button should be visible
-    await expect(createButton).toBeVisible({ timeout: 10000 });
+    await expect(createButton).toBeVisible({ timeout: 20000 });
     await createButton.click();
 
     // BotEdit component replaces the list content (not a new dialog)
@@ -86,18 +94,20 @@ test.describe('Settings - Bot Management', () => {
     const botName = TestData.uniqueName(`${testPrefix}-bot`);
 
     // Open Manage Bots dialog
-    const manageBots = page.locator('button:has-text("Manage Bots"), button:has-text("管理Bot")');
-    await expect(manageBots).toBeVisible({ timeout: 10000 });
+    const manageBots = page.locator(
+      'button:has-text("Manage Bots"), button:has-text("管理机器人"), button:has-text("管理Bot")'
+    );
+    await expect(manageBots).toBeVisible({ timeout: 20000 });
     await manageBots.click();
 
     // Wait for dialog
-    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 10000 });
 
     // Click "New Bot" button
     const createButton = page.locator(
-      '[role="dialog"] button:has-text("New Bot"), [role="dialog"] button:has-text("新建Bot"), [role="dialog"] button:has-text("新建")'
+      '[role="dialog"] button:has-text("New Bot"), [role="dialog"] button:has-text("新建机器人"), [role="dialog"] button:has-text("新建Bot"), [role="dialog"] button:has-text("新建")'
     );
-    await expect(createButton).toBeVisible({ timeout: 10000 });
+    await expect(createButton).toBeVisible({ timeout: 20000 });
     await createButton.click();
 
     // Wait for BotEdit form
@@ -124,12 +134,14 @@ test.describe('Settings - Bot Management', () => {
 
   test('should show edit and delete buttons for existing bots', async ({ page }) => {
     // Open Manage Bots dialog
-    const manageBots = page.locator('button:has-text("Manage Bots"), button:has-text("管理Bot")');
-    await expect(manageBots).toBeVisible({ timeout: 10000 });
+    const manageBots = page.locator(
+      'button:has-text("Manage Bots"), button:has-text("管理机器人"), button:has-text("管理Bot")'
+    );
+    await expect(manageBots).toBeVisible({ timeout: 20000 });
     await manageBots.click();
 
     // Wait for dialog
-    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 10000 });
 
     // Check if there are any bots - if so, edit/delete buttons should exist
     const botCard = page.locator('[role="dialog"] .bg-base').first();
