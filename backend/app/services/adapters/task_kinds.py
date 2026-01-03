@@ -2172,6 +2172,11 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             else False
         )
 
+        status = task_crd.status.status if task_crd.status else "PENDING"
+        error_message = None
+        if task_crd.status and status in ["FAILED", "CANCELLED"]:
+            error_message = task_crd.status.errorMessage
+
         return {
             "id": task.id,
             "type": type,
@@ -2186,10 +2191,12 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             "git_domain": git_domain,
             "branch_name": branch_name,
             "prompt": task_crd.spec.prompt,
-            "status": task_crd.status.status if task_crd.status else "PENDING",
+            "status": status,
             "progress": task_crd.status.progress if task_crd.status else 0,
+            "status_phase": task_crd.status.statusPhase if task_crd.status else None,
+            "progress_text": task_crd.status.progressText if task_crd.status else None,
             "result": task_crd.status.result if task_crd.status else None,
-            "error_message": task_crd.status.errorMessage if task_crd.status else None,
+            "error_message": error_message,
             "created_at": created_at or task.created_at,
             "updated_at": updated_at or task.updated_at,
             "completed_at": completed_at,
@@ -2666,6 +2673,11 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             or "chat"
         )
 
+        status = task_crd.status.status if task_crd.status else "PENDING"
+        error_message = None
+        if task_crd.status and status in ["FAILED", "CANCELLED"]:
+            error_message = task_crd.status.errorMessage
+
         return {
             "id": task.id,
             "type": type,
@@ -2680,10 +2692,12 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             "git_domain": workspace_data.get("git_domain", ""),
             "branch_name": workspace_data.get("branch_name", ""),
             "prompt": task_crd.spec.prompt,
-            "status": task_crd.status.status if task_crd.status else "PENDING",
+            "status": status,
             "progress": task_crd.status.progress if task_crd.status else 0,
+            "status_phase": task_crd.status.statusPhase if task_crd.status else None,
+            "progress_text": task_crd.status.progressText if task_crd.status else None,
             "result": task_crd.status.result if task_crd.status else None,
-            "error_message": task_crd.status.errorMessage if task_crd.status else None,
+            "error_message": error_message,
             "created_at": related_data.get("created_at", task.created_at),
             "updated_at": related_data.get("updated_at", task.updated_at),
             "completed_at": related_data.get("completed_at"),

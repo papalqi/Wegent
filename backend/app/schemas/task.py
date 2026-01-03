@@ -128,6 +128,8 @@ class TaskDetail(BaseModel):
     prompt: str
     status: TaskStatus = TaskStatus.PENDING
     progress: int = 0
+    status_phase: Optional[str] = None
+    progress_text: Optional[str] = None
     result: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
     created_at: datetime
