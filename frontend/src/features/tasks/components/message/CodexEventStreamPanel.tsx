@@ -186,10 +186,7 @@ export default function CodexEventStreamPanel({
                         <div className="min-w-0 truncate text-xs font-medium text-text-primary">
                           {getEventTitle(event, index)}
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={`shrink-0 text-[11px] ${toneClass.badge}`}
-                        >
+                        <Badge variant="info" size="sm" className={`shrink-0 ${toneClass.badge}`}>
                           {tone.toUpperCase()}
                         </Badge>
                       </div>
