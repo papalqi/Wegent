@@ -17,7 +17,8 @@ export class ApiClient {
   constructor(
     private request: APIRequestContext,
     private baseURL: string,
-    private token?: string
+    private token?: string,
+    private timeoutMs: number = 60_000
   ) {}
 
   /**
@@ -50,31 +51,53 @@ export class ApiClient {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    let response: APIResponse;
+    let response: APIResponse | undefined;
 
     const options = {
       headers,
+      timeout: this.timeoutMs,
       ...(data ? { data } : {}),
     };
 
     const url = `${this.baseURL}${endpoint}`;
 
-    switch (method) {
-      case 'GET':
-        response = await this.request.get(url, options);
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        switch (method) {
+          case 'GET':
+            response = await this.request.get(url, options);
+            break;
+          case 'POST':
+            response = await this.request.post(url, options);
+            break;
+          case 'PUT':
+            response = await this.request.put(url, options);
+            break;
+          case 'DELETE':
+            response = await this.request.delete(url, options);
+            break;
+          case 'PATCH':
+            response = await this.request.patch(url, options);
+            break;
+        }
         break;
-      case 'POST':
-        response = await this.request.post(url, options);
-        break;
-      case 'PUT':
-        response = await this.request.put(url, options);
-        break;
-      case 'DELETE':
-        response = await this.request.delete(url, options);
-        break;
-      case 'PATCH':
-        response = await this.request.patch(url, options);
-        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const isTimeout =
+          message.includes('Timeout') ||
+          message.includes('timed out') ||
+          message.includes('ETIMEDOUT');
+        if (!isTimeout || attempt === maxAttempts) {
+          throw error;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+      }
+    }
+
+    if (!response) {
+      throw new Error(`API request failed without response: ${method} ${url}`);
     }
 
     return {

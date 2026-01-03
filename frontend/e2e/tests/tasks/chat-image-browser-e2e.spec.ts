@@ -546,8 +546,40 @@ test.describe('Chat Image Browser E2E with Mock Model Server', () => {
     const capturedRequests = (await capturedResponse.json()) as CapturedRequest[];
     console.log(`Captured ${capturedRequests.length} requests`);
 
-    // Find the chat completion request
-    const chatRequest = capturedRequests.find(req => req.url?.includes('/chat/completions'));
+    const expectedUserText = 'What is in this image?';
+
+    const findMatchingChatRequest = (requests: CapturedRequest[]) => {
+      const chatRequests = requests.filter(req => req.url?.includes('/chat/completions'));
+      return chatRequests
+        .filter(req => {
+          const messages = req.body?.messages;
+          if (!Array.isArray(messages)) return false;
+          return messages.some(msg => {
+            if (msg?.role !== 'user' || !Array.isArray(msg?.content)) return false;
+            return msg.content.some((c: { type?: string; text?: string }) => {
+              return (
+                c?.type === 'text' &&
+                typeof c?.text === 'string' &&
+                c.text.includes(expectedUserText)
+              );
+            });
+          });
+        })
+        .at(-1);
+    };
+
+    let chatRequest = findMatchingChatRequest(capturedRequests);
+
+    const start = Date.now();
+    while (!chatRequest && Date.now() - start < 20_000) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const resp = await request
+        .get(`${MOCK_MODEL_SERVER_URL}/captured-requests`)
+        .catch(() => null);
+      if (!resp || resp.status() !== 200) continue;
+      const latest = (await resp.json()) as CapturedRequest[];
+      chatRequest = findMatchingChatRequest(latest);
+    }
 
     if (!chatRequest) {
       console.log('Captured requests:', JSON.stringify(capturedRequests, null, 2));
@@ -579,7 +611,7 @@ test.describe('Chat Image Browser E2E with Mock Model Server', () => {
       // Verify text content exists
       const textContent = userMessage.content.find(c => c.type === 'text');
       expect(textContent).toBeDefined();
-      expect(textContent?.text).toContain('What is in this image?');
+      expect(textContent?.text).toContain(expectedUserText);
 
       // Verify image_url content exists
       const imageContent = userMessage.content.find(c => c.type === 'image_url');
