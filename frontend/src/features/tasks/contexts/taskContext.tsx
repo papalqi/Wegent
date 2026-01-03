@@ -83,6 +83,8 @@ export const TaskContextProvider = ({ children }: { children: ReactNode }) => {
 
   // Track task status for notification
   const taskStatusMapRef = useRef<Map<number, TaskStatus>>(new Map());
+  const taskErrorFetchInFlightRef = useRef<Set<number>>(new Set());
+  const taskErrorFetchedRef = useRef<Set<number>>(new Set());
 
   // WebSocket connection for real-time task updates
   const { registerTaskHandlers, isConnected, leaveTask, joinTask } = useSocket();
@@ -541,6 +543,93 @@ export const TaskContextProvider = ({ children }: { children: ReactNode }) => {
             ...(completedAt && { completed_at: completedAt }),
           };
         });
+      }
+
+      // WebSocket payload does not include error_message; fetch detail once on FAILED to show real error.
+      if (data.status === 'FAILED') {
+        if (
+          taskErrorFetchedRef.current.has(data.task_id) ||
+          taskErrorFetchInFlightRef.current.has(data.task_id)
+        ) {
+          return;
+        }
+
+        taskErrorFetchInFlightRef.current.add(data.task_id);
+        void (async () => {
+          try {
+            const detail = await taskApis.getTaskDetail(data.task_id);
+            taskErrorFetchedRef.current.add(data.task_id);
+
+            setTasks(prev =>
+              prev.map(task =>
+                task.id === data.task_id
+                  ? {
+                      ...task,
+                      status: detail.status,
+                      progress: detail.progress ?? task.progress,
+                      status_phase: detail.status_phase ?? task.status_phase,
+                      progress_text: detail.progress_text ?? task.progress_text,
+                      error_message: detail.error_message ?? task.error_message,
+                      updated_at: detail.updated_at ?? now,
+                      completed_at: detail.completed_at ?? task.completed_at,
+                    }
+                  : task
+              )
+            );
+
+            setGroupTasks(prev =>
+              prev.map(task =>
+                task.id === data.task_id
+                  ? {
+                      ...task,
+                      status: detail.status,
+                      progress: detail.progress ?? task.progress,
+                      status_phase: detail.status_phase ?? task.status_phase,
+                      progress_text: detail.progress_text ?? task.progress_text,
+                      error_message: detail.error_message ?? task.error_message,
+                      updated_at: detail.updated_at ?? now,
+                      completed_at: detail.completed_at ?? task.completed_at,
+                    }
+                  : task
+              )
+            );
+
+            setPersonalTasks(prev =>
+              prev.map(task =>
+                task.id === data.task_id
+                  ? {
+                      ...task,
+                      status: detail.status,
+                      progress: detail.progress ?? task.progress,
+                      status_phase: detail.status_phase ?? task.status_phase,
+                      progress_text: detail.progress_text ?? task.progress_text,
+                      error_message: detail.error_message ?? task.error_message,
+                      updated_at: detail.updated_at ?? now,
+                      completed_at: detail.completed_at ?? task.completed_at,
+                    }
+                  : task
+              )
+            );
+
+            setSelectedTaskDetail(prev => {
+              if (!prev || prev.id !== data.task_id) return prev;
+              return {
+                ...prev,
+                status: detail.status,
+                progress: detail.progress ?? prev.progress,
+                status_phase: detail.status_phase ?? prev.status_phase,
+                progress_text: detail.progress_text ?? prev.progress_text,
+                error_message: detail.error_message ?? prev.error_message,
+                updated_at: detail.updated_at ?? now,
+                completed_at: detail.completed_at ?? prev.completed_at,
+              };
+            });
+          } catch {
+            // Best-effort; keep existing error placeholder if fetch fails.
+          } finally {
+            taskErrorFetchInFlightRef.current.delete(data.task_id);
+          }
+        })();
       }
     },
     [selectedTask]

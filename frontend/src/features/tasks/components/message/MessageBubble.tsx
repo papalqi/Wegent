@@ -325,10 +325,8 @@ const MessageBubble = memo(
       isWaiting ||
       msg.isWaiting;
 
-    const renderProgressBar = (status: string, progress: number) => {
+    const renderProgressBar = (status: string, _progress: number) => {
       const normalizedStatus = (status ?? '').toUpperCase();
-      const isActiveStatus = ['RUNNING', 'PENDING', 'PROCESSING'].includes(normalizedStatus);
-      const safeProgress = Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 100) : 0;
 
       // Get status configuration (icon, label key, colors)
       const getStatusConfig = (statusKey: string) => {
@@ -339,7 +337,6 @@ const MessageBubble = memo(
               labelKey: 'messages.status_running',
               bgClass: 'bg-primary/10',
               textClass: 'text-primary',
-              dotClass: 'bg-primary',
             };
           case 'PENDING':
             return {
@@ -347,7 +344,6 @@ const MessageBubble = memo(
               labelKey: 'messages.status_pending',
               bgClass: 'bg-amber-500/10',
               textClass: 'text-amber-600 dark:text-amber-400',
-              dotClass: 'bg-amber-500',
             };
           case 'PROCESSING':
             return {
@@ -355,7 +351,6 @@ const MessageBubble = memo(
               labelKey: 'messages.status_processing',
               bgClass: 'bg-blue-500/10',
               textClass: 'text-blue-600 dark:text-blue-400',
-              dotClass: 'bg-blue-500',
             };
           case 'COMPLETED':
             return {
@@ -363,7 +358,6 @@ const MessageBubble = memo(
               labelKey: 'messages.status_completed',
               bgClass: 'bg-green-500/10',
               textClass: 'text-green-600 dark:text-green-400',
-              dotClass: 'bg-green-500',
             };
           case 'FAILED':
             return {
@@ -371,7 +365,6 @@ const MessageBubble = memo(
               labelKey: 'messages.status_failed',
               bgClass: 'bg-red-500/10',
               textClass: 'text-red-600 dark:text-red-400',
-              dotClass: 'bg-red-500',
             };
           case 'CANCELLED':
             return {
@@ -379,7 +372,6 @@ const MessageBubble = memo(
               labelKey: 'messages.status_cancelled',
               bgClass: 'bg-gray-500/10',
               textClass: 'text-gray-600 dark:text-gray-400',
-              dotClass: 'bg-gray-500',
             };
           case 'CANCELLING':
             return {
@@ -387,7 +379,6 @@ const MessageBubble = memo(
               labelKey: 'messages.status_cancelling',
               bgClass: 'bg-orange-500/10',
               textClass: 'text-orange-600 dark:text-orange-400',
-              dotClass: 'bg-orange-500',
             };
           default:
             return {
@@ -395,7 +386,6 @@ const MessageBubble = memo(
               labelKey: 'messages.status_running',
               bgClass: 'bg-primary/10',
               textClass: 'text-primary',
-              dotClass: 'bg-primary',
             };
         }
       };
@@ -403,8 +393,7 @@ const MessageBubble = memo(
       const config = getStatusConfig(normalizedStatus);
 
       return (
-        <div className="mt-3 space-y-2">
-          {/* Status Badge */}
+        <div className="mt-3">
           <div className="flex items-center gap-2">
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${config.bgClass} ${config.textClass}`}
@@ -413,20 +402,6 @@ const MessageBubble = memo(
               <span>{t(config.labelKey) || status}</span>
             </span>
           </div>
-
-          {/* Minimal Progress Bar - only show for active statuses */}
-          {isActiveStatus && (
-            <div className="w-full bg-border/40 rounded-full h-1 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ease-out ${config.dotClass} ${isActiveStatus ? 'progress-bar-shimmer' : ''}`}
-                style={{ width: `${Math.max(safeProgress, 3)}%` }}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={safeProgress}
-                role="progressbar"
-              />
-            </div>
-          )}
         </div>
       );
     };
@@ -1361,10 +1336,14 @@ const MessageBubble = memo(
           {!isUserTypeMessage && msg.thinking && (
             <ThinkingDisplay
               thinking={msg.thinking}
+              taskId={selectedTaskDetail?.id ?? null}
               taskStatus={msg.subtaskStatus}
               taskPhase={selectedTaskDetail?.status_phase}
               taskProgress={selectedTaskDetail?.progress}
               taskProgressText={selectedTaskDetail?.progress_text}
+              taskErrorMessage={selectedTaskDetail?.error_message}
+              taskUpdatedAt={selectedTaskDetail?.updated_at ?? null}
+              taskCompletedAt={selectedTaskDetail?.completed_at ?? null}
             />
           )}
           <div

@@ -97,10 +97,14 @@ export interface McpServer {
  */
 export interface ThinkingDisplayProps {
   thinking: ThinkingStep[] | null;
+  taskId?: number | null;
   taskStatus?: string;
   taskPhase?: string | null;
   taskProgress?: number | null;
   taskProgressText?: string | null;
+  taskErrorMessage?: string | null;
+  taskUpdatedAt?: string | null;
+  taskCompletedAt?: string | null;
 }
 
 /**

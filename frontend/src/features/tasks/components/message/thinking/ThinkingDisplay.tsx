@@ -14,10 +14,14 @@ import DetailedThinkingView from './DetailedThinkingView';
  */
 const ThinkingDisplay = memo(function ThinkingDisplay({
   thinking,
+  taskId,
   taskStatus,
   taskPhase,
   taskProgress,
   taskProgressText,
+  taskErrorMessage,
+  taskUpdatedAt,
+  taskCompletedAt,
 }: ThinkingDisplayProps) {
   // Early return if no thinking data
   if (!thinking || thinking.length === 0) {
@@ -28,10 +32,14 @@ const ThinkingDisplay = memo(function ThinkingDisplay({
   return (
     <DetailedThinkingView
       thinking={thinking}
+      taskId={taskId}
       taskStatus={taskStatus}
       taskPhase={taskPhase}
       taskProgress={taskProgress}
       taskProgressText={taskProgressText}
+      taskErrorMessage={taskErrorMessage}
+      taskUpdatedAt={taskUpdatedAt}
+      taskCompletedAt={taskCompletedAt}
     />
   );
 });
