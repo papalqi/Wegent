@@ -10,14 +10,13 @@
 Callback client module, handles communication with the executor_manager callback API
 """
 
-import os
-import requests
-import time
 import json
-from typing import Dict, Any, Optional
+import os
+import time
+from typing import Any, Dict, Optional
 
+import requests
 from executor.config import config
-
 from shared.logger import setup_logger
 from shared.status import TaskStatus
 from shared.telemetry.config import get_otel_config
@@ -139,7 +138,11 @@ class CallbackClient:
         if status:
             data["status"] = status
         if message:
-            data["error_message"] = message
+            normalized_status = str(status).upper() if status else ""
+            if normalized_status in {TaskStatus.FAILED.value, TaskStatus.TIMEOUT.value}:
+                data["error_message"] = message
+            else:
+                data["message"] = message
         if result:
             data["result"] = result
         if task_type:
@@ -172,8 +175,8 @@ class CallbackClient:
         headers = {"Content-Type": "application/json"}
         otel_config = get_otel_config()
         if otel_config.enabled:
-            from shared.telemetry.core import is_telemetry_enabled
             from shared.telemetry.context import inject_trace_context_to_headers
+            from shared.telemetry.core import is_telemetry_enabled
 
             if is_telemetry_enabled():
                 headers = inject_trace_context_to_headers(headers)
