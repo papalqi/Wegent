@@ -73,6 +73,7 @@ ELASTICSEARCH_PORT="${WEGENT_ELASTICSEARCH_PORT:-9200}"
 
 # Optional components
 ENABLE_RAG="${WEGENT_ENABLE_RAG:-false}"
+FRONTEND_DEV_MODE="${WEGENT_FRONTEND_DEV_MODE:-false}"
 
 # Runtime workspace for executor containers (host path)
 EXECUTOR_WORKSPACE="${WEGENT_EXECUTOR_WORKSPACE:-${HOME}/wecode-bot}"
@@ -131,12 +132,13 @@ Options:
   --executor-manager-port PORT   Executor Manager port (default: ${EXECUTOR_MANAGER_PORT})
   --rag                          Start Elasticsearch (RAG profile) (default: ${ENABLE_RAG})
   --no-rag                       Do not start Elasticsearch
+  --dev                          Start frontend in development mode (skip build, use next dev)
   -h, --help                     Show help
 
 Environment variables (optional):
   WEGENT_FRONTEND_PORT, WEGENT_BACKEND_PORT, WEGENT_EXECUTOR_MANAGER_PORT
   WEGENT_MYSQL_PORT, WEGENT_REDIS_PORT, WEGENT_ELASTICSEARCH_PORT (must match docker-compose.yml port mapping)
-  WEGENT_ENABLE_RAG, WEGENT_EXECUTOR_WORKSPACE
+  WEGENT_ENABLE_RAG, WEGENT_EXECUTOR_WORKSPACE, WEGENT_FRONTEND_DEV_MODE
   WEGENT_IMAGE_PREFIX, WEGENT_EXECUTOR_MANAGER_IMAGE, WEGENT_EXECUTOR_IMAGE
   WEGENT_EXECUTOR_MANAGER_VERSION, WEGENT_EXECUTOR_VERSION
 EOF
@@ -148,6 +150,23 @@ die() {
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# macOS compatibility: setsid is not available by default
+# Use setsid if available, otherwise fall back to nohup or direct background execution
+# The command should already include output redirection (e.g., >>log 2>&1)
+run_detached() {
+  local cmd="$1"
+  if have setsid; then
+    setsid bash -c "$cmd" &
+  elif have nohup; then
+    # macOS fallback: use nohup (command should handle its own redirection)
+    nohup bash -c "$cmd" &
+  else
+    # Last resort: direct background execution
+    bash -c "$cmd" &
+  fi
+  echo $!
+}
 
 validate_port() {
   local port="$1"
@@ -346,6 +365,10 @@ main() {
         ENABLE_RAG="false"
         shift
         ;;
+      --dev)
+        FRONTEND_DEV_MODE="true"
+        shift
+        ;;
       -h|--help)
         usage
         exit 0
@@ -450,37 +473,63 @@ main() {
     die "Failed to detect gateway IP for docker network 'wegent-network'."
   fi
 
+  # Check if image exists locally to avoid unnecessary pulls
+  local image_exists=false
+  if docker image inspect "${EXECUTOR_MANAGER_IMAGE}" >/dev/null 2>&1; then
+    image_exists=true
+    echo -e "${GREEN}  Using existing local image: ${EXECUTOR_MANAGER_IMAGE}${NC}"
+  fi
+
   # If using floating tags (latest*), always pull before starting to avoid stale images.
   local pull_flag=()
   if [[ "${EXECUTOR_MANAGER_IMAGE}" == *":latest"* ]]; then
     pull_flag=(--pull=always)
+    if [ "$image_exists" = false ]; then
+      echo -e "${YELLOW}  Pulling ${EXECUTOR_MANAGER_IMAGE}...${NC}"
+    fi
+  elif [ "$image_exists" = false ]; then
+    echo -e "${YELLOW}  Image not found locally, pulling ${EXECUTOR_MANAGER_IMAGE}...${NC}"
+    echo -e "${YELLOW}  (This may take a while for first-time download)${NC}"
   fi
+
   if [[ "${EXECUTOR_IMAGE}" == *":latest"* ]]; then
+    if ! docker image inspect "${EXECUTOR_IMAGE}" >/dev/null 2>&1; then
+      echo -e "${YELLOW}  Pulling ${EXECUTOR_IMAGE}...${NC}"
+    fi
     docker pull "${EXECUTOR_IMAGE}" >/dev/null 2>&1 || true
   fi
 
-  docker run -d "${pull_flag[@]}" \
-    --name wegent-executor-manager \
-    --network wegent-network \
-    --network-alias executor_manager \
-    --add-host host.docker.internal:host-gateway \
-    -p "${EXECUTOR_MANAGER_PORT}:8001" \
-    -e TZ=Asia/Shanghai \
-    -e TASK_API_DOMAIN="http://${network_gateway}:${BACKEND_PORT}" \
-    -e EXECUTOR_MANAGER_PORT="8001" \
-    -e MAX_CONCURRENT_TASKS=30 \
-    -e PORT=8001 \
-    -e CALLBACK_HOST="http://executor_manager:8001" \
-    -e CALLBACK_PORT="8001" \
-    -e NETWORK=wegent-network \
-    -e DOCKER_HOST_ADDR="host.docker.internal" \
-    -e EXECUTOR_IMAGE="${EXECUTOR_IMAGE}" \
-    -e EXECUTOR_PORT_RANGE_MIN=10001 \
-    -e EXECUTOR_PORT_RANGE_MAX=10100 \
-    -e EXECUTOR_WORKSPACE="${EXECUTOR_WORKSPACE}" \
-    -e EXECUTOR_WORKSPCE="${EXECUTOR_WORKSPACE}" \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    "${EXECUTOR_MANAGER_IMAGE}" >/dev/null
+  # Build docker run command with optional pull flag
+  local docker_cmd=(
+    docker run -d
+  )
+  if [ ${#pull_flag[@]} -gt 0 ]; then
+    docker_cmd+=("${pull_flag[@]}")
+  fi
+  docker_cmd+=(
+        --name wegent-executor-manager
+        --network wegent-network
+        --network-alias executor_manager
+        --add-host host.docker.internal:host-gateway
+        -p "${EXECUTOR_MANAGER_PORT}:8001"
+        -e TZ=Asia/Shanghai
+        -e TASK_API_DOMAIN="http://${network_gateway}:${BACKEND_PORT}"
+        -e EXECUTOR_MANAGER_PORT="8001"
+        -e MAX_CONCURRENT_TASKS=30
+        -e PORT=8001
+        -e CALLBACK_HOST="http://executor_manager:8001"
+        -e CALLBACK_PORT="8001"
+        -e NETWORK=wegent-network
+        -e DOCKER_HOST_ADDR="host.docker.internal"
+        -e EXECUTOR_IMAGE="${EXECUTOR_IMAGE}"
+        -e EXECUTOR_PORT_RANGE_MIN=10001
+        -e EXECUTOR_PORT_RANGE_MAX=10100
+        -e EXECUTOR_WORKSPACE="${EXECUTOR_WORKSPACE}"
+        -e EXECUTOR_WORKSPCE="${EXECUTOR_WORKSPACE}"
+        -v /var/run/docker.sock:/var/run/docker.sock
+    "${EXECUTOR_MANAGER_IMAGE}"
+  )
+  "${docker_cmd[@]}" >/dev/null
 
   # Executor Manager performs a one-time executor binary extraction which can take ~2 minutes
   # on first run (docker pull + copy). Extend health wait to avoid false negatives.
@@ -512,7 +561,7 @@ main() {
     EXECUTOR_CANCEL_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/tasks/cancel" \
     EXECUTOR_DELETE_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/executor/delete" \
     FRONTEND_URL="http://127.0.0.1:${FRONTEND_PORT}" \
-    setsid bash -c "cd '${ROOT_DIR}/backend' && exec uv run uvicorn app.main:app --host 0.0.0.0 --port '${BACKEND_PORT}'" >>"$backend_log" 2>&1 &
+    sh -c "cd '${ROOT_DIR}/backend' && exec uv run uvicorn app.main:app --host 0.0.0.0 --port '${BACKEND_PORT}'" >>"$backend_log" 2>&1 &
 
   BACKEND_PGID="$!"
   echo -e "${GREEN}✓ Backend started (PGID=${BACKEND_PGID})${NC}"
@@ -524,37 +573,65 @@ main() {
   echo -e "${GREEN}✓ Backend is healthy${NC}"
   echo ""
 
-  echo -e "${BLUE}[5/6] Building Frontend (npm run build)...${NC}"
   local node_major=""
   node_major="$(node --version | sed 's/^v//' | cut -d. -f1)"
   if [ "${node_major}" -lt 18 ]; then
     die "Node.js 18+ is required (found v${node_major})."
   fi
 
-  (
-    cd "${ROOT_DIR}/frontend"
-    if [ ! -d node_modules ]; then
-      npm install
-    fi
-    npm run build
-  )
-  echo -e "${GREEN}✓ Frontend build completed${NC}"
-  echo ""
+  if [ "$FRONTEND_DEV_MODE" = "true" ]; then
+    echo -e "${BLUE}[5/6] Starting Frontend in Development Mode (npm run dev)...${NC}"
+    echo -e "${YELLOW}  Note: Development mode enables hot reload and incremental compilation${NC}"
+    
+    (
+      cd "${ROOT_DIR}/frontend"
+      if [ ! -d node_modules ]; then
+        npm install
+      fi
+    )
+    
+    local frontend_log=""
+    frontend_log="${ROOT_DIR}/frontend/next.log"
+    : >"$frontend_log"
 
-  echo -e "${BLUE}[6/6] Starting Frontend (host, npm start)...${NC}"
-  local frontend_log=""
-  frontend_log="${ROOT_DIR}/frontend/next.log"
-  : >"$frontend_log"
+    env \
+      NODE_ENV="development" \
+      PORT="${FRONTEND_PORT}" \
+      RUNTIME_INTERNAL_API_URL="http://127.0.0.1:${BACKEND_PORT}" \
+      RUNTIME_SOCKET_DIRECT_URL="http://localhost:${BACKEND_PORT}" \
+      sh -c "cd '${ROOT_DIR}/frontend' && exec npm run dev" >>"$frontend_log" 2>&1 &
 
-  env \
-    NODE_ENV="production" \
-    RUNTIME_INTERNAL_API_URL="http://127.0.0.1:${BACKEND_PORT}" \
-    RUNTIME_SOCKET_DIRECT_URL="http://localhost:${BACKEND_PORT}" \
-    setsid bash -c "cd '${ROOT_DIR}/frontend' && exec npm start -- -p '${FRONTEND_PORT}'" >>"$frontend_log" 2>&1 &
+    FRONTEND_PGID="$!"
+    echo -e "${GREEN}✓ Frontend started in dev mode (PGID=${FRONTEND_PGID})${NC}"
+    echo -e "${GREEN}  Frontend log: ${frontend_log}${NC}"
+  else
+    echo -e "${BLUE}[5/6] Building Frontend (npm run build)...${NC}"
 
-  FRONTEND_PGID="$!"
-  echo -e "${GREEN}✓ Frontend started (PGID=${FRONTEND_PGID})${NC}"
-  echo -e "${GREEN}  Frontend log: ${frontend_log}${NC}"
+    (
+      cd "${ROOT_DIR}/frontend"
+      if [ ! -d node_modules ]; then
+        npm install
+      fi
+      npm run build
+    )
+    echo -e "${GREEN}✓ Frontend build completed${NC}"
+    echo ""
+
+    echo -e "${BLUE}[6/6] Starting Frontend (host, npm start)...${NC}"
+    local frontend_log=""
+    frontend_log="${ROOT_DIR}/frontend/next.log"
+    : >"$frontend_log"
+
+    env \
+      NODE_ENV="production" \
+      RUNTIME_INTERNAL_API_URL="http://127.0.0.1:${BACKEND_PORT}" \
+      RUNTIME_SOCKET_DIRECT_URL="http://localhost:${BACKEND_PORT}" \
+      sh -c "cd '${ROOT_DIR}/frontend' && exec npm start -- -p '${FRONTEND_PORT}'" >>"$frontend_log" 2>&1 &
+
+    FRONTEND_PGID="$!"
+    echo -e "${GREEN}✓ Frontend started (PGID=${FRONTEND_PGID})${NC}"
+    echo -e "${GREEN}  Frontend log: ${frontend_log}${NC}"
+  fi
 
   if ! wait_for_http "http://127.0.0.1:${FRONTEND_PORT}" 120; then
     die "Frontend did not become ready on port ${FRONTEND_PORT}."
