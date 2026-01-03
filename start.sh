@@ -211,6 +211,99 @@ ensure_uv() {
   have uv || die "uv installation failed. Please install uv manually: https://github.com/astral-sh/uv"
 }
 
+maybe_build_frontend_needed() {
+  local flag_var="$1"
+  local source_ts
+  source_ts="$(max_mtime "${ROOT_DIR}/frontend")"
+  local build_ts
+  build_ts="$(max_mtime "${ROOT_DIR}/frontend/.next")"
+
+  local need="false"
+  if [ "$build_ts" -eq 0 ] || [ "$source_ts" -gt "$build_ts" ]; then
+    need="true"
+  fi
+
+  printf -v "$flag_var" '%s' "$need"
+}
+
+# Return max mtime (seconds) for given paths, pruning common cache dirs to keep checks fast.
+max_mtime() {
+  python - "$@" <<'PY'
+import os, sys
+
+prune = {'.git', 'node_modules', '.next', '.turbo', '.pytest_cache', '__pycache__', '.mypy_cache', 'dist', 'build', 'coverage', '.venv'}
+max_ts = 0
+
+def walk(path):
+    global max_ts
+    if not os.path.exists(path):
+        return
+    if os.path.isfile(path):
+        try:
+            max_ts = max(max_ts, os.path.getmtime(path))
+        except FileNotFoundError:
+            pass
+        return
+    for root, dirs, files in os.walk(path):
+        dirs[:] = [d for d in dirs if d not in prune]
+        for f in files:
+            fp = os.path.join(root, f)
+            try:
+                max_ts = max(max_ts, os.path.getmtime(fp))
+            except FileNotFoundError:
+                continue
+
+for p in sys.argv[1:]:
+    walk(p)
+
+print(int(max_ts))
+PY
+}
+
+# Get docker image created timestamp (seconds since epoch); returns 0 if image missing.
+image_created_ts() {
+  local image="$1"
+  local created=""
+  created="$(docker image inspect "$image" -f '{{.Created}}' 2>/dev/null || true)"
+  if [ -z "$created" ]; then
+    echo 0
+    return
+  fi
+  python - "$created" <<'PY'
+import sys, datetime
+val = sys.argv[1]
+try:
+    dt = datetime.datetime.fromisoformat(val.replace('Z', '+00:00'))
+    print(int(dt.timestamp()))
+except Exception:
+    print(0)
+PY
+}
+
+# Build image if source is newer (or image missing). Sets flag variable by name to "true"/"false".
+maybe_build_image() {
+  local image="$1"
+  local dockerfile="$2"
+  local label="$3"
+  local flag_var="$4"
+  shift 4
+  local source_ts
+  source_ts="$(max_mtime "$@")"
+  local image_ts
+  image_ts="$(image_created_ts "$image")"
+
+  local built="false"
+  if [ "$image_ts" -lt "$source_ts" ] || [ "$image_ts" -eq 0 ]; then
+    echo -e "${YELLOW}  Building ${label} image from local source (tag: ${image})...${NC}"
+    docker build -f "$dockerfile" -t "$image" "$ROOT_DIR"
+    built="true"
+  else
+    echo -e "${GREEN}  ${label} image up-to-date (source mtime ≤ image).${NC}"
+  fi
+
+  printf -v "$flag_var" '%s' "$built"
+}
+
 kill_process_group() {
   local pgid="$1"
   if [ -z "$pgid" ]; then
@@ -467,6 +560,12 @@ main() {
 
   echo -e "${BLUE}[3/6] Starting Executor Manager (Docker)...${NC}"
 
+  echo -e "  Checking local executor images freshness..."
+  local built_executor_manager_image="false"
+  local built_executor_image="false"
+  maybe_build_image "${EXECUTOR_MANAGER_IMAGE}" "${ROOT_DIR}/docker/executor_manager/Dockerfile" "Executor Manager" "built_executor_manager_image" "${ROOT_DIR}/executor_manager" "${ROOT_DIR}/shared" "${ROOT_DIR}/docker/executor_manager/Dockerfile"
+  maybe_build_image "${EXECUTOR_IMAGE}" "${ROOT_DIR}/docker/executor/Dockerfile" "Executor" "built_executor_image" "${ROOT_DIR}/executor" "${ROOT_DIR}/shared" "${ROOT_DIR}/docker/executor/Dockerfile"
+
   local network_gateway=""
   network_gateway="$(docker network inspect wegent-network --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)"
   if [ -z "$network_gateway" ]; then
@@ -482,21 +581,23 @@ main() {
 
   # If using floating tags (latest*), always pull before starting to avoid stale images.
   local pull_flag=()
-  if [[ "${EXECUTOR_MANAGER_IMAGE}" == *":latest"* ]]; then
+  if [[ "${EXECUTOR_MANAGER_IMAGE}" == *":latest"* ]] && [ "$built_executor_manager_image" = "false" ]; then
     pull_flag=(--pull=always)
     if [ "$image_exists" = false ]; then
       echo -e "${YELLOW}  Pulling ${EXECUTOR_MANAGER_IMAGE}...${NC}"
     fi
-  elif [ "$image_exists" = false ]; then
+  elif [ "$image_exists" = false ] && [ "$built_executor_manager_image" = "false" ]; then
     echo -e "${YELLOW}  Image not found locally, pulling ${EXECUTOR_MANAGER_IMAGE}...${NC}"
     echo -e "${YELLOW}  (This may take a while for first-time download)${NC}"
   fi
-
-  if [[ "${EXECUTOR_IMAGE}" == *":latest"* ]]; then
-    if ! docker image inspect "${EXECUTOR_IMAGE}" >/dev/null 2>&1; then
-      echo -e "${YELLOW}  Pulling ${EXECUTOR_IMAGE}...${NC}"
+  if [ "$built_executor_manager_image" = "false" ]; then
+    # Avoid overriding freshly built image with a pull.
+    if [[ "${EXECUTOR_IMAGE}" == *":latest"* ]] && [ "$built_executor_image" = "false" ]; then
+      if ! docker image inspect "${EXECUTOR_IMAGE}" >/dev/null 2>&1; then
+        echo -e "${YELLOW}  Pulling ${EXECUTOR_IMAGE}...${NC}"
+      fi
+      docker pull "${EXECUTOR_IMAGE}" >/dev/null 2>&1 || true
     fi
-    docker pull "${EXECUTOR_IMAGE}" >/dev/null 2>&1 || true
   fi
 
   # Build docker run command with optional pull flag
@@ -605,17 +706,31 @@ main() {
     echo -e "${GREEN}✓ Frontend started in dev mode (PGID=${FRONTEND_PGID})${NC}"
     echo -e "${GREEN}  Frontend log: ${frontend_log}${NC}"
   else
-    echo -e "${BLUE}[5/6] Building Frontend (npm run build)...${NC}"
+    local need_frontend_build="false"
+    maybe_build_frontend_needed need_frontend_build
+
+    if [ "$need_frontend_build" = "true" ]; then
+      echo -e "${BLUE}[5/6] Building Frontend (npm run build)...${NC}"
+    else
+      echo -e "${BLUE}[5/6] Frontend build not needed (source unchanged)...${NC}"
+    fi
 
     (
       cd "${ROOT_DIR}/frontend"
       if [ ! -d node_modules ]; then
         npm install
       fi
-      npm run build
+      if [ "$need_frontend_build" = "true" ]; then
+        npm run build
+      fi
     )
-    echo -e "${GREEN}✓ Frontend build completed${NC}"
-    echo ""
+    if [ "$need_frontend_build" = "true" ]; then
+      echo -e "${GREEN}✓ Frontend build completed${NC}"
+      echo ""
+    else
+      echo -e "${GREEN}✓ Reusing existing frontend build output (.next)${NC}"
+      echo ""
+    fi
 
     echo -e "${BLUE}[6/6] Starting Frontend (host, npm start)...${NC}"
     local frontend_log=""
