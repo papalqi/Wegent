@@ -23,7 +23,6 @@ import { useScrollManagement } from '../hooks/useScrollManagement';
 import { useFloatingInput } from '../hooks/useFloatingInput';
 import { useTeamPreferences } from '../hooks/useTeamPreferences';
 import { useAttachmentUpload } from '../hooks/useAttachmentUpload';
-import SystemPromptPanel from './SystemPromptPanel';
 
 /**
  * Threshold in pixels for determining when to collapse selectors.
@@ -390,7 +389,6 @@ export default function ChatArea({
           style={{ paddingBottom: hasMessages ? `${inputHeight + 16}px` : '0' }}
         >
           <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 pt-12">
-            <SystemPromptPanel team={selectedTaskDetail?.team || chatState.selectedTeam} />
             <MessagesArea
               selectedTeam={chatState.selectedTeam}
               selectedRepo={chatState.selectedRepo}
@@ -425,7 +423,6 @@ export default function ChatArea({
                 autoFocus={!hasMessages}
                 inputControlsRef={inputControlsRef}
               />
-              <SystemPromptPanel team={chatState.selectedTeam} />
               <QuickAccessCards
                 teams={teams}
                 selectedTeam={chatState.selectedTeam}
