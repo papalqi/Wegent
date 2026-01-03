@@ -377,8 +377,6 @@ kill_listen_port() {
         | sort -u \
         | tr '\n' ' '
     )"
-  else
-    return 0
   fi
 
   if [ -n "$pids" ]; then
