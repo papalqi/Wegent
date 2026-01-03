@@ -120,20 +120,8 @@ export function deriveTaskExecutionPhase(input: {
   if (status === 'FAILED') return 'failed';
   if (status === 'CANCELLED' || status === 'CANCELLING') return 'cancelled';
   if (status === 'COMPLETED') return 'completed';
-  if (
-    (status === 'RUNNING' || status === 'DELETE') &&
-    (input.progress === null || input.progress === undefined)
-  ) {
-    return 'executing';
-  }
-
-  const p = clampProgress(input.progress);
-  if (p < 20) return 'booting_executor';
-  if (p < 40) return 'pulling_image';
-  if (p < 60) return 'loading_skills';
-  if (p < 90) return 'executing';
-  if (p < 100) return 'syncing';
-  return 'completed';
+  if (status === 'RUNNING' || status === 'DELETE') return 'executing';
+  return 'executing';
 }
 
 export function getTaskExecutionDisplay(input: {
@@ -151,6 +139,6 @@ export function getTaskExecutionDisplay(input: {
     labelKey: config.labelKey,
     icon: config.icon,
     tone: config.tone,
-    showProgress: config.showProgress,
+    showProgress: false,
   };
 }
