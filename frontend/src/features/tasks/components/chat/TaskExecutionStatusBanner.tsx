@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Loader2, Clock, CheckCircle2, XCircle, Ban } from 'lucide-react';
 
 import type { TaskStatus } from '@/types/api';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/hooks/useTranslation';
 import { isTaskActiveStatus } from '@/utils/taskStatus';
 import { getTaskExecutionDisplay, type TaskExecutionIcon } from '@/utils/task-execution-phase';
+import { useTaskPhaseTimeline } from '@/hooks/use-task-phase-timeline';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -20,11 +20,14 @@ import {
 
 type TaskExecutionStatusBannerProps = {
   task: {
+    id?: number | null;
     status: TaskStatus;
     progress?: number | null;
     status_phase?: string | null;
     progress_text?: string | null;
     error_message?: string | null;
+    updated_at?: string | null;
+    completed_at?: string | null;
   } | null;
   retryMessage?: { content: string; type: string; error?: string; subtaskId?: number } | null;
   onRetry?: (message: {
@@ -58,7 +61,54 @@ export function TaskExecutionStatusBanner({
   const { t } = useTranslation();
 
   const [isErrorDialogOpen, setIsErrorDialogOpen] = useState(false);
-  const shouldShow = Boolean(task && isTaskActiveStatus(task.status));
+  const shouldShow = Boolean(task && (isTaskActiveStatus(task.status) || task.status === 'FAILED'));
+
+  const displayForTimeline = useMemo(() => {
+    const status = (task?.status ?? 'PENDING') as TaskStatus;
+    return getTaskExecutionDisplay({
+      status,
+      progress: task?.progress,
+      statusPhase: task?.status_phase ?? null,
+    });
+  }, [task?.progress, task?.status, task?.status_phase]);
+
+  const stageId = task
+    ? ((task.progress_text?.trim() ? task.progress_text.trim() : null) ??
+      (task.status_phase?.trim() ? task.status_phase.trim() : null) ??
+      displayForTimeline.phase)
+    : null;
+
+  const stageLabelForTimeline = task
+    ? task.progress_text?.trim()
+      ? task.progress_text
+      : task.status === 'CANCELLING'
+        ? t('chat:messages.status_cancelling')
+        : t(displayForTimeline.labelKey) || t('chat:messages.status_running')
+    : null;
+
+  const eventAtMs = (() => {
+    const parsed = task?.updated_at ? Date.parse(task.updated_at) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : Date.now();
+  })();
+
+  const terminalAtMs = (() => {
+    const parsed = task?.completed_at ? Date.parse(task.completed_at) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  })();
+
+  const isTerminal = Boolean(
+    task && (task.status === 'COMPLETED' || task.status === 'FAILED' || task.status === 'CANCELLED')
+  );
+
+  const { timeline, nowMs } = useTaskPhaseTimeline({
+    taskId: task?.id ?? null,
+    stageId,
+    stageLabel: stageLabelForTimeline,
+    eventAtMs,
+    isTerminal,
+    terminalAtMs,
+  });
+
   if (!shouldShow || !task) return null;
 
   const display = getTaskExecutionDisplay({
@@ -68,11 +118,11 @@ export function TaskExecutionStatusBanner({
   });
 
   const Icon = ICONS[display.icon];
-  const title =
-    task.status === 'CANCELLING'
+  const title = task.progress_text?.trim()
+    ? task.progress_text
+    : task.status === 'CANCELLING'
       ? t('chat:messages.status_cancelling')
-      : t(display.labelKey) || task.progress_text || t('chat:messages.status_running');
-  const progressValue = display.showProgress ? Math.max(display.progress, 3) : display.progress;
+      : t(display.labelKey) || t('chat:messages.status_running');
 
   const errorDetail =
     task.status !== 'FAILED'
@@ -83,6 +133,13 @@ export function TaskExecutionStatusBanner({
         t('chat:status.error') ||
         'Unknown error';
 
+  const formatSeconds = (ms: number) => {
+    const seconds = Math.max(0, Math.floor(ms / 1000));
+    return t('chat:messages.phase_elapsed', { seconds }) || `${seconds}s`;
+  };
+
+  const renderedTimeline = timeline.length > 0 ? timeline.slice(-8) : [];
+
   return (
     <Alert variant={getAlertVariant(display.phase)} className="mb-4">
       <Icon
@@ -91,10 +148,14 @@ export function TaskExecutionStatusBanner({
       />
       <div>
         <AlertTitle className="mb-0">{title}</AlertTitle>
-        <AlertDescription className={cn(display.showProgress ? 'mt-2' : 'mt-0')}>
-          {display.showProgress && <Progress value={progressValue} className="h-1.5" />}
+        <AlertDescription className="mt-2">
+          {renderedTimeline.length > 0 && (
+            <div className="text-xs tabular-nums text-muted-foreground">
+              {formatSeconds(nowMs - renderedTimeline[renderedTimeline.length - 1].startedAtMs)}
+            </div>
+          )}
           {task.status === 'FAILED' && (
-            <div className={cn(display.showProgress ? 'mt-3' : 'mt-2')}>
+            <div className="mt-3">
               {errorDetail && (
                 <p className="text-sm text-muted-foreground line-clamp-2 break-words">
                   {errorDetail}

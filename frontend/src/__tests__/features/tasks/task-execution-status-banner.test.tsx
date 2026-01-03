@@ -15,25 +15,24 @@ describe('TaskExecutionStatusBanner', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('should render phase label and progressbar for running tasks', () => {
+  it('should render real phase label for running tasks', () => {
     render(
       <TaskExecutionStatusBanner
         task={{
           status: 'RUNNING',
           progress: 15,
-          status_phase: null,
+          status_phase: 'pulling_image',
           progress_text: null,
         }}
       />
     );
 
     expect(screen.getByRole('alert')).toBeInTheDocument();
-    expect(screen.getByText('chat:messages.phase_booting_executor')).toBeInTheDocument();
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(screen.getByText('chat:messages.phase_pulling_image')).toBeInTheDocument();
   });
 
-  it('should render nothing for failed tasks', () => {
-    const { container } = render(
+  it('should render error details for failed tasks', () => {
+    render(
       <TaskExecutionStatusBanner
         task={{
           status: 'FAILED',
@@ -47,6 +46,7 @@ describe('TaskExecutionStatusBanner', () => {
       />
     );
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.getByText('boom')).toBeInTheDocument();
   });
 });

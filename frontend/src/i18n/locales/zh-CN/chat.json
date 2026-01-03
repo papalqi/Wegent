@@ -56,6 +56,7 @@
     "phase_completed": "已完成",
     "phase_failed": "执行失败",
     "phase_cancelled": "已取消",
+    "phase_elapsed": "{{seconds}}秒",
     "recovered": "已恢复",
     "content_recovered": "已恢复内容",
     "content_recovered_desc": "页面刷新后已恢复之前的内容",
