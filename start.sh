@@ -110,6 +110,7 @@ EXECUTOR_IMAGE="${WEGENT_EXECUTOR_IMAGE:-${IMAGE_PREFIX}/wegent-executor:${WEGEN
 
 BACKEND_PGID=""
 FRONTEND_PGID=""
+CLEANUP_ARMED="false"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -366,7 +367,10 @@ kill_listen_port() {
 
   if have lsof; then
     pids="$(lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
-  elif have ss; then
+  fi
+  # lsof may exist but return empty on some environments (e.g., IPv6-only listeners).
+  # Fall back to ss if available.
+  if [ -z "$pids" ] && have ss; then
     pids="$(
       ss -lptn "sport = :${port}" 2>/dev/null \
         | awk 'match($0, /pid=([0-9]+)/, a) {print a[1]}' \
@@ -429,6 +433,10 @@ cleanup() {
   local exit_code=$?
 
   trap - EXIT
+
+  if [ "${CLEANUP_ARMED}" != "true" ]; then
+    exit "$exit_code"
+  fi
 
   echo ""
   echo -e "${BLUE}Shutting down...${NC}"
@@ -527,6 +535,8 @@ main() {
     echo -e "  Elasticsearch:   http://localhost:${ELASTICSEARCH_PORT}"
   fi
   echo ""
+
+  CLEANUP_ARMED="true"
 
   echo -e "${BLUE}[1/6] Stopping existing services on target ports...${NC}"
 
