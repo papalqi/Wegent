@@ -211,6 +211,26 @@ ensure_uv() {
   have uv || die "uv installation failed. Please install uv manually: https://github.com/astral-sh/uv"
 }
 
+# Prefer python3; fall back to python; last resort: uv-managed python.
+PYTHON_RUNNER=()
+ensure_python_runner() {
+  if [ "${#PYTHON_RUNNER[@]}" -ne 0 ]; then
+    return 0
+  fi
+
+  if have python3; then
+    PYTHON_RUNNER=(python3)
+    return 0
+  fi
+  if have python; then
+    PYTHON_RUNNER=(python)
+    return 0
+  fi
+
+  ensure_uv
+  PYTHON_RUNNER=(uv run python)
+}
+
 maybe_build_frontend_needed() {
   local flag_var="$1"
   local source_ts
@@ -228,7 +248,8 @@ maybe_build_frontend_needed() {
 
 # Return max mtime (seconds) for given paths, pruning common cache dirs to keep checks fast.
 max_mtime() {
-  python - "$@" <<'PY'
+  ensure_python_runner
+  "${PYTHON_RUNNER[@]}" - "$@" <<'PY'
 import os, sys
 
 prune = {'.git', 'node_modules', '.next', '.turbo', '.pytest_cache', '__pycache__', '.mypy_cache', 'dist', 'build', 'coverage', '.venv'}
@@ -269,7 +290,8 @@ image_created_ts() {
     echo 0
     return
   fi
-  python - "$created" <<'PY'
+  ensure_python_runner
+  "${PYTHON_RUNNER[@]}" - "$created" <<'PY'
 import sys, datetime
 val = sys.argv[1]
 try:
