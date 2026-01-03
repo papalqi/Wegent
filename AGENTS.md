@@ -115,6 +115,31 @@ git branch -d feature/new-feature
 - 若环境提前设置了 `WEGENT_EXECUTOR_IMAGE/WEGENT_EXECUTOR_VERSION/WEGENT_IMAGE_PREFIX`，可能指向不存在的 `ghcr.io/wecode-ai/wegent-executor:latest-codex`，导致 Executor Manager 健康检查超时。
 - 处理方式：启动前 `unset WEGENT_EXECUTOR_IMAGE WEGENT_EXECUTOR_VERSION WEGENT_IMAGE_PREFIX`，或显式设为 `export WEGENT_EXECUTOR_IMAGE=ghcr.io/papalqi/wegent-executor:1.0.33-codex`，再运行 `./start.sh --no-rag`。
 
+### 远程运维：systemd 持久化启动（SSH 断开不退出）
+当你在远程 SSH 上运行 `./start.sh` 时，断开连接会导致脚本退出，进而触发脚本的 `cleanup`（会停止它启动的前后端进程与相关容器）。推荐用 systemd 托管启动。
+
+- Unit 文件位置：`/etc/systemd/system/wegent.service`
+- 行为等价于在仓库根目录执行：`./start.sh --no-rag`（如需 `--rag`/`--dev` 请修改 unit 的 `ExecStart`）
+- 停止语义：`systemctl stop wegent.service` ≈ 前台运行时按 `Ctrl+C`（会触发脚本清理并停止全部组件）
+
+常用命令：
+```bash
+systemctl status wegent.service
+systemctl start wegent.service
+systemctl restart wegent.service
+systemctl stop wegent.service
+
+# 开机自启/取消自启
+systemctl enable wegent.service
+systemctl disable wegent.service
+
+# 查看实时日志（start.sh 的 stdout/stderr 都在这里）
+journalctl -u wegent.service -f
+
+# 修改 unit 后需要 reload
+systemctl daemon-reload
+```
+
 ### Docker 镜像 CI（publish-image.yml）
 - 触发：合并到 main 的 PR（标题必须含 “Changeset version bump”）、推送标签 **`v*.*.*`（三段式版本）**、或手动 `workflow_dispatch`（可传 `version`、`base_ref`、`force_modules`）。
 - 注意：`pull_request: closed` 会触发 workflow，但 PR 标题不含 “Changeset version bump” 时 Job 会被条件跳过（显示 Skipped）。
