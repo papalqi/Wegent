@@ -16,7 +16,8 @@ from typing import Any, Dict, Optional, Tuple
 
 from executor.agents.agno.thinking_step_manager import ThinkingStepManager
 from executor.agents.base import Agent
-from executor.agents.claude_code.progress_state_manager import ProgressStateManager
+from executor.agents.claude_code.progress_state_manager import \
+    ProgressStateManager
 from executor.config import config
 from executor.tasks.resource_manager import ResourceManager
 from executor.tasks.task_state_manager import TaskState, TaskStateManager
@@ -26,6 +27,10 @@ from shared.status import TaskStatus
 from shared.utils.sensitive_data_masker import mask_sensitive_data
 
 logger = setup_logger("codex_agent")
+
+# Increase stream reader limit to tolerate verbose commands (e.g., pytest output).
+# Keep within reasonable bounds to avoid unbounded memory growth.
+STREAM_READER_LIMIT = 1024 * 1024 * 4  # 4 MiB
 
 
 class CodexAgent(Agent):
@@ -371,6 +376,7 @@ class CodexAgent(Agent):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=self._codex_env,
+            limit=STREAM_READER_LIMIT,
         )
         self._process = process
         self.resource_manager.register_resource(
@@ -450,7 +456,19 @@ class CodexAgent(Agent):
                 pass
 
         try:
-            async for raw in process.stdout:
+            while True:
+                raw = await _readline_tolerant(process.stdout)
+                if not raw:
+                    eof = (
+                        process.stdout.at_eof()
+                        if hasattr(process.stdout, "at_eof")
+                        else True
+                    )
+                    if eof:
+                        break
+                    # If we truncated an overlong line, continue reading.
+                    continue
+
                 if stdout_fp is not None:
                     try:
                         stdout_fp.write(raw)
@@ -700,6 +718,7 @@ class CodexAgent(Agent):
             stderr=asyncio.subprocess.STDOUT,
             cwd=work_dir,
             env=self._codex_env,
+            limit=STREAM_READER_LIMIT,
         )
         self._process = process
         self.resource_manager.register_resource(
@@ -724,9 +743,16 @@ class CodexAgent(Agent):
                     )
                     return TaskStatus.CANCELLED
 
-                line = await process.stdout.readline()
+                line = await _readline_tolerant(process.stdout)
                 if not line:
-                    break
+                    eof = (
+                        process.stdout.at_eof()
+                        if hasattr(process.stdout, "at_eof")
+                        else True
+                    )
+                    if eof:
+                        break
+                    continue
 
                 text = line.decode("utf-8", errors="replace")
                 content += text
@@ -821,6 +847,7 @@ class CodexAgent(Agent):
             stderr=asyncio.subprocess.STDOUT,
             cwd=work_dir,
             env=self._codex_env,
+            limit=STREAM_READER_LIMIT,
         )
         self._process = process
         self.resource_manager.register_resource(
@@ -845,9 +872,16 @@ class CodexAgent(Agent):
                     )
                     return TaskStatus.CANCELLED
 
-                line = await process.stdout.readline()
+                line = await _readline_tolerant(process.stdout)
                 if not line:
-                    break
+                    eof = (
+                        process.stdout.at_eof()
+                        if hasattr(process.stdout, "at_eof")
+                        else True
+                    )
+                    if eof:
+                        break
+                    continue
 
                 text = line.decode("utf-8", errors="replace")
                 content += text
@@ -922,3 +956,29 @@ def _terminate_process(proc: asyncio.subprocess.Process) -> None:
             proc.kill()
         except Exception:
             return
+
+
+async def _readline_tolerant(stream: Optional[asyncio.StreamReader]) -> bytes:
+    """
+    Read a line from the given stream but tolerate overlong lines.
+
+    If asyncio raises LimitOverrunError (line longer than stream limit),
+    we read a fixed-size chunk instead of failing the task.
+    """
+    if stream is None:
+        return b""
+    try:
+        if hasattr(stream, "readline"):
+            return await stream.readline()  # type: ignore[func-returns-value]
+        # Fallback for test fakes that are async iterators.
+        if hasattr(stream, "__anext__"):
+            try:
+                return await stream.__anext__()  # type: ignore[attr-defined]
+            except StopAsyncIteration:
+                return b""
+        return b""
+    except asyncio.LimitOverrunError:
+        # Consume a chunk to move the cursor forward; caller can decide to continue.
+        if hasattr(stream, "read"):
+            return await stream.read(STREAM_READER_LIMIT)  # type: ignore[attr-defined]
+        return b""
