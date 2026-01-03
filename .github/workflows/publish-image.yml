@@ -653,7 +653,8 @@ jobs:
             local key="$2"
             local value="$3"
             # update default fallback like ${KEY:-old}
-            sed -i -E "s|\\\${${key}:-[^}]+}|\\\${${key}:-${value}}|g" "$file"
+            # escape both `$` and `{` so sed treats them as literals instead of brace quantifiers
+            sed -i -E "s|\\$\\{${key}:-[^}]+\\}|\\$\\{${key}:-${value}}|g" "$file"
           }
 
           COMPOSE_FILE="docker-compose.yml"
