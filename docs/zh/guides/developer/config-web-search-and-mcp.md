@@ -30,6 +30,17 @@ CHAT_MCP_SERVERS={
 }
 ```
 
+### GitHub MCP（最小权限建议）
+
+若使用 `ghcr.io/github/github-mcp-server`，建议默认启用只读并显式枚举 toolset：
+
+```
+GITHUB_READ_ONLY=true
+GITHUB_TOOLSETS=repos,pulls
+```
+
+写操作需要显式关闭只读并配合平台侧策略门禁/审计（不建议仅依赖提示词）。
+
 ## 使用提示
 - 生产环境密钥请用平台 Secret 管理，勿写入仓库。
 - 若搜索/MCP 关闭，前端相关入口需显示为不可用或降级提示。

@@ -2,13 +2,28 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import os
+import re
 import subprocess
 from urllib.parse import quote, urlparse
 
 from shared.logger import setup_logger
 from shared.utils.crypto import decrypt_git_token, is_token_encrypted
+from shared.utils.sensitive_data_masker import mask_string
 
 logger = setup_logger(__name__)
+
+_URL_CREDENTIALS_RE = re.compile(r"://([^/@]+):([^@]+)@")
+
+
+def _redact_url_credentials(url: str) -> str:
+    """
+    Redact credentials in URLs like:
+      https://user:token@host/path -> https://user:***@host/path
+    """
+    if not url:
+        return url
+    return _URL_CREDENTIALS_RE.sub(r"://\1:***@", url)
 
 
 def get_repo_name_from_url(url):
@@ -44,7 +59,7 @@ def clone_repo(project_url, branch, project_path, user_name=None, token=None):
     if user_name is None:
         user_name = "token"
     logger.info(
-        f"get git token from url: {project_url}, branch:{branch}, project:{project_path}"
+        f"Cloning repository: url={_redact_url_credentials(project_url)}, branch={branch}, project={project_path}"
     )
     if token:
         return clone_repo_with_token(
@@ -108,7 +123,7 @@ def clone_repo_with_token(project_url, branch, project_path, username, token):
             encoded_username = quote(username, safe="")
             encoded_token = quote(token, safe="")
             auth_url = f"{protocol}://{encoded_username}:{encoded_token}@{rest}"
-            logger.info(f"Auth URL: {auth_url}")
+            logger.debug(f"Auth URL: {_redact_url_credentials(auth_url)}")
         else:
             # For non-Gerrit repos (GitHub, GitLab, etc.), use credentials as-is
             auth_url = f"{protocol}://{username}:{token}@{rest}"
@@ -116,7 +131,10 @@ def clone_repo_with_token(project_url, branch, project_path, username, token):
         auth_url = project_url
 
     logger.info(
-        f"Git clone {auth_url} to {project_path}, branch: {branch if branch else '(default)'}"
+        "Git clone %s to %s, branch: %s",
+        _redact_url_credentials(auth_url),
+        project_path,
+        branch if branch else "(default)",
     )
 
     # Build basic command
@@ -132,26 +150,34 @@ def clone_repo_with_token(project_url, branch, project_path, username, token):
     try:
         # Use subprocess.run to capture output and errors
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        logger.info(f"git clone url: {project_url}, code: {result.returncode}")
+        logger.info(
+            f"git clone url: {_redact_url_credentials(project_url)}, code: {result.returncode}"
+        )
 
         # Setup git hooks after successful clone
         setup_git_hooks(project_path)
 
         return True, None
     except subprocess.CalledProcessError as e:
-        error_msg = e.stderr if e.stderr else str(e)
-        logger.error(f"git clone failed: {error_msg}")
-        return False, error_msg
+        stderr = (e.stderr or "").strip()
+        if stderr:
+            safe_error = mask_string(stderr)
+            logger.error(f"git clone failed: {safe_error}")
+            return False, safe_error
+        logger.error(f"git clone failed (exit_code={e.returncode})")
+        return False, "git clone failed"
     except Exception as e:
-        logger.error(f"git clone failed with unexpected error: {e}")
-        return False, str(e)
+        safe_error = mask_string(str(e))
+        logger.error(f"git clone failed with unexpected error: {safe_error}")
+        return False, safe_error
 
 
 def get_git_token_from_url(git_url):
     domain = get_domain_from_url(git_url)
     if not domain:
-        logger.error(f"get domain from url failed: {git_url}")
-        raise Exception(f"get domain from url failed: {git_url}")
+        safe_url = _redact_url_credentials(git_url)
+        logger.error(f"get domain from url failed: {safe_url}")
+        raise Exception(f"get domain from url failed: {safe_url}")
 
     token_file = f"/root/.ssh/{domain}"
     try:
@@ -163,7 +189,8 @@ def get_git_token_from_url(git_url):
                 return decrypt_git_token(token)
             return token
     except IOError:
-        raise Exception(f"get domain from file failed: {git_url}, file: {token_file}")
+        safe_url = _redact_url_credentials(git_url)
+        raise Exception(f"get domain from file failed: {safe_url}, file: {token_file}")
 
 
 def get_project_path_from_url(url):
@@ -207,16 +234,28 @@ def setup_git_hooks(repo_path):
         - On success: (True, None)
         - On failure: (False, error_message)
     """
-    import os
-
     try:
-        # Check if .githooks directory exists in the repository
         githooks_path = os.path.join(repo_path, ".githooks")
-        if not os.path.isdir(githooks_path):
-            logger.debug(
-                f"No .githooks directory found in {repo_path}, skipping hooks setup"
-            )
-            return True, None
+        os.makedirs(githooks_path, exist_ok=True)
+
+        # Install a default pre-push hook if none exists.
+        pre_push_path = os.path.join(githooks_path, "pre-push")
+        if not os.path.exists(pre_push_path):
+            pre_push_script = """#!/usr/bin/env bash
+set -euo pipefail
+
+protected_refs_regex='^refs/heads/(main|master|release/.*)$'
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ \"${remote_ref}\" =~ ${protected_refs_regex} ]]; then
+    echo \"ERROR: push to protected branch is not allowed: ${remote_ref}\" 1>&2
+    exit 1
+  fi
+done
+"""
+            with open(pre_push_path, "w", encoding="utf-8") as f:
+                f.write(pre_push_script)
+            os.chmod(pre_push_path, 0o755)
 
         # Configure git to use .githooks directory
         cmd = ["git", "config", "core.hooksPath", ".githooks"]
@@ -227,12 +266,14 @@ def setup_git_hooks(repo_path):
         )
         return True, None
     except subprocess.CalledProcessError as e:
-        error_msg = e.stderr if e.stderr else str(e)
-        logger.error(f"Failed to setup git hooks: {error_msg}")
-        return False, error_msg
+        stderr = (e.stderr or "").strip()
+        safe_error = mask_string(stderr) if stderr else "git hooks setup failed"
+        logger.error(f"Failed to setup git hooks: {safe_error}")
+        return False, safe_error
     except Exception as e:
-        logger.error(f"Failed to setup git hooks with unexpected error: {e}")
-        return False, str(e)
+        safe_error = mask_string(str(e))
+        logger.error(f"Failed to setup git hooks with unexpected error: {safe_error}")
+        return False, safe_error
 
 
 def set_git_config(repo_path, name, email):
@@ -250,10 +291,19 @@ def set_git_config(repo_path, name, email):
         - On failure: (False, error_message)
     """
     try:
-        # Set both user.name and user.email in a single command
-        cmd = f'git config user.name "{name}" && git config user.email "{email}"'
-        result = subprocess.run(
-            cmd, cwd=repo_path, shell=True, capture_output=True, text=True, check=True
+        subprocess.run(
+            ["git", "config", "user.name", name],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", email],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
         )
 
         logger.info(
@@ -261,9 +311,11 @@ def set_git_config(repo_path, name, email):
         )
         return True, None
     except subprocess.CalledProcessError as e:
-        error_msg = e.stderr if e.stderr else str(e)
-        logger.error(f"Failed to set git config: {error_msg}")
-        return False, error_msg
+        stderr = (e.stderr or "").strip()
+        safe_error = mask_string(stderr) if stderr else "git config failed"
+        logger.error(f"Failed to set git config: {safe_error}")
+        return False, safe_error
     except Exception as e:
-        logger.error(f"Failed to set git config with unexpected error: {e}")
-        return False, str(e)
+        safe_error = mask_string(str(e))
+        logger.error(f"Failed to set git config with unexpected error: {safe_error}")
+        return False, safe_error

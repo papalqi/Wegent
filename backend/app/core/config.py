@@ -83,6 +83,27 @@ class Settings(BaseSettings):
     REPO_CACHE_EXPIRED_TIME: int = 7200  # 2 hour in seconds
     REPO_UPDATE_INTERVAL_SECONDS: int = 3600  # 1 hour in seconds
 
+    # PR operator / PR Action Gateway (write operations are disabled by default)
+    PR_ACTION_WRITE_ENABLED: bool = False
+    # Comma-separated allowlist of repo full names: "owner/repo,org/repo2"
+    PR_ACTION_REPO_ALLOWLIST: str = ""
+    # Comma-separated allowlist of base branches: "main,master,release/*" (exact match for now)
+    PR_ACTION_BASE_BRANCH_ALLOWLIST: str = ""
+    # External provider HTTP timeout in seconds (bounded, no infinite waits)
+    PR_ACTION_HTTP_TIMEOUT_SECONDS: float = 10.0
+
+    # PR policy engine (used by PR Action Gateway)
+    # Head branch naming rule (regex). Empty means no restriction.
+    PR_POLICY_HEAD_BRANCH_REGEX: str = r"^wegent-[A-Za-z0-9][A-Za-z0-9._/-]{0,63}$"
+    # Diff threshold rules. 0 means no limit.
+    PR_POLICY_MAX_CHANGED_FILES: int = 0
+    PR_POLICY_MAX_DIFF_LINES: int = 0
+    # Comma-separated glob patterns and/or prefixes for forbidden paths.
+    # Examples: ".env,**/.env*,**/*.pem,secrets/**"
+    PR_POLICY_FORBIDDEN_PATH_PATTERNS: str = ""
+    # Comma-separated required check names (CI/status checks). Empty means no requirement.
+    PR_POLICY_REQUIRED_CHECKS: str = ""
+
     # Task limits
     MAX_RUNNING_TASKS_PER_USER: int = 10
 

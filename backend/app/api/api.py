@@ -11,6 +11,7 @@ from app.api.endpoints import (
     knowledge,
     oidc,
     openapi_responses,
+    pr_actions,
     quota,
     rag,
     repository,
@@ -58,6 +59,7 @@ api_router.include_router(
     attachments.router, prefix="/attachments", tags=["attachments"]
 )
 api_router.include_router(repository.router, prefix="/git", tags=["repository"])
+api_router.include_router(pr_actions.router, prefix="/pr", tags=["pr-actions"])
 api_router.include_router(executors.router, prefix="/executors", tags=["executors"])
 api_router.include_router(quota.router, prefix="/quota", tags=["quota"])
 api_router.include_router(dify.router, prefix="/dify", tags=["dify"])

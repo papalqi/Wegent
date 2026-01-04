@@ -61,6 +61,17 @@ spec:
 | `spec.mcpServers` | object | 否 | MCP 服务器配置,定义智能体的工具能力 |
 | `spec.skills` | array | 否 | 关联的 Skill 名称列表,例如 `["skill-1", "skill-2"]` |
 
+### PR Operator 输出契约（建议）
+
+为便于平台侧策略门禁与审计，建议 PR Operator 类 Ghost 输出结构化 JSON（由平台侧消费/落库），而不是直接依赖提示词或任意 Shell：
+
+- `action`: `create_pr`（后续可扩展 `update_pr`/`request_review`）
+- `idempotency_key`: 用于幂等重试
+- `provider/git_domain/repo_full_name/base_branch/head_branch/title/body`
+- `policy_context`: `changed_files/files_changed/additions/deletions/passed_checks`（用于策略评估）
+
+对应的后端 Schema 参考：`backend/app/schemas/pr_operator_contract.py`。
+
 ---
 
 ## ✨ Skill
