@@ -46,11 +46,27 @@
 
 ```bash
 git clone https://github.com/wecode-ai/wegent.git && cd wegent
+cp .env.example .env
+# 修改 .env 中的 REDIS_PASSWORD（docker-compose 默认启用 Redis AUTH）
 docker-compose up -d
 # 访问 http://localhost:3000
 ```
 
 > 可选：启用 RAG 功能 `docker compose --profile rag up -d`
+
+### 🌐 公网 / 局域网访问（start.sh）
+
+`start.sh` 会在本机启动前后端（Docker 启动 MySQL/Redis/Executor Manager）。如果需要让其他机器访问，请用 `WEGENT_PUBLIC_HOST` 指定对外可访问的地址：
+
+```bash
+# 自动探测本机非回环 IPv4（推荐）
+WEGENT_PUBLIC_HOST=auto ./start.sh
+
+# 或显式指定公网 IP/域名
+WEGENT_PUBLIC_HOST=your-public-ip-or-domain ./start.sh
+```
+
+可选：`WEGENT_PUBLIC_SCHEME=https`（配合反向代理/HTTPS）、`WEGENT_FRONTEND_HOST=127.0.0.1`（限制前端仅本机访问）。
 
 ---
 

@@ -73,7 +73,7 @@ class PendingRequestRegistry:
         self._local_requests: Dict[str, PendingRequest] = {}
         self._lock = asyncio.Lock()
         self._pubsub_task: Optional[asyncio.Task] = None
-        self._redis_url = settings.REDIS_URL
+        self._redis_url = settings.get_redis_url()
         self._shutdown = False
 
     async def _get_redis_client(self, for_pubsub: bool = False) -> Redis:

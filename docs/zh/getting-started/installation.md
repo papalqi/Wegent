@@ -78,7 +78,7 @@ MYSQL_USER=task_user
 MYSQL_PASSWORD=your_password
 
 # Redis 配置
-REDIS_PASSWORD=your_redis_password  # 可选
+REDIS_PASSWORD=your_redis_password  # 必填（docker-compose 默认启用 Redis AUTH）
 
 # 后端配置
 PASSWORD_KEY=your-password-key-here
@@ -205,7 +205,8 @@ sudo systemctl start redis  # Linux
 brew services start redis  # macOS
 
 # 验证 Redis
-redis-cli ping  # 应返回 PONG
+redis-cli -a your_redis_password ping  # 如果配置了密码，应返回 PONG
+redis-cli ping  # 如果未配置密码，应返回 PONG
 ```
 
 ### 步骤 4: 安装后端
@@ -398,7 +399,8 @@ mysql -u task_user -p -h localhost task_manager
 **解决方案**:
 ```bash
 # 确保 Redis 正在运行
-redis-cli ping
+redis-cli -a your_redis_password ping  # 如果配置了密码
+redis-cli ping  # 如果未配置密码
 
 # 检查 Redis 配置
 docker-compose logs redis

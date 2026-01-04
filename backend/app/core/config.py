@@ -4,6 +4,7 @@
 
 from pathlib import Path
 from typing import Any, Mapping, Tuple, Type
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from dotenv import dotenv_values
 from pydantic_settings import (
@@ -132,6 +133,84 @@ class Settings(BaseSettings):
 
     # Redis configuration
     REDIS_URL: str = "redis://127.0.0.1:6379/0"
+    REDIS_PASSWORD: str | None = None
+
+    def get_redis_url(self) -> str:
+        """
+        Build a Redis URL with optional password injection.
+
+        Supports the common pattern:
+        - REDIS_URL without auth + REDIS_PASSWORD provided via environment
+        - REDIS_URL already contains auth: returned as-is
+        """
+        if not self.REDIS_URL:
+            return self.REDIS_URL
+
+        if not self.REDIS_PASSWORD:
+            return self.REDIS_URL
+
+        parts = urlsplit(self.REDIS_URL)
+        if parts.username or parts.password:
+            return self.REDIS_URL
+
+        host = parts.hostname or ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+
+        netloc = host
+        if parts.port is not None:
+            netloc = f"{netloc}:{parts.port}"
+
+        password = quote(self.REDIS_PASSWORD, safe="")
+        netloc = f":{password}@{netloc}"
+
+        return urlunsplit(
+            (
+                parts.scheme,
+                netloc,
+                parts.path,
+                parts.query,
+                parts.fragment,
+            )
+        )
+
+    def get_redis_url_safe(self) -> str:
+        """
+        Return a Redis URL safe for logging (password redacted).
+        """
+        url = self.get_redis_url()
+        if not url:
+            return url
+
+        parts = urlsplit(url)
+        if not parts.password and not parts.username:
+            return url
+
+        host = parts.hostname or ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+
+        netloc = host
+        if parts.port is not None:
+            netloc = f"{netloc}:{parts.port}"
+
+        username = parts.username or ""
+        if username:
+            auth = f"{quote(username, safe='')}:***"
+        else:
+            auth = ":***"
+
+        netloc = f"{auth}@{netloc}"
+
+        return urlunsplit(
+            (
+                parts.scheme,
+                netloc,
+                parts.path,
+                parts.query,
+                parts.fragment,
+            )
+        )
 
     # Team sharing configuration
     TEAM_SHARE_BASE_URL: str = "http://localhost:3000/chat"

@@ -46,11 +46,27 @@ English | [简体中文](README_zh.md)
 
 ```bash
 git clone https://github.com/wecode-ai/wegent.git && cd wegent
+cp .env.example .env
+# Update REDIS_PASSWORD in .env (docker-compose enables Redis AUTH by default)
 docker-compose up -d
 # Open http://localhost:3000
 ```
 
 > Optional: Enable RAG features with `docker compose --profile rag up -d`
+
+### 🌐 Public / LAN Access (start.sh)
+
+`start.sh` runs backend + frontend on host (and starts MySQL/Redis/Executor Manager via Docker). To make it accessible from other machines, set `WEGENT_PUBLIC_HOST` to a reachable address:
+
+```bash
+# Auto-detect a non-loopback IPv4 (recommended)
+WEGENT_PUBLIC_HOST=auto ./start.sh
+
+# Or specify your public IP / domain
+WEGENT_PUBLIC_HOST=your-public-ip-or-domain ./start.sh
+```
+
+Optional: `WEGENT_PUBLIC_SCHEME=https` (behind reverse proxy/HTTPS), `WEGENT_FRONTEND_HOST=127.0.0.1` (restrict frontend to local only).
 
 ---
 

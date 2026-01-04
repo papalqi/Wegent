@@ -152,6 +152,7 @@ cp .env.example .env
 # Main configuration items:
 # DATABASE_URL=mysql+pymysql://task_user:task_password@localhost:3306/task_manager
 # REDIS_URL=redis://127.0.0.1:6379/0
+# REDIS_PASSWORD=your_redis_password  # Optional, used when Redis AUTH is enabled
 # PASSWORD_KEY=your-password-key-here
 # EXECUTOR_DELETE_TASK_URL=http://localhost:8001/executor-manager/executor/delete
 ```
