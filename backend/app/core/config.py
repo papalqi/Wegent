@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     EXECUTOR_CANCEL_TASK_URL: str = (
         "http://localhost:8001/executor-manager/tasks/cancel"
     )
+    EXECUTOR_STATUS_URL: str = "http://localhost:8001/executor-manager/executor/status"
 
     # Shell feature flags
     # Set CODEX_SHELL_ENABLED=false to disable Codex selection and execution.

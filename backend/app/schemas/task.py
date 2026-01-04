@@ -176,3 +176,25 @@ class TaskLiteListResponse(BaseModel):
 
     total: int
     items: list[TaskLite]
+
+
+class TaskExecutorContainerStatus(BaseModel):
+    """
+    Executor container status for a task.
+
+    status meanings:
+    - running: container exists and is running
+    - exited: container exists but not running (exited/paused/etc.)
+    - not_found: container is missing or already deleted/cleaned
+    - unknown: status can't be determined (e.g., no executor_name yet, or check failed)
+    """
+
+    task_id: int
+    executor_name: Optional[str] = None
+    status: str
+    state: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class TaskExecutorContainerStatusBatchResponse(BaseModel):
+    items: List[TaskExecutorContainerStatus]
