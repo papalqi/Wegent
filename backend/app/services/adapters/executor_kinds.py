@@ -29,6 +29,54 @@ from app.services.webhook_notification import Notification, webhook_notification
 logger = logging.getLogger(__name__)
 
 
+def _merge_executor_subtask_result(existing: Any, incoming: Any) -> Any:
+    """Merge executor subtask result updates without losing persisted fields.
+
+    Executors may send partial `result` payloads (e.g. only `value` on terminal
+    updates). We preserve previously persisted fields like `shell_type` and
+    `codex_events` so the frontend can keep rendering the event stream.
+    """
+
+    if incoming is None:
+        return existing
+    if not isinstance(incoming, dict):
+        return incoming
+
+    base: Dict[str, Any] = existing if isinstance(existing, dict) else {}
+    merged: Dict[str, Any] = dict(base)
+    incoming_dict: Dict[str, Any] = dict(incoming)
+
+    existing_events = merged.get("codex_events")
+    resolved_events: list[Any] = (
+        list(existing_events) if isinstance(existing_events, list) else []
+    )
+
+    incoming_events = incoming_dict.get("codex_events")
+    if isinstance(incoming_events, list):
+        # Avoid clearing persisted events when an executor sends an empty list.
+        if len(incoming_events) == 0:
+            incoming_dict.pop("codex_events", None)
+        # If executor sends a full persisted list, adopt it when it looks newer.
+        elif len(incoming_events) >= len(resolved_events):
+            resolved_events = list(incoming_events)
+            incoming_dict.pop("codex_events", None)
+
+    # Executors may stream a single `codex_event` per callback; append it into the
+    # persisted `codex_events` list and avoid storing the transient key.
+    codex_event = incoming_dict.pop("codex_event", None)
+    if codex_event is not None:
+        if isinstance(codex_event, list):
+            resolved_events.extend(codex_event)
+        else:
+            resolved_events.append(codex_event)
+
+    if resolved_events:
+        merged["codex_events"] = resolved_events
+
+    merged.update(incoming_dict)
+    return merged
+
+
 class ExecutorKindsService(
     BaseService[Kind, SubtaskExecutorUpdate, SubtaskExecutorUpdate]
 ):
@@ -1163,32 +1211,10 @@ class ExecutorKindsService(
             exclude={"subtask_title", "task_title"}, exclude_unset=True
         )
 
-        # Merge Codex event stream into stored result for persistence and refresh replay.
-        # Executor may stream a single `codex_event` per callback; we append it into `codex_events` list.
-        if isinstance(update_data.get("result"), dict):
-            incoming_result = update_data["result"]
-            codex_event = incoming_result.get("codex_event")
-            if codex_event is not None:
-                merged_result: Dict[str, Any] = {}
-                if isinstance(subtask.result, dict):
-                    merged_result.update(subtask.result)
-
-                existing_events = merged_result.get("codex_events")
-                if not isinstance(existing_events, list):
-                    existing_events = []
-
-                if isinstance(codex_event, list):
-                    existing_events.extend(codex_event)
-                else:
-                    existing_events.append(codex_event)
-                merged_result["codex_events"] = existing_events
-
-                # Keep the latest event for live streaming payloads while avoiding unbounded growth
-                # in per-callback result; the persisted list above is the source of truth.
-                incoming_result = dict(incoming_result)
-                incoming_result.pop("codex_event", None)
-                merged_result.update(incoming_result)
-                update_data["result"] = merged_result
+        if "result" in update_data:
+            update_data["result"] = _merge_executor_subtask_result(
+                subtask.result, update_data.get("result")
+            )
 
         for field, value in update_data.items():
             setattr(subtask, field, value)

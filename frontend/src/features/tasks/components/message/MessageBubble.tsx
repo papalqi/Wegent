@@ -1426,9 +1426,11 @@ const MessageBubble = memo(
             )}
 
             <MessageDebugPanel data={msg.debug} t={t} />
-            {msg.type === 'ai' && msg.result?.shell_type === 'Codex' && (
-              <CodexEventStreamPanel events={msg.result.codex_events} t={t} />
-            )}
+            {msg.type === 'ai' &&
+              Array.isArray(msg.result?.codex_events) &&
+              msg.result.codex_events.length > 0 && (
+                <CodexEventStreamPanel events={msg.result.codex_events} t={t} />
+              )}
 
             {/* Show copy button for user messages - visible on hover */}
             {isUserTypeMessage && (
