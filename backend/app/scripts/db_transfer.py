@@ -23,7 +23,6 @@ from sqlalchemy import MetaData, Table, create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import URL, make_url
 
-
 BYTES_SENTINEL_TYPE = "__type__"
 BYTES_SENTINEL_VALUE = "bytes"
 DEFAULT_CHUNK_SIZE = 500
@@ -99,7 +98,9 @@ def _get_current_database(engine: Engine) -> str | None:
 def _get_alembic_revision(engine: Engine) -> str | None:
     with engine.connect() as conn:
         try:
-            return conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+            return conn.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar()
         except Exception:
             return None
 
@@ -117,12 +118,16 @@ def _quote_ident(name: str) -> str:
 
 def _mysql_show_create_table(engine: Engine, table_name: str) -> str:
     with engine.connect() as conn:
-        row = conn.execute(
-            text(f"SHOW CREATE TABLE {_quote_ident(table_name)}")
-        ).mappings().one()
+        row = (
+            conn.execute(text(f"SHOW CREATE TABLE {_quote_ident(table_name)}"))
+            .mappings()
+            .one()
+        )
         create_sql = row.get("Create Table")
         if not isinstance(create_sql, str):
-            raise RuntimeError(f"SHOW CREATE TABLE returned invalid result for {table_name}")
+            raise RuntimeError(
+                f"SHOW CREATE TABLE returned invalid result for {table_name}"
+            )
         return create_sql
 
 
@@ -154,7 +159,9 @@ def _decode_value(value: Any) -> Any:
     return value
 
 
-def _iter_table_rows(engine: Engine, table_name: str, chunk_size: int) -> Iterable[list[dict[str, Any]]]:
+def _iter_table_rows(
+    engine: Engine, table_name: str, chunk_size: int
+) -> Iterable[list[dict[str, Any]]]:
     stmt = text(f"SELECT * FROM {_quote_ident(table_name)}")
     with engine.connect() as conn:
         result = conn.execute(stmt)
@@ -209,7 +216,9 @@ def export_database(
             with zf.open(f"data/{table}.jsonl", "w") as fp:
                 for rows in _iter_table_rows(engine, table, chunk_size):
                     for row in rows:
-                        line = json.dumps(row, separators=(",", ":"), ensure_ascii=False)
+                        line = json.dumps(
+                            row, separators=(",", ":"), ensure_ascii=False
+                        )
                         fp.write((line + "\n").encode("utf-8"))
 
     _eprint(f"Export written to {output_path}")
@@ -224,7 +233,9 @@ def _maybe_create_database(database_url: str) -> None:
     if not url.database:
         return
 
-    server_engine = create_engine(_database_url_without_database(url), pool_pre_ping=True)
+    server_engine = create_engine(
+        _database_url_without_database(url), pool_pre_ping=True
+    )
     db_name = url.database
     with server_engine.begin() as conn:
         conn.execute(
@@ -256,7 +267,9 @@ def _truncate_tables(engine: Engine, tables: Sequence[str]) -> None:
         conn.exec_driver_sql("SET FOREIGN_KEY_CHECKS=1")
 
 
-def _apply_schema_from_zip(engine: Engine, zf: zipfile.ZipFile, tables: Sequence[str]) -> None:
+def _apply_schema_from_zip(
+    engine: Engine, zf: zipfile.ZipFile, tables: Sequence[str]
+) -> None:
     with engine.begin() as conn:
         conn.exec_driver_sql("SET FOREIGN_KEY_CHECKS=0")
         for table in tables:
@@ -280,7 +293,9 @@ def _load_jsonl_lines(zf: zipfile.ZipFile, path: str) -> Iterable[dict[str, Any]
             yield {k: _decode_value(v) for k, v in item.items()}
 
 
-def _insert_table_data(engine: Engine, table_name: str, rows: Iterable[dict[str, Any]], chunk_size: int) -> int:
+def _insert_table_data(
+    engine: Engine, table_name: str, rows: Iterable[dict[str, Any]], chunk_size: int
+) -> int:
     metadata = MetaData()
     table = Table(table_name, metadata, autoload_with=engine)
     inserted = 0
@@ -387,7 +402,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     import_p = sub.add_parser("import", help="Import database from a ZIP dump file.")
-    import_p.add_argument("--in", dest="inp", required=True, type=Path, help="Dump path.")
+    import_p.add_argument(
+        "--in", dest="inp", required=True, type=Path, help="Dump path."
+    )
     import_p.add_argument(
         "--create-db",
         action="store_true",
