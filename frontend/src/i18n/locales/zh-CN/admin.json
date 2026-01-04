@@ -7,7 +7,8 @@
     "public_retrievers": "公共检索引擎",
     "public_skills": "公共技能",
     "api_keys": "密钥管理",
-    "system_config": "系统配置"
+    "system_config": "系统配置",
+    "database": "数据库管理"
   },
   "stats": {
     "total_users": "总用户数",
@@ -356,6 +357,41 @@
       "load_failed": "加载个人密钥失败",
       "delete_failed": "删除个人密钥失败",
       "toggle_failed": "切换个人密钥状态失败"
+    }
+  },
+  "database": {
+    "title": "数据库管理",
+    "description": "导出和导入数据库备份文件",
+    "export": {
+      "title": "导出数据库",
+      "description": "将整个数据库导出为 SQL 备份文件",
+      "button": "导出数据库",
+      "exporting": "正在导出...",
+      "success": "导出成功",
+      "success_description": "数据库已成功导出，文件已开始下载",
+      "failed": "导出失败",
+      "failed_description": "数据库导出过程中发生错误",
+      "note": "导出的 SQL 文件包含完整的数据库结构和数据，可用于恢复数据库。"
+    },
+    "import": {
+      "title": "导入数据库",
+      "description": "从 SQL 备份文件恢复数据库",
+      "button": "选择 SQL 文件",
+      "importing": "正在导入...",
+      "selected_file": "已选择文件",
+      "success": "导入成功",
+      "success_description": "数据库已成功从 {{filename}} 导入（大小: {{size}} MB）",
+      "failed": "导入失败",
+      "failed_description": "数据库导入过程中发生错误",
+      "invalid_file": "无效的文件",
+      "invalid_file_description": "请选择 .sql 格式的文件",
+      "file_too_large": "文件过大",
+      "file_too_large_description": "文件大小不能超过 500 MB",
+      "warning_title": "警告：数据库导入操作",
+      "warning_message": "此操作将修改数据库，可能会覆盖或删除现有数据。请确保您已备份当前数据库。",
+      "warning_emphasis": "此操作无法撤销！",
+      "confirm_import": "确认导入",
+      "note": "仅支持 .sql 格式的 MySQL 备份文件，最大文件大小为 500 MB。导入前请确保已备份当前数据库。"
     }
   }
 }

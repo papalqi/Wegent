@@ -433,4 +433,61 @@ export const adminApis = {
   async deletePublicRetriever(retrieverId: number): Promise<void> {
     return apiClient.delete(`/admin/public-retrievers/${retrieverId}`);
   },
+
+  // ==================== Database Management ====================
+
+  /**
+   * Export database as SQL dump file
+   */
+  async exportDatabase(): Promise<Blob> {
+    const { getApiBaseUrl } = await import('@/lib/runtime-config');
+    const { getToken } = await import('./user');
+    const baseURL = getApiBaseUrl();
+    const token = getToken();
+
+    const response = await fetch(`${baseURL}/admin/database/export`, {
+      method: 'GET',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to export database' }));
+      throw new Error(error.detail || 'Failed to export database');
+    }
+
+    return response.blob();
+  },
+
+  /**
+   * Import database from SQL dump file
+   */
+  async importDatabase(
+    file: File
+  ): Promise<{ success: boolean; message: string; file_size_mb: number }> {
+    const { getApiBaseUrl } = await import('@/lib/runtime-config');
+    const { getToken } = await import('./user');
+    const baseURL = getApiBaseUrl();
+    const token = getToken();
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${baseURL}/admin/database/import`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+        // Don't set Content-Type, let browser set it with boundary
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to import database' }));
+      throw new Error(error.detail || 'Failed to import database');
+    }
+
+    return response.json();
+  },
 };

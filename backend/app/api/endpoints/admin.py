@@ -2,9 +2,20 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Path,
+    Query,
+    UploadFile,
+    status,
+)
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -50,9 +61,12 @@ from app.schemas.task import TaskCreate, TaskInDB
 from app.schemas.user import Token, UserInDB, UserInfo
 from app.services.adapters.public_retriever import public_retriever_service
 from app.services.adapters.task_kinds import task_kinds_service
+from app.services.database_export import export_database, import_database
 from app.services.k_batch import batch_service
 from app.services.kind import kind_service
 from app.services.user import user_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -1696,3 +1710,136 @@ async def delete_public_retriever(
         db, retriever_id=retriever_id, current_user=current_user
     )
     return None
+
+
+# ==================== Database Export Endpoint ====================
+
+
+@router.get("/database/export", summary="Export database")
+async def export_database_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Export entire database as SQL dump file (admin only).
+
+    This endpoint exports the database using mysqldump if available,
+    or falls back to SQLAlchemy-based export. The exported file can be
+    used to restore the database.
+
+    Returns a downloadable SQL file.
+    """
+    from datetime import datetime
+
+    try:
+        # Export database
+        buffer = export_database(db)
+
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"wegent_database_export_{timestamp}.sql"
+
+        # Return as downloadable file
+        return StreamingResponse(
+            buffer,
+            media_type="application/sql",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:
+        logger.error(f"Failed to export database: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export database: {str(e)}",
+        )
+
+
+@router.post("/database/import", summary="Import database")
+async def import_database_endpoint(
+    file: UploadFile = File(..., description="SQL dump file to import"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Import database from SQL dump file (admin only).
+
+    **WARNING**: This operation will modify the database. All existing data
+    may be overwritten or deleted. Use with extreme caution.
+
+    This endpoint imports the database using mysql command if available,
+    or falls back to SQLAlchemy-based import. The SQL file should be
+    a valid MySQL dump file (typically exported using the export endpoint).
+
+    Args:
+        file: SQL dump file (.sql)
+
+    Returns:
+        Success message with import details
+    """
+    # Validate file type
+    if not file.filename or not file.filename.endswith(".sql"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be a SQL dump file (.sql)",
+        )
+
+    # Validate file size (max 500MB)
+    MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB
+
+    try:
+        # Read file content
+        sql_content = await file.read()
+
+        # Check file size
+        if len(sql_content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File size exceeds maximum limit (500 MB). File size: {len(sql_content) / (1024 * 1024):.2f} MB",
+            )
+
+        # Validate SQL content (basic check)
+        if len(sql_content) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SQL file is empty",
+            )
+
+        # Check if content looks like SQL
+        sql_preview = sql_content[:1000].decode("utf-8", errors="ignore").upper()
+        if not any(
+            keyword in sql_preview
+            for keyword in ["CREATE", "INSERT", "DROP", "SET", "--"]
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File does not appear to be a valid SQL dump file",
+            )
+
+        # Import database
+        success, error_message = import_database(db, sql_content)
+
+        if not success:
+            logger.error(f"Failed to import database: {error_message}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to import database: {error_message or 'Unknown error'}",
+            )
+
+        file_size_mb = len(sql_content) / (1024 * 1024)
+        logger.info(
+            f"Database imported successfully from {file.filename} ({file_size_mb:.2f} MB)"
+        )
+
+        return {
+            "success": True,
+            "message": f"Database imported successfully from {file.filename}",
+            "file_size_mb": round(file_size_mb, 2),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error importing database: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to import database: {str(e)}",
+        )
