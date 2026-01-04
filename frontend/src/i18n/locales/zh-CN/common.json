@@ -405,6 +405,11 @@
     "open_from": "<> Code",
     "open_from_vscode": "VSCode",
     "open_from_git": "Git",
+    "container_status_title": "编程容器",
+    "container_status_running": "运行中",
+    "container_status_exited": "已停止",
+    "container_status_not_found": "已丢失/已清理",
+    "container_status_unknown": "无法确认",
     "access_denied_title": "无访问权限",
     "access_denied_description": "您没有权限访问此任务。请联系任务创建者，通过「邀请成员」功能邀请您加入。",
     "access_denied_go_home": "返回聊天页"

@@ -26,6 +26,8 @@ from app.schemas.shared_task import (
 from app.schemas.task import (
     TaskCreate,
     TaskDetail,
+    TaskExecutorContainerStatus,
+    TaskExecutorContainerStatusBatchResponse,
     TaskInDB,
     TaskListResponse,
     TaskLiteListResponse,
@@ -181,6 +183,213 @@ def search_tasks_by_title(
         db=db, user_id=current_user.id, title=title, skip=skip, limit=limit
     )
     return {"total": total, "items": items}
+
+
+def _get_allowed_task_ids(db: Session, user_id: int, task_ids: list[int]) -> set[int]:
+    from app.models.task import TaskResource
+    from app.models.task_member import MemberStatus, TaskMember
+
+    if not task_ids:
+        return set()
+
+    owned_ids = {
+        t.id
+        for t in db.query(TaskResource)
+        .filter(
+            TaskResource.id.in_(task_ids),
+            TaskResource.kind == "Task",
+            TaskResource.is_active == True,
+            TaskResource.user_id == user_id,
+        )
+        .all()
+    }
+
+    member_ids = {
+        row[0]
+        for row in db.query(TaskMember.task_id)
+        .filter(
+            TaskMember.task_id.in_(task_ids),
+            TaskMember.user_id == user_id,
+            TaskMember.status == MemberStatus.ACTIVE.value,
+        )
+        .all()
+    }
+
+    return owned_ids | member_ids
+
+
+def _fetch_executor_container_status(executor_name: str) -> dict:
+    import requests
+
+    response = requests.get(
+        settings.EXECUTOR_STATUS_URL,
+        params={"executor_name": executor_name},
+        timeout=2.0,
+    )
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError("Invalid executor_manager response")
+    return data
+
+
+def _build_task_container_status(
+    task_id: int,
+    executor_name: Optional[str],
+    executor_deleted_at: Optional[bool],
+) -> TaskExecutorContainerStatus:
+    if not executor_name:
+        return TaskExecutorContainerStatus(
+            task_id=task_id,
+            executor_name=None,
+            status="unknown",
+            state=None,
+            reason="no_executor_name",
+        )
+
+    if executor_deleted_at:
+        return TaskExecutorContainerStatus(
+            task_id=task_id,
+            executor_name=executor_name,
+            status="not_found",
+            state=None,
+            reason="executor_deleted",
+        )
+
+    try:
+        result = _fetch_executor_container_status(executor_name)
+        if result.get("status") != "success":
+            return TaskExecutorContainerStatus(
+                task_id=task_id,
+                executor_name=executor_name,
+                status="unknown",
+                state=None,
+                reason=result.get("error_msg") or "check_failed",
+            )
+
+        exists = bool(result.get("exists"))
+        state = result.get("state")
+        if not exists:
+            return TaskExecutorContainerStatus(
+                task_id=task_id,
+                executor_name=executor_name,
+                status="not_found",
+                state=None,
+                reason="container_missing",
+            )
+
+        if state == "running":
+            return TaskExecutorContainerStatus(
+                task_id=task_id,
+                executor_name=executor_name,
+                status="running",
+                state=state,
+                reason=None,
+            )
+
+        return TaskExecutorContainerStatus(
+            task_id=task_id,
+            executor_name=executor_name,
+            status="exited",
+            state=state,
+            reason=None,
+        )
+    except Exception as e:
+        return TaskExecutorContainerStatus(
+            task_id=task_id,
+            executor_name=executor_name,
+            status="unknown",
+            state=None,
+            reason=f"check_failed: {str(e)}",
+        )
+
+
+@router.get(
+    "/container-status",
+    response_model=TaskExecutorContainerStatusBatchResponse,
+)
+def get_tasks_container_status(
+    task_ids: list[int] = Query(..., description="Task IDs", alias="task_ids"),
+    current_user: User = Depends(security.get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.models.subtask import Subtask
+
+    allowed = _get_allowed_task_ids(db=db, user_id=current_user.id, task_ids=task_ids)
+
+    subtasks = (
+        db.query(Subtask)
+        .filter(
+            Subtask.task_id.in_(allowed),
+            Subtask.executor_name.isnot(None),
+            Subtask.executor_name != "",
+        )
+        .order_by(Subtask.task_id.asc(), Subtask.updated_at.desc())
+        .all()
+    )
+
+    latest_by_task: dict[int, Subtask] = {}
+    for subtask in subtasks:
+        if subtask.task_id not in latest_by_task:
+            latest_by_task[subtask.task_id] = subtask
+
+    items: list[TaskExecutorContainerStatus] = []
+    for task_id in task_ids:
+        if task_id not in allowed:
+            items.append(
+                TaskExecutorContainerStatus(
+                    task_id=task_id,
+                    executor_name=None,
+                    status="unknown",
+                    state=None,
+                    reason="task_not_found_or_no_permission",
+                )
+            )
+            continue
+
+        latest = latest_by_task.get(task_id)
+        items.append(
+            _build_task_container_status(
+                task_id=task_id,
+                executor_name=getattr(latest, "executor_name", None),
+                executor_deleted_at=getattr(latest, "executor_deleted_at", None),
+            )
+        )
+
+    return TaskExecutorContainerStatusBatchResponse(items=items)
+
+
+@router.get(
+    "/{task_id}/container-status",
+    response_model=TaskExecutorContainerStatus,
+)
+def get_task_container_status(
+    task_id: int = Depends(with_task_telemetry),
+    current_user: User = Depends(security.get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.models.subtask import Subtask
+
+    allowed = _get_allowed_task_ids(db=db, user_id=current_user.id, task_ids=[task_id])
+    if task_id not in allowed:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    latest = (
+        db.query(Subtask)
+        .filter(
+            Subtask.task_id == task_id,
+            Subtask.executor_name.isnot(None),
+            Subtask.executor_name != "",
+        )
+        .order_by(Subtask.updated_at.desc())
+        .first()
+    )
+
+    return _build_task_container_status(
+        task_id=task_id,
+        executor_name=getattr(latest, "executor_name", None),
+        executor_deleted_at=getattr(latest, "executor_deleted_at", None),
+    )
 
 
 @router.get("/{task_id}", response_model=TaskDetail)

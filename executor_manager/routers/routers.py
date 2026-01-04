@@ -25,8 +25,11 @@ from pydantic import BaseModel
 from shared.logger import setup_logger
 from shared.models.task import TasksRequest
 from shared.telemetry.config import get_otel_config
-from shared.telemetry.context import (set_request_context, set_task_context,
-                                      set_user_context)
+from shared.telemetry.context import (
+    set_request_context,
+    set_task_context,
+    set_user_context,
+)
 
 # Setup logger
 logger = setup_logger(__name__)
@@ -406,6 +409,20 @@ async def get_executor_load(http_request: Request):
         return result
     except Exception as e:
         logger.error(f"Error getting executor load: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/executor-manager/executor/status")
+async def get_executor_status(executor_name: str, http_request: Request):
+    try:
+        client_ip = http_request.client.host if http_request.client else "unknown"
+        logger.info(
+            f"Received request to get executor status: {executor_name} from {client_ip}"
+        )
+        executor = ExecutorDispatcher.get_executor(EXECUTOR_DISPATCHER_MODE)
+        return executor.get_executor_status(executor_name)
+    except Exception as e:
+        logger.error(f"Error getting executor status for '{executor_name}': {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

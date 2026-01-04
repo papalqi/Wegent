@@ -20,10 +20,10 @@ class Executor(abc.ABC):
     ) -> Dict[str, Any]:
         """
         Get the IDs of all tasks currently being executed.
-        
+
         Args:
             label_selector: Optional selector to filter tasks
-            
+
         Returns:
             Dict containing a list of current task IDs and related information
         """
@@ -37,4 +37,18 @@ class Executor(abc.ABC):
     def get_executor_count(
         self, label_selector: Optional[str] = None
     ) -> Dict[str, Any]:
+        pass
+
+    @abc.abstractmethod
+    def get_executor_status(self, executor_name: str) -> Dict[str, Any]:
+        """
+        Get executor container status by name.
+
+        Returns:
+            Dict with keys:
+            - status: "success" | "failed"
+            - exists: bool
+            - state: Optional[str] (docker container state when exists)
+            - error_msg: Optional[str]
+        """
         pass

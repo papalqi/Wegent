@@ -4,7 +4,15 @@
 
 import { apiClient } from './client';
 import { getToken } from './user';
-import { Task, PaginationParams, TaskStatus, SuccessMessage, TaskDetail } from '../types/api';
+import {
+  Task,
+  PaginationParams,
+  TaskStatus,
+  SuccessMessage,
+  TaskDetail,
+  TaskExecutorContainerStatus,
+  TaskExecutorContainerStatusBatchResponse,
+} from '../types/api';
 
 // Task Request/Response Types
 export interface CreateTaskRequest {
@@ -216,6 +224,20 @@ export const taskApis = {
 
   updateTask: async (id: number, data: UpdateTaskRequest): Promise<Task> => {
     return apiClient.put(`/tasks/${id}`, data);
+  },
+
+  getTaskContainerStatus: async (taskId: number): Promise<TaskExecutorContainerStatus> => {
+    return apiClient.get(`/tasks/${taskId}/container-status`);
+  },
+
+  getTasksContainerStatus: async (
+    taskIds: number[]
+  ): Promise<TaskExecutorContainerStatusBatchResponse> => {
+    const query = new URLSearchParams();
+    for (const id of taskIds) {
+      query.append('task_ids', String(id));
+    }
+    return apiClient.get(`/tasks/container-status?${query.toString()}`);
   },
 
   getTaskDetail: async (id: number): Promise<TaskDetail> => {

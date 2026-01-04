@@ -35,6 +35,7 @@ import { paths } from '@/config/paths';
 import { useSearchShortcut } from '@/features/tasks/hooks/useSearchShortcut';
 import { Workbench } from '@/features/tasks/components';
 import { ChatArea } from '@/features/tasks/components/chat';
+import { TaskContainerStatusBadge } from '@/features/tasks/components/container-status/TaskContainerStatusBadge';
 
 export default function CodePage() {
   // Get search params to check for taskId
@@ -108,6 +109,12 @@ export default function CodePage() {
 
   // Mobile detection
   const isMobile = useIsMobile();
+
+  const taskIdNumber = useMemo(() => {
+    if (!taskId) return null;
+    const n = Number(taskId);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [taskId]);
 
   // Check if user has git token
   const hasGitToken = !!(user?.git_info && user.git_info.length > 0);
@@ -290,6 +297,7 @@ export default function CodePage() {
           >
             {shareButton}
             {isMobile ? <ThemeToggle /> : <GithubStarButton />}
+            {taskIdNumber && <TaskContainerStatusBadge taskId={taskIdNumber} />}
             {hasTaskId && <OpenMenu openLinks={openLinks} />}
             {hasTaskId && (
               <WorkbenchToggle

@@ -405,6 +405,11 @@
     "open_from": "<> Code",
     "open_from_vscode": "VSCode",
     "open_from_git": "Git",
+    "container_status_title": "Coding Container",
+    "container_status_running": "Running",
+    "container_status_exited": "Stopped",
+    "container_status_not_found": "Missing",
+    "container_status_unknown": "Unknown",
     "access_denied_title": "Access Denied",
     "access_denied_description": "You don't have permission to access this task. Please contact the task owner to invite you via the \"Invite Members\" feature.",
     "access_denied_go_home": "Go to Chat"
