@@ -191,6 +191,7 @@ if [ "$FRONTEND_COUNT" -gt 0 ] 2>/dev/null; then
         
         cd "$REPO_ROOT" || exit 1
     fi
+    cd "$REPO_ROOT" || exit 1
     echo ""
 fi
 
@@ -203,7 +204,7 @@ if [ "$BACKEND_COUNT" -gt 0 ] 2>/dev/null; then
     cd "$REPO_ROOT/backend" || exit 1
     
     # Check if virtual environment or Python packages are available
-    if ! command -v black &> /dev/null && [ ! -f "venv/bin/black" ]; then
+    if ! command -v uv &> /dev/null && ! command -v black &> /dev/null && [ ! -f "venv/bin/black" ]; then
         echo -e "   ${YELLOW}⚠️ SKIP: black not found${NC}"
         echo -e "   ${YELLOW}   Run 'pip install black isort pytest' to install dependencies${NC}"
         WARNINGS+=("Backend: black not found, format checks skipped")
@@ -245,7 +246,7 @@ if [ "$BACKEND_COUNT" -gt 0 ] 2>/dev/null; then
         > "$TEMP_DIR/syntax.log"  # Clear/create the file
         for pyfile in $(echo "$CHANGED_FILES" | grep "^backend/.*\.py$"); do
             if [ -f "../$pyfile" ]; then
-                uv run python -m py_compile "../$pyfile" 2>> "$TEMP_DIR/syntax.log"
+                python -m py_compile "../$pyfile" 2>> "$TEMP_DIR/syntax.log"
                 if [ $? -ne 0 ]; then
                     echo -e "   ${RED}   Syntax error in: $pyfile${NC}"
                     SYNTAX_ERROR=1
@@ -268,55 +269,44 @@ if [ "$BACKEND_COUNT" -gt 0 ] 2>/dev/null; then
         if [ $BLACK_EXIT -eq 0 ]; then
             echo -e "   ${GREEN}✅ Black: PASSED${NC}"
         else
-            echo -e "   ${RED}❌ Black: FAILED (run 'cd backend && black app/' to fix)${NC}"
+            echo -e "   ${RED}❌ Black: FAILED (run 'cd backend && uv run black app/' to fix)${NC}"
             CHECK_FAILED=1
             FAILED_CHECKS+=("Backend Black")
             # Append fix hint to log file
-            echo -e "\nFix: cd backend && black app/" >> "$TEMP_DIR/black.log"
+            echo -e "\nFix: cd backend && uv run black app/" >> "$TEMP_DIR/black.log"
             FAILED_LOGS+=("$TEMP_DIR/black.log")
         fi
         
         # isort check
-        if ! command -v isort &> /dev/null; then
-            echo -e "   ${YELLOW}⚠️ SKIP: isort not found${NC}"
-            echo -e "   ${YELLOW}   Run 'pip install isort' to install dependencies${NC}"
-            WARNINGS+=("Backend: isort not found, import sort checks skipped")
+        echo -e "   Running isort check..."
+        uv run isort --check-only --diff app/ > "$TEMP_DIR/isort.log" 2>&1
+        ISORT_EXIT=$?
+        if [ $ISORT_EXIT -eq 0 ]; then
+            echo -e "   ${GREEN}✅ isort: PASSED${NC}"
         else
-            uv run isort --check-only --diff app/ > "$TEMP_DIR/isort.log" 2>&1
-            ISORT_EXIT=$?
-            if [ $ISORT_EXIT -eq 0 ]; then
-                echo -e "   ${GREEN}✅ isort: PASSED${NC}"
-            else
-                echo -e "   ${RED}❌ isort: FAILED (run 'cd backend && isort app/' to fix)${NC}"
-                CHECK_FAILED=1
-                FAILED_CHECKS+=("Backend isort")
-                echo -e "\nFix: cd backend && isort app/" >> "$TEMP_DIR/isort.log"
-                FAILED_LOGS+=("$TEMP_DIR/isort.log")
-            fi
+            echo -e "   ${RED}❌ isort: FAILED (run 'cd backend && uv run isort app/' to fix)${NC}"
+            CHECK_FAILED=1
+            FAILED_CHECKS+=("Backend isort")
+            echo -e "\nFix: cd backend && uv run isort app/" >> "$TEMP_DIR/isort.log"
+            FAILED_LOGS+=("$TEMP_DIR/isort.log")
         fi
         
         # pytest
-        if ! command -v pytest &> /dev/null; then
-            echo -e "   ${YELLOW}⚠️ SKIP: pytest not found${NC}"
-            echo -e "   ${YELLOW}   Run 'pip install pytest' to install dependencies${NC}"
-            WARNINGS+=("Backend: pytest not found, tests skipped")
-        else
-            echo -e "   Running pytest..."
-            if [ -d "tests" ]; then
-                uv run pytest tests/ --tb=short -q > "$TEMP_DIR/backend_pytest.log" 2>&1
-                PYTEST_EXIT=$?
-                if [ $PYTEST_EXIT -eq 0 ]; then
-                    echo -e "   ${GREEN}✅ Pytest: PASSED${NC}"
-                else
-                    echo -e "   ${RED}❌ Pytest: FAILED${NC}"
-                    CHECK_FAILED=1
-                    FAILED_CHECKS+=("Backend Pytest")
-                    FAILED_LOGS+=("$TEMP_DIR/backend_pytest.log")
-                fi
+        echo -e "   Running pytest..."
+        if [ -d "tests" ]; then
+            uv run pytest tests/ --tb=short -q > "$TEMP_DIR/backend_pytest.log" 2>&1
+            PYTEST_EXIT=$?
+            if [ $PYTEST_EXIT -eq 0 ]; then
+                echo -e "   ${GREEN}✅ Pytest: PASSED${NC}"
             else
-                echo -e "   ${YELLOW}⚠️ SKIP: tests directory not found${NC}"
-                WARNINGS+=("Backend: tests directory not found")
+                echo -e "   ${RED}❌ Pytest: FAILED${NC}"
+                CHECK_FAILED=1
+                FAILED_CHECKS+=("Backend Pytest")
+                FAILED_LOGS+=("$TEMP_DIR/backend_pytest.log")
             fi
+        else
+            echo -e "   ${YELLOW}⚠️ SKIP: tests directory not found${NC}"
+            WARNINGS+=("Backend: tests directory not found")
         fi
         # Python syntax check (output to temp file)
         echo -e "   Running Python syntax check..."
