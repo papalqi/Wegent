@@ -75,6 +75,64 @@ ELASTICSEARCH_PORT="${WEGENT_ELASTICSEARCH_PORT:-9200}"
 ENABLE_RAG="${WEGENT_ENABLE_RAG:-false}"
 FRONTEND_DEV_MODE="${WEGENT_FRONTEND_DEV_MODE:-false}"
 
+# Public access configuration (for browsers on other machines).
+# By default, the script keeps using localhost.
+# Set WEGENT_PUBLIC_HOST=auto to auto-detect a non-loopback IPv4 address.
+detect_default_ipv4() {
+  local ip=""
+
+  if command -v ip >/dev/null 2>&1; then
+    ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="src") {print $(i+1); exit}}')"
+  fi
+
+  if [ -z "$ip" ] && command -v python3 >/dev/null 2>&1; then
+    ip="$(python3 - <<'PY'
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    s.connect(("8.8.8.8", 80))
+    print(s.getsockname()[0])
+finally:
+    s.close()
+PY
+)"
+  fi
+  if [ -z "$ip" ] && command -v python >/dev/null 2>&1; then
+    ip="$(python - <<'PY'
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    s.connect(("8.8.8.8", 80))
+    print(s.getsockname()[0])
+finally:
+    s.close()
+PY
+)"
+  fi
+
+  echo "${ip}"
+}
+
+PUBLIC_SCHEME="${WEGENT_PUBLIC_SCHEME:-http}"
+PUBLIC_HOST="${WEGENT_PUBLIC_HOST:-localhost}"
+if [ "${PUBLIC_HOST}" = "auto" ]; then
+  PUBLIC_HOST="$(detect_default_ipv4)"
+  if [ -z "${PUBLIC_HOST}" ]; then
+    PUBLIC_HOST="localhost"
+  fi
+fi
+
+PUBLIC_FRONTEND_URL="${PUBLIC_SCHEME}://${PUBLIC_HOST}:${FRONTEND_PORT}"
+PUBLIC_BACKEND_URL="${PUBLIC_SCHEME}://${PUBLIC_HOST}:${BACKEND_PORT}"
+
+# Allow overrides via existing env vars (useful for reverse proxies).
+BACKEND_FRONTEND_URL="${FRONTEND_URL:-${PUBLIC_FRONTEND_URL}}"
+SOCKET_DIRECT_URL="${RUNTIME_SOCKET_DIRECT_URL:-${PUBLIC_BACKEND_URL}}"
+
+# Next.js bind host (affects whether other machines can access the frontend).
+# Default to 0.0.0.0 to allow LAN/WAN access; override with WEGENT_FRONTEND_HOST=127.0.0.1 to restrict to local only.
+FRONTEND_HOST="${WEGENT_FRONTEND_HOST:-0.0.0.0}"
+
 # Runtime workspace for executor containers (host path)
 EXECUTOR_WORKSPACE="${WEGENT_EXECUTOR_WORKSPACE:-${HOME}/wecode-bot}"
 
@@ -138,10 +196,13 @@ Options:
 
 Environment variables (optional):
   WEGENT_FRONTEND_PORT, WEGENT_BACKEND_PORT, WEGENT_EXECUTOR_MANAGER_PORT
+  WEGENT_PUBLIC_HOST (default: localhost; use 'auto' to detect), WEGENT_PUBLIC_SCHEME (default: http)
+  WEGENT_FRONTEND_HOST (default: 0.0.0.0; set to 127.0.0.1 to restrict to local only)
   WEGENT_MYSQL_PORT, WEGENT_REDIS_PORT, WEGENT_ELASTICSEARCH_PORT (must match docker-compose.yml port mapping)
   WEGENT_ENABLE_RAG, WEGENT_EXECUTOR_WORKSPACE, WEGENT_FRONTEND_DEV_MODE
   WEGENT_IMAGE_PREFIX, WEGENT_EXECUTOR_MANAGER_IMAGE, WEGENT_EXECUTOR_IMAGE
   WEGENT_EXECUTOR_MANAGER_VERSION, WEGENT_EXECUTOR_VERSION
+  REDIS_PASSWORD (required for docker-compose.yml redis auth; auto-generated if missing)
 EOF
 }
 
@@ -151,6 +212,39 @@ die() {
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+ensure_redis_password() {
+  if [ -n "${REDIS_PASSWORD:-}" ]; then
+    return 0
+  fi
+
+  local generated=""
+  if have python3; then
+    generated="$(python3 - <<'PY'
+import secrets
+print(secrets.token_hex(32))
+PY
+)"
+  elif have openssl; then
+    generated="$(openssl rand -hex 32)"
+  else
+    generated="wegent-redis-$(date +%s)"
+  fi
+
+  export REDIS_PASSWORD="${generated}"
+
+  local env_local_file="${WEGENT_ENV_LOCAL_FILE:-${ROOT_DIR}/.env.local}"
+  if [ -f "${env_local_file}" ]; then
+    if ! grep -qE '^REDIS_PASSWORD=' "${env_local_file}" 2>/dev/null; then
+      echo "" >>"${env_local_file}"
+      echo "REDIS_PASSWORD=${generated}" >>"${env_local_file}"
+    fi
+  else
+    echo "REDIS_PASSWORD=${generated}" >>"${env_local_file}"
+  fi
+
+  echo -e "${YELLOW}REDIS_PASSWORD 未设置，已自动生成并写入 ${env_local_file}${NC}"
+}
 
 # macOS compatibility: setsid is not available by default
 # Use setsid if available, otherwise fall back to nohup or direct background execution
@@ -517,6 +611,8 @@ main() {
   have npm || die "npm is required."
   have curl || die "curl is required."
 
+  ensure_redis_password
+
   mkdir -p "$EXECUTOR_WORKSPACE"
 
   echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
@@ -524,13 +620,18 @@ main() {
   echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
   echo ""
   echo -e "${GREEN}Ports:${NC}"
-  echo -e "  Frontend:        http://localhost:${FRONTEND_PORT}"
-  echo -e "  Backend:         http://localhost:${BACKEND_PORT}"
-  echo -e "  ExecutorManager: http://localhost:${EXECUTOR_MANAGER_PORT}"
+  echo -e "  Frontend:        ${PUBLIC_FRONTEND_URL}"
+  echo -e "  Backend:         ${PUBLIC_BACKEND_URL}"
+  echo -e "  ExecutorManager: http://${PUBLIC_HOST}:${EXECUTOR_MANAGER_PORT}"
   echo -e "  MySQL:           localhost:${MYSQL_PORT}"
   echo -e "  Redis:           localhost:${REDIS_PORT}"
   if [ "$ENABLE_RAG" = "true" ]; then
-    echo -e "  Elasticsearch:   http://localhost:${ELASTICSEARCH_PORT}"
+    echo -e "  Elasticsearch:   http://${PUBLIC_HOST}:${ELASTICSEARCH_PORT}"
+  fi
+  if [ "${PUBLIC_HOST}" = "localhost" ] || [ "${PUBLIC_HOST}" = "127.0.0.1" ] || [ "${PUBLIC_HOST}" = "::1" ]; then
+    echo ""
+    echo -e "${YELLOW}Tip: To allow access from other machines, run with:${NC}"
+    echo -e "  ${BLUE}WEGENT_PUBLIC_HOST=auto ./start.sh${NC}"
   fi
   echo ""
 
@@ -691,7 +792,7 @@ main() {
     EXECUTOR_MANAGER_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}" \
     EXECUTOR_CANCEL_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/tasks/cancel" \
     EXECUTOR_DELETE_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/executor/delete" \
-    FRONTEND_URL="http://127.0.0.1:${FRONTEND_PORT}" \
+    FRONTEND_URL="${BACKEND_FRONTEND_URL}" \
     sh -c "cd '${ROOT_DIR}/backend' && exec uv run uvicorn app.main:app --host 0.0.0.0 --port '${BACKEND_PORT}'" >>"$backend_log" 2>&1 &
 
   BACKEND_PGID="$!"
@@ -729,8 +830,8 @@ main() {
       NODE_ENV="development" \
       PORT="${FRONTEND_PORT}" \
       RUNTIME_INTERNAL_API_URL="http://127.0.0.1:${BACKEND_PORT}" \
-      RUNTIME_SOCKET_DIRECT_URL="http://localhost:${BACKEND_PORT}" \
-      sh -c "cd '${ROOT_DIR}/frontend' && exec npm run dev" >>"$frontend_log" 2>&1 &
+      RUNTIME_SOCKET_DIRECT_URL="${SOCKET_DIRECT_URL}" \
+      sh -c "cd '${ROOT_DIR}/frontend' && exec npm run dev -- -p '${FRONTEND_PORT}' -H '${FRONTEND_HOST}'" >>"$frontend_log" 2>&1 &
 
     FRONTEND_PGID="$!"
     echo -e "${GREEN}✓ Frontend started in dev mode (PGID=${FRONTEND_PGID})${NC}"
@@ -770,8 +871,8 @@ main() {
     env \
       NODE_ENV="production" \
       RUNTIME_INTERNAL_API_URL="http://127.0.0.1:${BACKEND_PORT}" \
-      RUNTIME_SOCKET_DIRECT_URL="http://localhost:${BACKEND_PORT}" \
-      sh -c "cd '${ROOT_DIR}/frontend' && exec npm start -- -p '${FRONTEND_PORT}'" >>"$frontend_log" 2>&1 &
+      RUNTIME_SOCKET_DIRECT_URL="${SOCKET_DIRECT_URL}" \
+      sh -c "cd '${ROOT_DIR}/frontend' && exec npm start -- -p '${FRONTEND_PORT}' -H '${FRONTEND_HOST}'" >>"$frontend_log" 2>&1 &
 
     FRONTEND_PGID="$!"
     echo -e "${GREEN}✓ Frontend started (PGID=${FRONTEND_PGID})${NC}"
@@ -784,9 +885,9 @@ main() {
 
   echo ""
   echo -e "${GREEN}All services are up.${NC}"
-  echo -e "${GREEN}- Frontend: http://localhost:${FRONTEND_PORT}${NC}"
-  echo -e "${GREEN}- Backend:  http://localhost:${BACKEND_PORT}/api/docs${NC}"
-  echo -e "${GREEN}- Executor: http://localhost:${EXECUTOR_MANAGER_PORT}/health${NC}"
+  echo -e "${GREEN}- Frontend: ${PUBLIC_FRONTEND_URL}${NC}"
+  echo -e "${GREEN}- Backend:  ${PUBLIC_BACKEND_URL}/api/docs${NC}"
+  echo -e "${GREEN}- Executor: http://${PUBLIC_HOST}:${EXECUTOR_MANAGER_PORT}/health${NC}"
   echo ""
   echo -e "${YELLOW}Press Ctrl+C to stop everything.${NC}"
 

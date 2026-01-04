@@ -78,7 +78,7 @@ MYSQL_USER=task_user
 MYSQL_PASSWORD=your_password
 
 # Redis Configuration
-REDIS_PASSWORD=your_redis_password  # Optional
+REDIS_PASSWORD=your_redis_password  # Required (docker-compose enables Redis AUTH by default)
 
 # Backend Configuration
 PASSWORD_KEY=your-password-key-here
@@ -205,7 +205,8 @@ sudo systemctl start redis  # Linux
 brew services start redis  # macOS
 
 # Verify Redis
-redis-cli ping  # Should return PONG
+redis-cli -a your_redis_password ping  # If password is configured, should return PONG
+redis-cli ping  # If no password is configured, should return PONG
 ```
 
 ### Step 4: Install Backend
@@ -398,7 +399,8 @@ mysql -u task_user -p -h localhost task_manager
 **Solution**:
 ```bash
 # Ensure Redis is running
-redis-cli ping
+redis-cli -a your_redis_password ping  # If password is configured
+redis-cli ping  # If no password is configured
 
 # Check Redis configuration
 docker-compose logs redis
