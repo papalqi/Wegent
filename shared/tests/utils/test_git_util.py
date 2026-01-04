@@ -7,12 +7,9 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
-from shared.utils.git_util import (
-    _redact_url_credentials,
-    clone_repo_with_token,
-    is_gerrit_url,
-    setup_git_hooks,
-)
+from shared.utils.git_util import (_redact_url_credentials,
+                                   clone_repo_with_token, is_gerrit_url,
+                                   setup_git_hooks)
 
 
 class TestGitUtil:
@@ -242,4 +239,5 @@ class TestGitUtil:
         assert "refs/heads/(main|master|release/.*)" in script
 
         mode = os.stat(pre_push_path).st_mode
-        assert mode & 0o111
+        if os.name != "nt":
+            assert mode & 0o111

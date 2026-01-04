@@ -72,6 +72,36 @@ export const MOCK_TASKS: Task[] = [
   },
 ];
 
+function getMockTaskContainerStatus(taskId: number) {
+  if (taskId === 1) {
+    return {
+      task_id: taskId,
+      executor_name: `mock-executor-${taskId}`,
+      status: 'running',
+      state: 'running',
+      reason: null,
+    } as const;
+  }
+
+  if (taskId === 2) {
+    return {
+      task_id: taskId,
+      executor_name: `mock-executor-${taskId}`,
+      status: 'exited',
+      state: 'exited',
+      reason: 'completed',
+    } as const;
+  }
+
+  return {
+    task_id: taskId,
+    executor_name: null,
+    status: 'not_found',
+    state: null,
+    reason: 'not_found',
+  } as const;
+}
+
 export const taskHandlers = [
   http.get('/api/tasks', ({ request }) => {
     const url = new URL(request.url);
@@ -94,6 +124,63 @@ export const taskHandlers = [
     return HttpResponse.json(response);
   }),
 
+  http.get('/api/tasks/lite', ({ request }) => {
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '10');
+    const status = url.searchParams.get('status');
+
+    let filteredTasks = MOCK_TASKS;
+    if (status) {
+      filteredTasks = MOCK_TASKS.filter(task => task.status === status);
+    }
+
+    const total = filteredTasks.length;
+    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit);
+    return HttpResponse.json({ total, items: paginatedTasks } satisfies TaskListResponse);
+  }),
+
+  http.get('/api/tasks/lite/personal', ({ request }) => {
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '10');
+    const status = url.searchParams.get('status');
+
+    let filteredTasks = MOCK_TASKS.filter(t => !t.is_group_chat);
+    if (status) {
+      filteredTasks = filteredTasks.filter(task => task.status === status);
+    }
+
+    const total = filteredTasks.length;
+    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit);
+    return HttpResponse.json({ total, items: paginatedTasks } satisfies TaskListResponse);
+  }),
+
+  http.get('/api/tasks/lite/group', ({ request }) => {
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '10');
+    const status = url.searchParams.get('status');
+
+    let filteredTasks = MOCK_TASKS.filter(t => t.is_group_chat);
+    if (status) {
+      filteredTasks = filteredTasks.filter(task => task.status === status);
+    }
+
+    const total = filteredTasks.length;
+    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit);
+    return HttpResponse.json({ total, items: paginatedTasks } satisfies TaskListResponse);
+  }),
+
+  http.get('/api/tasks/container-status', ({ request }) => {
+    const url = new URL(request.url);
+    const taskIds = url.searchParams.getAll('task_ids').map(id => Number(id));
+    const validIds = taskIds.filter(id => Number.isFinite(id) && id > 0);
+    return HttpResponse.json({
+      items: validIds.map(id => getMockTaskContainerStatus(id)),
+    });
+  }),
+
   http.get('/api/tasks/:id', ({ params }) => {
     const { id } = params;
     const task = MOCK_TASKS.find(t => t.id === Number(id));
@@ -102,6 +189,15 @@ export const taskHandlers = [
     } else {
       return new HttpResponse(null, { status: 404 });
     }
+  }),
+
+  http.get('/api/tasks/:id/container-status', ({ params }) => {
+    const { id } = params;
+    const taskId = Number(id);
+    if (!Number.isFinite(taskId) || taskId <= 0) {
+      return new HttpResponse(null, { status: 400 });
+    }
+    return HttpResponse.json(getMockTaskContainerStatus(taskId));
   }),
 
   http.post('/api/tasks', async ({ request }) => {
