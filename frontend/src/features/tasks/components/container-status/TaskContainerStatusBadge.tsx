@@ -17,22 +17,17 @@ function getBadgeVariant(status: TaskContainerStatus) {
   return 'warning';
 }
 
-function getStatusLabel(
-  t: (key: string, defaultValue?: string) => string,
-  status: TaskContainerStatus
-) {
-  if (status === 'running') return t('common:tasks.container_status_running');
-  if (status === 'exited') return t('common:tasks.container_status_exited');
-  if (status === 'not_found') return t('common:tasks.container_status_not_found');
-  return t('common:tasks.container_status_unknown');
-}
-
 export function TaskContainerStatusBadge({ taskId }: { taskId: number }) {
   const { t } = useTranslation();
   const { data } = useTaskContainerStatus(taskId, { intervalMs: 10_000, enabled: true });
 
   const status = data?.status ?? 'unknown';
-  const label = getStatusLabel(t, status);
+  const label = (() => {
+    if (status === 'running') return t('common:tasks.container_status_running');
+    if (status === 'exited') return t('common:tasks.container_status_exited');
+    if (status === 'not_found') return t('common:tasks.container_status_not_found');
+    return t('common:tasks.container_status_unknown');
+  })();
   const title = t('common:tasks.container_status_title');
   const tooltip = data?.executor_name
     ? `${title}: ${label} (${data.executor_name})`
