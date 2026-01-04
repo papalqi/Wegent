@@ -4,8 +4,8 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Task, TaskType } from '@/types/api';
+import { useState, useEffect, useMemo } from 'react';
+import { Task, TaskContainerStatus, TaskType } from '@/types/api';
 import TaskMenu from './TaskMenu';
 import {
   CheckCircle2,
@@ -22,6 +22,8 @@ import { useTaskContext } from '@/features/tasks/contexts/taskContext';
 import { useChatStreamContext } from '@/features/tasks/contexts/chatStreamContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { taskApis } from '@/apis/tasks';
+import { useTaskContainerStatusMap } from '@/features/tasks/hooks/useTaskContainerStatus';
+import { TaskContainerStatusIcon } from '@/features/tasks/components/container-status/TaskContainerStatusIcon';
 import { isTaskUnread } from '@/utils/taskViewStatus';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getTaskStatusLabelKey } from '@/utils/taskStatus';
@@ -285,6 +287,25 @@ export default function TaskListSection({
     return 'chat';
   };
 
+  const codeTaskIds = useMemo(() => {
+    return tasks
+      .filter(task => !task.is_group_chat && inferTaskMode(task) === 'code')
+      .map(task => task.id);
+  }, [tasks]);
+
+  const { map: containerStatusMap } = useTaskContainerStatusMap(codeTaskIds, {
+    intervalMs: 20_000,
+    enabled: true,
+    maxTasks: 50,
+  });
+
+  const getContainerStatusLabel = (status: TaskContainerStatus) => {
+    if (status === 'running') return t('common:tasks.container_status_running');
+    if (status === 'exited') return t('common:tasks.container_status_exited');
+    if (status === 'not_found') return t('common:tasks.container_status_not_found');
+    return t('common:tasks.container_status_unknown');
+  };
+
   const handleRestartTask = (task: Task) => {
     const confirmed = confirm(
       t(
@@ -452,6 +473,11 @@ export default function TaskListSection({
               task.title.length > 30 ? task.title.slice(0, 30) + '...' : task.title;
             const statusKey = getTaskStatusLabelKey(task.status);
             const statusLabel = statusKey ? t(statusKey) : task.status;
+            const taskMode = inferTaskMode(task);
+            const containerStatus =
+              taskMode === 'code' && !task.is_group_chat
+                ? (containerStatusMap[task.id]?.status ?? 'unknown')
+                : null;
 
             return (
               <TooltipProvider key={task.id}>
@@ -481,6 +507,9 @@ export default function TaskListSection({
                     <p className="font-medium">{truncatedTitle}</p>
                     <p className="text-xs text-text-muted">
                       {taskTypeLabel} · {statusLabel} · {formatTimeAgo(task.created_at)}
+                      {containerStatus
+                        ? ` · ${t('common:tasks.container_status_title')}: ${getContainerStatusLabel(containerStatus)}`
+                        : ''}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -502,6 +531,11 @@ export default function TaskListSection({
           })();
           const statusKey = getTaskStatusLabelKey(task.status);
           const statusLabel = statusKey ? t(statusKey) : task.status;
+          const taskMode = inferTaskMode(task);
+          const containerStatus =
+            taskMode === 'code' && !task.is_group_chat
+              ? (containerStatusMap[task.id]?.status ?? 'unknown')
+              : null;
 
           return (
             <TooltipProvider key={task.id}>
@@ -532,6 +566,13 @@ export default function TaskListSection({
                     <p className="flex-1 min-w-0 text-sm text-text-primary leading-tight truncate m-0">
                       {task.title}
                     </p>
+
+                    {/* Executor container status (code tasks only) */}
+                    {containerStatus && (
+                      <div className="flex-shrink-0">
+                        <TaskContainerStatusIcon status={containerStatus} />
+                      </div>
+                    )}
 
                     {/* Status icon on the right - only render container when needed */}
                     {(shouldShowStatusIcon(task) || isTaskUnread(task)) && (
@@ -573,6 +614,9 @@ export default function TaskListSection({
                   <p className="font-medium">{task.title}</p>
                   <p className="text-xs text-text-muted">
                     {taskTypeLabel} · {statusLabel} · {formatTimeAgo(task.created_at)}
+                    {containerStatus
+                      ? ` · ${t('common:tasks.container_status_title')}: ${getContainerStatusLabel(containerStatus)}`
+                      : ''}
                   </p>
                 </TooltipContent>
               </Tooltip>

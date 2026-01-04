@@ -356,6 +356,20 @@ export interface Task {
   is_group_chat?: boolean; // Whether this task is a group chat
 }
 
+export type TaskContainerStatus = 'running' | 'exited' | 'not_found' | 'unknown';
+
+export interface TaskExecutorContainerStatus {
+  task_id: number;
+  executor_name: string | null;
+  status: TaskContainerStatus;
+  state: string | null;
+  reason: string | null;
+}
+
+export interface TaskExecutorContainerStatusBatchResponse {
+  items: TaskExecutorContainerStatus[];
+}
+
 /** GitHub repository new structure */
 export interface GitRepoInfo {
   git_repo_id: number;

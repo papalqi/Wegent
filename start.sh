@@ -325,7 +325,6 @@ ensure_python_runner() {
   ensure_uv
   PYTHON_RUNNER=(uv run python)
 }
-
 maybe_build_frontend_needed() {
   local flag_var="$1"
   local source_ts
