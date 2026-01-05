@@ -105,3 +105,76 @@ def test_provider_probe_http_error(test_client, test_token, mocker):
     assert data["success"] is False
     assert data["checks"]["prompt_llm"]["ok"] is False
     assert data["checks"]["prompt_llm"]["error"] == "http_status:401"
+
+
+def test_provider_probe_accepts_ok_with_punctuation(test_client, test_token, mocker):
+    async def _request(method: str, url: str, headers=None, json=None):  # noqa: ANN001
+        req = httpx.Request(method, url)
+        if method == "GET" and url.endswith("/v1/models"):
+            return httpx.Response(200, request=req, json={"data": [{"id": "gpt-4o"}]})
+        if method == "POST" and url.endswith("/v1/chat/completions"):
+            return httpx.Response(
+                200,
+                request=req,
+                json={"choices": [{"message": {"content": "OK."}}]},
+            )
+        return httpx.Response(404, request=req, json={})
+
+    mocker.patch("httpx.AsyncClient.request", AsyncMock(side_effect=_request))
+
+    resp = test_client.post(
+        "/api/models/provider-probe",
+        headers=_auth_headers(test_token),
+        json={
+            "provider_type": "openai",
+            "base_url": "https://example.com",
+            "api_key": "sk-test",
+            "model_id": "gpt-4o",
+            "probe_targets": ["list_models", "prompt_llm"],
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["checks"]["list_models"]["ok"] is True
+    assert data["checks"]["prompt_llm"]["ok"] is True
+
+
+def test_provider_probe_accepts_content_parts(test_client, test_token, mocker):
+    async def _request(method: str, url: str, headers=None, json=None):  # noqa: ANN001
+        req = httpx.Request(method, url)
+        if method == "GET" and url.endswith("/v1/models"):
+            return httpx.Response(200, request=req, json={"data": [{"id": "gpt-4o"}]})
+        if method == "POST" and url.endswith("/v1/chat/completions"):
+            return httpx.Response(
+                200,
+                request=req,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": [{"type": "text", "text": "OK"}],
+                            }
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(404, request=req, json={})
+
+    mocker.patch("httpx.AsyncClient.request", AsyncMock(side_effect=_request))
+
+    resp = test_client.post(
+        "/api/models/provider-probe",
+        headers=_auth_headers(test_token),
+        json={
+            "provider_type": "openai",
+            "base_url": "https://example.com",
+            "api_key": "sk-test",
+            "model_id": "gpt-4o",
+            "probe_targets": ["list_models", "prompt_llm"],
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["checks"]["prompt_llm"]["ok"] is True

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
+import re
 import time
 from typing import List, Optional
 from urllib.parse import urlparse
@@ -35,6 +36,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+_OK_PUNCTUATION = " .,!?:;，。！？"
 
 
 def _normalize_openai_base_url(base_url: Optional[str]) -> str:
@@ -62,6 +64,24 @@ def _merge_headers(api_key: str, custom_headers: Optional[dict]) -> dict[str, st
     return headers
 
 
+def _extract_text_content(content: object) -> Optional[str]:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+                continue
+            if isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        text = "".join(parts).strip()
+        return text or None
+    return None
+
+
 def _extract_openai_chat_completions_text(payload: object) -> Optional[str]:
     if not isinstance(payload, dict):
         return None
@@ -74,8 +94,7 @@ def _extract_openai_chat_completions_text(payload: object) -> Optional[str]:
     message = first.get("message")
     if not isinstance(message, dict):
         return None
-    content = message.get("content")
-    return content if isinstance(content, str) else None
+    return _extract_text_content(message.get("content"))
 
 
 def _extract_openai_responses_text(payload: object) -> Optional[str]:
@@ -96,7 +115,9 @@ def _extract_openai_responses_text(payload: object) -> Optional[str]:
         for c in content:
             if not isinstance(c, dict):
                 continue
-            if c.get("type") == "output_text" and isinstance(c.get("text"), str):
+            if c.get("type") in {"output_text", "text"} and isinstance(
+                c.get("text"), str
+            ):
                 return c["text"]
     return None
 
@@ -104,7 +125,28 @@ def _extract_openai_responses_text(payload: object) -> Optional[str]:
 def _is_ok_text(text: Optional[str]) -> bool:
     if not text:
         return False
-    return text.strip().upper() == "OK"
+
+    normalized = text.strip()
+    if not normalized:
+        return False
+
+    quote_chars = "\"'“”‘’"
+    if (
+        len(normalized) >= 2
+        and normalized[0] in quote_chars
+        and normalized[-1] in quote_chars
+    ):
+        normalized = normalized[1:-1].strip()
+
+    normalized = normalized.rstrip(_OK_PUNCTUATION).strip()
+    return normalized.upper() == "OK"
+
+
+def _truncate_preview(text: str, max_len: int = 160) -> str:
+    sanitized = re.sub(r"\s+", " ", text).strip()
+    if len(sanitized) <= max_len:
+        return sanitized
+    return f"{sanitized[:max_len]}…"
 
 
 async def _request_json(
@@ -119,7 +161,11 @@ async def _request_json(
         resp = await client.request(method, url, headers=headers, json=json_body)
         latency_ms = int((time.perf_counter() - start) * 1000)
         resp.raise_for_status()
-        return resp.json(), latency_ms, None
+        try:
+            payload = resp.json()
+        except ValueError:
+            return None, latency_ms, "invalid_json"
+        return payload, latency_ms, None
     except httpx.TimeoutException:
         latency_ms = int((time.perf_counter() - start) * 1000)
         return None, latency_ms, "timeout"
@@ -633,7 +679,10 @@ async def probe_provider(
                     text = _extract_openai_chat_completions_text(payload)
 
                 if err is None and not _is_ok_text(text):
-                    err = "unexpected_response"
+                    if text is None:
+                        err = "unexpected_response:no_text"
+                    else:
+                        err = f"unexpected_response:text={_truncate_preview(text)}"
                 checks["prompt_llm"] = ProviderProbeCheck(
                     ok=err is None, latency_ms=latency_ms, error=err
                 )
@@ -662,9 +711,9 @@ async def probe_provider(
                             else None
                         )
                         if not isinstance(emb, list) or not emb:
-                            err = "unexpected_response"
+                            err = "unexpected_response:missing_embedding"
                     except Exception:
-                        err = "unexpected_response"
+                        err = "unexpected_response:missing_embedding"
 
                 checks["embedding"] = ProviderProbeCheck(
                     ok=err is None, latency_ms=latency_ms, error=err
