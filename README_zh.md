@@ -125,6 +125,28 @@ git push origin feature/your-feature
 - 若 PR 合并但标题不含 `Changeset version bump`，Actions 里可能会显示为 **Skipped**（job 被 `if:` 条件跳过）。
 - **Tests 工作流**（`.github/workflows/test.yml`）在所有推送到 `main`/`develop` 和所有 PR 时运行。
 
+### 🧪 Chrome DevTools MCP（可选：交互式回归 / 调试）
+
+适用场景：需要用 MCP 客户端驱动真实 Chrome（查看 Console / Network / DOM 等），用于补充 Playwright 自动化回归或排查 flaky。
+
+**依赖：**
+- 已安装 Google Chrome
+- Node.js `>= 20.19.0`（`chrome-devtools-mcp` 要求；低版本会直接报错）
+- （可选）Codex CLI（本仓库的 Codex 技能会用到）
+
+**配置（Codex CLI）：**
+```bash
+# 添加 MCP server（全局）
+codex mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest
+
+# 查看已配置的 MCP servers
+codex mcp list
+```
+
+常见问题：如果提示 `chrome-devtools-mcp does not support Node ...`，请升级 Node 到 `>= 20.19.0`（或在 Codex 配置中指定更新的 Node/`npx`）。
+
+> Wegent 内部的 MCP（Chat Shell）开关与服务列表请参考：`docs/zh/guides/developer/config-web-search-and-mcp.md`。
+
 ## 📞 支持
 
 - 🐛 问题反馈：[GitHub Issues](https://github.com/wecode-ai/wegent/issues)

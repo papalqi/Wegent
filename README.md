@@ -125,6 +125,28 @@ git push origin feature/your-feature
 - If a PR is merged without `Changeset version bump` in the title, the workflow may show as **Skipped** (jobs gated by `if:` conditions).
 - **Tests workflow** (`.github/workflows/test.yml`) runs on all pushes to `main`/`develop` and all PRs.
 
+### 🧪 Chrome DevTools MCP (Optional: Interactive Regression / Debugging)
+
+Use case: drive a real Chrome instance via an MCP client (inspect Console / Network / DOM) to complement Playwright E2E or debug flaky UI tests.
+
+**Dependencies:**
+- Google Chrome installed
+- Node.js `>= 20.19.0` (required by `chrome-devtools-mcp`; older versions will fail)
+- (Optional) Codex CLI
+
+**Setup (Codex CLI):**
+```bash
+# Add an MCP server (global)
+codex mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest
+
+# List configured MCP servers
+codex mcp list
+```
+
+Troubleshooting: if you see `chrome-devtools-mcp does not support Node ...`, upgrade Node to `>= 20.19.0` (or configure Codex to use a newer Node/`npx`).
+
+> For Wegent's built-in MCP (Chat Shell) configuration, see `docs/zh/guides/developer/config-web-search-and-mcp.md`.
+
 ## 📞 Support
 
 - 🐛 Issues: [GitHub Issues](https://github.com/wecode-ai/wegent/issues)
