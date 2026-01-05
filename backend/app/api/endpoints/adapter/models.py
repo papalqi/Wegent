@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _OK_PUNCTUATION = " .,!?:;，。！？"
+_PROBE_MAX_TOKENS = 32
 
 
 def _normalize_openai_base_url(base_url: Optional[str]) -> str:
@@ -655,7 +656,7 @@ async def probe_provider(
                     body = {
                         "model": req.model_id,
                         "input": "Reply with exactly OK. Ping.",
-                        "max_output_tokens": 8,
+                        "max_output_tokens": _PROBE_MAX_TOKENS,
                         "temperature": 0,
                     }
                     payload, latency_ms, err = await _request_json(
@@ -671,7 +672,7 @@ async def probe_provider(
                             {"role": "user", "content": "Ping."},
                         ],
                         "temperature": 0,
-                        "max_tokens": 8,
+                        "max_tokens": _PROBE_MAX_TOKENS,
                     }
                     payload, latency_ms, err = await _request_json(
                         client, "POST", url, headers, json_body=body
