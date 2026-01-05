@@ -52,6 +52,9 @@ coverage.xml
 htmlcov/
 .pytest_cache/
 
+# Test artifacts
+artifacts/
+
 # Database
 *.db
 *.sqlite3
