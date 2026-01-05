@@ -43,7 +43,7 @@ def upgrade():
         sa.Column("decision", sa.String(length=16), nullable=False),
         sa.Column("policy_code", sa.String(length=64), nullable=True),
         sa.Column("policy_message", sa.String(length=1024), nullable=True),
-        sa.Column("request_json", sa.Text(), nullable=False, server_default="{}"),
+        sa.Column("request_json", sa.Text(), nullable=False),
         sa.Column("response_json", sa.Text(), nullable=True),
         sa.Column("pr_number", sa.Integer(), nullable=True),
         sa.Column("pr_url", sa.String(length=1024), nullable=True),
