@@ -263,7 +263,7 @@ export default function BranchSelector({
             }
             noMatchText={t('common:branches.no_match')}
             contentClassName="max-w-[260px]"
-            triggerProps={{ 'data-branch-trigger': true }}
+            triggerProps={{ 'data-branch-trigger': 'true' }}
           />
         </div>
       </div>
@@ -318,7 +318,7 @@ export default function BranchSelector({
           noMatchText={t('common:branches.no_match')}
           triggerClassName="w-full border-0 shadow-none h-auto py-0 px-0 hover:bg-transparent focus:ring-0"
           contentClassName="max-w-[260px]"
-          triggerProps={{ 'data-branch-trigger': true }}
+          triggerProps={{ 'data-branch-trigger': 'true' }}
           renderTriggerValue={item => {
             if (!item) return null;
             const branch = branches.find(b => b.name === item.value);

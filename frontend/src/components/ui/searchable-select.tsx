@@ -32,6 +32,10 @@ export interface SearchableSelectGroup {
   defaultOpen?: boolean;
 }
 
+type TriggerButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  [key: `data-${string}`]: string | number | boolean | undefined;
+};
+
 interface SearchableSelectProps {
   value?: string;
   onValueChange?: (value: string) => void;
@@ -48,7 +52,7 @@ interface SearchableSelectProps {
   className?: string;
   contentClassName?: string;
   triggerClassName?: string;
-  triggerProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
+  triggerProps?: TriggerButtonProps;
   renderTriggerValue?: (item: SearchableSelectItem | undefined) => React.ReactNode;
   footer?: React.ReactNode;
   listFooter?: React.ReactNode; // Content rendered at the end of the list (after items, before footer)
