@@ -5,7 +5,7 @@
 'use client';
 
 import * as React from 'react';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Command,
@@ -25,6 +25,13 @@ export interface SearchableSelectItem {
   content?: React.ReactNode; // Custom content for the item
 }
 
+export interface SearchableSelectGroup {
+  key: string;
+  label: string;
+  items: SearchableSelectItem[];
+  defaultOpen?: boolean;
+}
+
 interface SearchableSelectProps {
   value?: string;
   onValueChange?: (value: string) => void;
@@ -32,7 +39,8 @@ interface SearchableSelectProps {
   disabled?: boolean;
   placeholder?: string;
   searchPlaceholder?: string;
-  items: SearchableSelectItem[];
+  items?: SearchableSelectItem[];
+  groups?: SearchableSelectGroup[];
   loading?: boolean;
   error?: string | null;
   emptyText?: string;
@@ -40,6 +48,7 @@ interface SearchableSelectProps {
   className?: string;
   contentClassName?: string;
   triggerClassName?: string;
+  triggerProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
   renderTriggerValue?: (item: SearchableSelectItem | undefined) => React.ReactNode;
   footer?: React.ReactNode;
   listFooter?: React.ReactNode; // Content rendered at the end of the list (after items, before footer)
@@ -54,7 +63,8 @@ export function SearchableSelect({
   disabled,
   placeholder = 'Select...',
   searchPlaceholder = 'Search...',
-  items,
+  items = [],
+  groups,
   loading,
   error,
   emptyText = 'No items',
@@ -62,6 +72,7 @@ export function SearchableSelect({
   className,
   contentClassName,
   triggerClassName,
+  triggerProps,
   renderTriggerValue,
   footer,
   listFooter,
@@ -71,10 +82,26 @@ export function SearchableSelect({
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
   const [searchValue, setSearchValue] = React.useState('');
 
+  const defaultOpenGroupKeys = React.useMemo(() => {
+    if (!groups) return new Set<string>();
+    return new Set(groups.filter(g => g.defaultOpen).map(g => g.key));
+  }, [groups]);
+
+  const [openGroupKeys, setOpenGroupKeys] = React.useState<Set<string>>(defaultOpenGroupKeys);
+
+  React.useEffect(() => {
+    setOpenGroupKeys(defaultOpenGroupKeys);
+  }, [defaultOpenGroupKeys]);
+
+  const resolvedItems = React.useMemo(() => {
+    if (!groups) return items;
+    return groups.flatMap(g => g.items);
+  }, [groups, items]);
+
   // Find selected item
   const selectedItem = React.useMemo(() => {
-    return items.find(item => item.value === value);
-  }, [items, value]);
+    return resolvedItems.find(item => item.value === value);
+  }, [resolvedItems, value]);
 
   const handleSelect = (currentValue: string) => {
     onValueChange?.(currentValue);
@@ -91,8 +118,24 @@ export function SearchableSelect({
     if (!isOpen) {
       setSearchValue('');
       onSearchChange?.('');
+      setOpenGroupKeys(defaultOpenGroupKeys);
     }
-  }, [isOpen, onSearchChange]);
+  }, [isOpen, onSearchChange, defaultOpenGroupKeys]);
+
+  React.useEffect(() => {
+    if (!groups) return;
+    if (!searchValue) return;
+    setOpenGroupKeys(new Set(groups.map(g => g.key)));
+  }, [groups, searchValue]);
+
+  const toggleGroup = (key: string) => {
+    setOpenGroupKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   return (
     <div className={className}>
@@ -112,6 +155,7 @@ export function SearchableSelect({
               'disabled:cursor-not-allowed disabled:opacity-50',
               triggerClassName
             )}
+            {...triggerProps}
           >
             <div className="flex-1 min-w-0">
               {selectedItem && renderTriggerValue ? (
@@ -156,50 +200,119 @@ export function SearchableSelect({
             <CommandList className="min-h-[36px] max-h-[200px] overflow-y-auto flex-1">
               {error ? (
                 <div className="py-4 px-3 text-center text-sm text-error">{error}</div>
-              ) : items.length === 0 ? (
+              ) : resolvedItems.length === 0 ? (
                 <CommandEmpty className="py-4 text-center text-sm text-text-muted">
                   {loading ? 'Loading...' : emptyText}
                 </CommandEmpty>
               ) : (
                 <>
-                  <CommandEmpty className="py-4 text-center text-sm text-text-muted">
-                    {noMatchText}
-                  </CommandEmpty>
-                  <CommandGroup>
-                    {items.map(item => (
-                      <CommandItem
-                        key={item.value}
-                        value={item.searchText || item.label}
-                        disabled={item.disabled}
-                        onSelect={() => handleSelect(item.value)}
-                        className={cn(
-                          'group cursor-pointer select-none',
-                          'px-3 py-1.5 text-sm text-text-primary',
-                          'rounded-md mx-1 my-[2px]',
-                          'data-[selected=true]:bg-primary/10 data-[selected=true]:text-primary',
-                          'aria-selected:bg-hover',
-                          'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
-                          '!flex !flex-row !items-start !gap-3'
-                        )}
-                      >
-                        <Check
+                  {(searchValue || !groups) && (
+                    <CommandEmpty className="py-4 text-center text-sm text-text-muted">
+                      {noMatchText}
+                    </CommandEmpty>
+                  )}
+                  {groups ? (
+                    <div className="py-1">
+                      {groups.map(group => {
+                        const isGroupOpen = openGroupKeys.has(group.key) || !!searchValue;
+                        return (
+                          <div key={group.key} className="px-1">
+                            <button
+                              type="button"
+                              className={cn(
+                                'w-full flex items-center gap-2 rounded-md px-2 py-1.5',
+                                'text-xs font-medium text-text-muted',
+                                'hover:bg-hover transition-colors',
+                                'focus:outline-none focus:ring-2 focus:ring-primary/20'
+                              )}
+                              onClick={() => toggleGroup(group.key)}
+                              aria-expanded={isGroupOpen}
+                            >
+                              {isGroupOpen ? (
+                                <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
+                              )}
+                              <span className="truncate">{group.label}</span>
+                            </button>
+                            {isGroupOpen && (
+                              <CommandGroup>
+                                {group.items.map(item => (
+                                  <CommandItem
+                                    key={item.value}
+                                    value={item.searchText || item.label}
+                                    disabled={item.disabled}
+                                    onSelect={() => handleSelect(item.value)}
+                                    className={cn(
+                                      'group cursor-pointer select-none',
+                                      'px-3 py-1.5 text-sm text-text-primary',
+                                      'rounded-md mx-1 my-[2px]',
+                                      'data-[selected=true]:bg-primary/10 data-[selected=true]:text-primary',
+                                      'aria-selected:bg-hover',
+                                      'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
+                                      '!flex !flex-row !items-start !gap-3'
+                                    )}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        'h-3 w-3 shrink-0 mt-0.5 ml-1',
+                                        value === item.value
+                                          ? 'opacity-100 text-primary'
+                                          : 'opacity-0 text-text-muted'
+                                      )}
+                                    />
+                                    {item.content ? (
+                                      <div className="flex-1 min-w-0">{item.content}</div>
+                                    ) : (
+                                      <span className="flex-1 min-w-0 truncate" title={item.label}>
+                                        {item.label}
+                                      </span>
+                                    )}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <CommandGroup>
+                      {items.map(item => (
+                        <CommandItem
+                          key={item.value}
+                          value={item.searchText || item.label}
+                          disabled={item.disabled}
+                          onSelect={() => handleSelect(item.value)}
                           className={cn(
-                            'h-3 w-3 shrink-0 mt-0.5 ml-1',
-                            value === item.value
-                              ? 'opacity-100 text-primary'
-                              : 'opacity-0 text-text-muted'
+                            'group cursor-pointer select-none',
+                            'px-3 py-1.5 text-sm text-text-primary',
+                            'rounded-md mx-1 my-[2px]',
+                            'data-[selected=true]:bg-primary/10 data-[selected=true]:text-primary',
+                            'aria-selected:bg-hover',
+                            'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
+                            '!flex !flex-row !items-start !gap-3'
                           )}
-                        />
-                        {item.content ? (
-                          <div className="flex-1 min-w-0">{item.content}</div>
-                        ) : (
-                          <span className="flex-1 min-w-0 truncate" title={item.label}>
-                            {item.label}
-                          </span>
-                        )}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
+                        >
+                          <Check
+                            className={cn(
+                              'h-3 w-3 shrink-0 mt-0.5 ml-1',
+                              value === item.value
+                                ? 'opacity-100 text-primary'
+                                : 'opacity-0 text-text-muted'
+                            )}
+                          />
+                          {item.content ? (
+                            <div className="flex-1 min-w-0">{item.content}</div>
+                          ) : (
+                            <span className="flex-1 min-w-0 truncate" title={item.label}>
+                              {item.label}
+                            </span>
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
                 </>
               )}
             </CommandList>

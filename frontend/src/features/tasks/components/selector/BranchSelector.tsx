@@ -5,7 +5,11 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useContext } from 'react';
-import { SearchableSelect, SearchableSelectItem } from '@/components/ui/searchable-select';
+import {
+  SearchableSelect,
+  SearchableSelectGroup,
+  SearchableSelectItem,
+} from '@/components/ui/searchable-select';
 import { FiGitBranch } from 'react-icons/fi';
 import { GitRepoInfo, GitBranch, TaskDetail } from '@/types/api';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -129,22 +133,67 @@ export default function BranchSelector({
   const showError = !!error;
   const showNoBranch = !showLoading && !showError && branches.length === 0;
 
-  // Convert branches to SearchableSelectItem format
-  const selectItems: SearchableSelectItem[] = useMemo(() => {
-    return branches.map(branch => ({
-      value: branch.name,
-      label: branch.name,
-      searchText: branch.name,
-      content: (
-        <span>
-          {branch.name}
-          {branch.default && (
-            <span className="ml-2 text-green-400 text-[10px]">{t('common:branches.default')}</span>
-          )}
-        </span>
-      ),
-    }));
-  }, [branches, t]);
+  const groupedSelectItems: SearchableSelectGroup[] = useMemo(() => {
+    const rootKey = '__root__';
+
+    const groupsMap = new Map<string, { label: string; items: SearchableSelectItem[] }>();
+    const ensureGroup = (key: string, label: string) => {
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, { label, items: [] });
+      }
+      return groupsMap.get(key)!;
+    };
+
+    for (const branch of branches) {
+      const slashIndex = branch.name.indexOf('/');
+      const hasPrefix = slashIndex > 0;
+      const groupKey = hasPrefix ? branch.name.slice(0, slashIndex) : rootKey;
+      const groupLabel = hasPrefix ? groupKey : t('common:branches.group.root', 'Root');
+      const displayName = hasPrefix ? branch.name.slice(slashIndex + 1) : branch.name;
+
+      const group = ensureGroup(groupKey, groupLabel);
+      group.items.push({
+        value: branch.name,
+        label: branch.name,
+        searchText: branch.name,
+        content: (
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex-1 min-w-0 truncate" title={branch.name}>
+              {displayName}
+            </span>
+            {branch.default && (
+              <span className="text-green-400 text-[10px] whitespace-nowrap">
+                {t('common:branches.default')}
+              </span>
+            )}
+          </div>
+        ),
+      });
+    }
+
+    const sortedGroups = Array.from(groupsMap.entries())
+      .sort(([a], [b]) => {
+        if (a === rootKey && b !== rootKey) return -1;
+        if (b === rootKey && a !== rootKey) return 1;
+        return a.localeCompare(b);
+      })
+      .map(([key, group]) => {
+        group.items.sort((a, b) => a.value.localeCompare(b.value));
+        const isSelectedInGroup =
+          !!selectedBranch &&
+          group.items.some(item => item.value === selectedBranch.name) &&
+          group.items.length > 0;
+
+        return {
+          key,
+          label: group.label,
+          items: group.items,
+          defaultOpen: key === rootKey || isSelectedInGroup,
+        };
+      });
+
+    return sortedGroups;
+  }, [branches, selectedBranch, t]);
 
   // Do not render (no branches, no selection, and no loading/error)
   if (!selectedBranch && branches.length === 0 && !showLoading && !showError) return null;
@@ -168,7 +217,7 @@ export default function BranchSelector({
   // In compact mode, only show the icon button
   if (compact) {
     return (
-      <div className="flex items-center min-w-0">
+      <div className="relative flex items-center min-w-0">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -198,15 +247,15 @@ export default function BranchSelector({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        {/* Hidden SearchableSelect for popover functionality */}
-        <div className="hidden">
+        {/* Invisible SearchableSelect trigger for popover positioning */}
+        <div className="absolute inset-0 opacity-0 pointer-events-none">
           <SearchableSelect
             value={selectedBranch?.name}
             onValueChange={handleChange}
             disabled={disabled || showError || showNoBranch || showLoading}
             placeholder={t('common:branches.select_branch')}
             searchPlaceholder={t('common:branches.search_branch')}
-            items={selectItems}
+            groups={groupedSelectItems}
             loading={showLoading}
             error={showError ? error : null}
             emptyText={
@@ -214,6 +263,7 @@ export default function BranchSelector({
             }
             noMatchText={t('common:branches.no_match')}
             contentClassName="max-w-[260px]"
+            triggerProps={{ 'data-branch-trigger': true }}
           />
         </div>
       </div>
@@ -259,7 +309,7 @@ export default function BranchSelector({
           disabled={disabled || showError || showNoBranch || showLoading}
           placeholder={t('common:branches.select_branch')}
           searchPlaceholder={t('common:branches.search_branch')}
-          items={selectItems}
+          groups={groupedSelectItems}
           loading={showLoading}
           error={showError ? error : null}
           emptyText={
@@ -268,6 +318,7 @@ export default function BranchSelector({
           noMatchText={t('common:branches.no_match')}
           triggerClassName="w-full border-0 shadow-none h-auto py-0 px-0 hover:bg-transparent focus:ring-0"
           contentClassName="max-w-[260px]"
+          triggerProps={{ 'data-branch-trigger': true }}
           renderTriggerValue={item => {
             if (!item) return null;
             const branch = branches.find(b => b.name === item.value);
