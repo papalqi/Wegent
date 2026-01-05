@@ -340,6 +340,31 @@ maybe_build_frontend_needed() {
   printf -v "$flag_var" '%s' "$need"
 }
 
+# Ensure Next.js standalone runtime has all required static assets.
+# When `output: 'standalone'` is enabled, the server may run from `.next/standalone/` and
+# expects `public/` and `.next/static/` to be present alongside `server.js`.
+sync_frontend_standalone_assets() {
+  local frontend_dir="${ROOT_DIR}/frontend"
+  local standalone_dir="${frontend_dir}/.next/standalone"
+
+  if [ ! -f "${standalone_dir}/server.js" ]; then
+    return 0
+  fi
+
+  echo -e "${BLUE}  Syncing standalone assets (public/, .next/static)...${NC}"
+
+  rm -rf "${standalone_dir}/public" "${standalone_dir}/.next/static"
+  mkdir -p "${standalone_dir}/.next"
+
+  if [ -d "${frontend_dir}/public" ]; then
+    cp -a "${frontend_dir}/public" "${standalone_dir}/"
+  fi
+
+  if [ -d "${frontend_dir}/.next/static" ]; then
+    cp -a "${frontend_dir}/.next/static" "${standalone_dir}/.next/"
+  fi
+}
+
 # Return max mtime (seconds) for given paths, pruning common cache dirs to keep checks fast.
 max_mtime() {
   ensure_python_runner
@@ -861,6 +886,8 @@ main() {
       echo -e "${GREEN}✓ Reusing existing frontend build output (.next)${NC}"
       echo ""
     fi
+
+    sync_frontend_standalone_assets
 
     echo -e "${BLUE}[6/6] Starting Frontend (host, npm start)...${NC}"
     local frontend_log=""
