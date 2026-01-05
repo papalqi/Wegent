@@ -25,7 +25,7 @@ def upgrade():
     op.create_table(
         "pr_action_audits",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("user_id", sa.Integer(), nullable=False, index=True),
+        sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("idempotency_key", sa.String(length=128), nullable=False),
         sa.Column(
             "provider", sa.String(length=32), nullable=False, server_default="github"
