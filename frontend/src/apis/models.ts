@@ -137,6 +137,43 @@ export interface TestConnectionResponse {
   message: string;
 }
 
+// Provider /models proxy (upstream discovery)
+export interface ProviderModelsRequest {
+  provider_type: string;
+  base_url?: string;
+  api_key: string;
+  custom_headers?: Record<string, string>;
+}
+
+export interface ProviderModelsResponse {
+  success: boolean;
+  message: string;
+  base_url_resolved?: string;
+  model_ids: string[];
+}
+
+export interface ProviderProbeRequest {
+  provider_type: string;
+  base_url?: string;
+  api_key: string;
+  model_id?: string;
+  custom_headers?: Record<string, string>;
+  probe_targets?: string[];
+}
+
+export interface ProviderProbeCheck {
+  ok: boolean;
+  latency_ms?: number | null;
+  error?: string | null;
+}
+
+export interface ProviderProbeResponse {
+  success: boolean;
+  message: string;
+  base_url_resolved?: string;
+  checks: Record<string, ProviderProbeCheck>;
+}
+
 // Compatible Models Types
 export interface CompatibleModel {
   name: string;
@@ -291,6 +328,14 @@ export const modelApis = {
    */
   async testConnection(config: TestConnectionRequest): Promise<TestConnectionResponse> {
     return apiClient.post('/models/test-connection', config);
+  },
+
+  async getProviderModels(config: ProviderModelsRequest): Promise<ProviderModelsResponse> {
+    return apiClient.post('/models/provider-models', config);
+  },
+
+  async probeProvider(config: ProviderProbeRequest): Promise<ProviderProbeResponse> {
+    return apiClient.post('/models/provider-probe', config);
   },
 
   /**

@@ -463,28 +463,26 @@ sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 - **显示名称**: 可选的在界面上显示的人类可读名称
 
 **提供商配置**:
-- **提供商类型**: 选择 `OpenAI` 或 `Anthropic`
-- **模型 ID**: 从预设模型中选择或输入自定义模型 ID
-  - OpenAI 预设: `gpt-4`, `gpt-4-turbo`, `gpt-3.5-turbo`, `gpt-4o`, `gpt-4o-mini`
-  - Anthropic 预设: `claude-sonnet-4-20250514`, `claude-3-7-sonnet-20250219`, `claude-3-5-haiku-20241022`
+- **提供商类型**: 选择模型协议（OpenAI / OpenAI Responses / Anthropic / Gemini 等）
+  - OpenAI 协议也可用于 OpenAI-compatible 的自建/代理端点
+- **模型 ID**: 可从提供商 `/models` 自动拉取并选择，或选择 **自定义...** 手动输入（用于不支持 `/models` 的情况）
 
 **认证信息**:
 - **API Key**: 输入您从提供商获取的 API 密钥
   - 使用可见性切换按钮 (👁️) 显示/隐藏密钥
 - **Base URL**: 可选的自定义 API 端点 (用于代理或自托管服务)
+  - 对 OpenAI-compatible 端点，可直接填写主机地址而无需手动补 `/v1`（如 `http://localhost:8000`），界面会展示最终解析地址（如 `http://localhost:8000/v1`）
 
 #### 步骤 3: 测试连接
 
 在保存之前，使用 **测试连接** 功能验证您的配置:
 
 1. 点击 **测试连接** 按钮
-2. 系统会发送一个最小化的测试请求来验证:
-   - API Key 有效性
-   - 模型可用性
-   - 网络连通性
+2. 系统会发送真实探测请求（如拉取模型列表、prompt 测试、embedding 测试），并展示每项检查的状态/耗时
+   - 注意：该操作可能产生费用或触发限流，且只会在您点击按钮时执行
 3. 结果:
-   - ✅ "成功连接到 {模型}" - 配置有效
-   - ❌ 错误信息 - 检查您的 API 密钥或网络设置
+   - ✅ 每项检查 **OK** - 相关端点可用
+   - ❌ 每项检查 **Fail** - 请检查 API Key、模型 ID、Base URL 或端点兼容性
 
 #### 步骤 4: 保存配置
 
