@@ -67,10 +67,10 @@ Wegent 是开源的智能体团队操作系统。本文件是贡献者的中文�
    - ✅ 由维护者管理
 
 2. **develop 分支**
-   - ❌ 不直接推送新功能
-   - ✅ 接受所有功能分支的 PR
-   - ✅ 集成测试在此进行
-   - ✅ 始终保持可工作状态
+  - ❌ 不直接推送新功能，但是如果是修复的内容是可以提交的，不需要新开
+  - ✅ 接受所有功能分支的 PR
+  - ✅ 集成测试在此进行
+  - ✅ 始终保持可工作状态
 
 3. **功能分支（feature/fix/hotfix）**
    - ✅ 从 develop 创建：`git checkout -b feature/xxx develop`
@@ -94,6 +94,8 @@ git push origin feature/new-feature
 # 5. 合并后删除分支
 git branch -d feature/new-feature
 ```
+
+注意：如果当前是在develop分支，并且如果你只是在修bug，提交的时候直接提交在develop就可以了
 
 ## 基础工作流
 - 分支：`<type>/<description>`，如 `feature/ghost-import`（从 develop 创建，PR 回 develop）
