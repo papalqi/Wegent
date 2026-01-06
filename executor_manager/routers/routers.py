@@ -25,11 +25,8 @@ from pydantic import BaseModel
 from shared.logger import setup_logger
 from shared.models.task import TasksRequest
 from shared.telemetry.config import get_otel_config
-from shared.telemetry.context import (
-    set_request_context,
-    set_task_context,
-    set_user_context,
-)
+from shared.telemetry.context import (set_request_context, set_task_context,
+                                      set_user_context)
 
 # Setup logger
 logger = setup_logger(__name__)
@@ -232,7 +229,12 @@ async def callback_handler(request: CallbackRequest, http_request: Request):
             request.result and request.result.get("validation_id")
         )
         if is_validation_task:
-            await _forward_validation_callback(request)
+            forward_success = await _forward_validation_callback(request)
+            if not forward_success:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Failed to forward validation callback for task {request.task_id}",
+                )
             # For validation tasks, we only need to forward to backend for Redis update
             # No need to update task status in database (validation tasks don't exist in DB)
             logger.info(
@@ -259,17 +261,23 @@ async def callback_handler(request: CallbackRequest, http_request: Request):
             logger.warning(
                 f"Failed to update status for task {request.task_id}: {result}"
             )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to update backend task status for task {request.task_id}: {result}",
+            )
         logger.info(f"Successfully processed callback for task {request.task_id}")
         return {
             "status": "success",
             "message": f"Successfully processed callback for task {request.task_id}",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error processing callback: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _forward_validation_callback(request: CallbackRequest):
+async def _forward_validation_callback(request: CallbackRequest) -> bool:
     """Forward validation task callback to Backend for Redis status update"""
     import httpx
 
@@ -281,7 +289,7 @@ async def _forward_validation_callback(request: CallbackRequest):
         logger.warning(
             f"Validation callback for task {request.task_id} has no validation_id, skipping forward"
         )
-        return
+        return True
 
     # Map callback status to validation status (case-insensitive)
     status_lower = request.status.lower() if request.status else ""
@@ -325,12 +333,15 @@ async def _forward_validation_callback(request: CallbackRequest):
                 logger.info(
                     f"Successfully forwarded validation callback: {validation_id} -> {validation_status}, valid={valid_value}"
                 )
+                return True
             else:
                 logger.warning(
                     f"Failed to forward validation callback: {response.status_code} {response.text}"
                 )
+                return False
     except Exception as e:
         logger.error(f"Error forwarding validation callback: {e}")
+        return False
 
 
 @app.post("/executor-manager/tasks/receive")

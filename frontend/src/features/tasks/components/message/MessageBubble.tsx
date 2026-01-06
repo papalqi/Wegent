@@ -13,18 +13,7 @@ import type {
   Attachment,
   SubtaskContextBrief,
 } from '@/types/api';
-import {
-  Bot,
-  Download,
-  AlertCircle,
-  Loader2,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Ban,
-  User,
-  RefreshCw,
-} from 'lucide-react';
+import { Bot, Download, AlertCircle, User, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -35,7 +24,6 @@ import ClarificationForm from '../clarification/ClarificationForm';
 import FinalPromptMessage from './FinalPromptMessage';
 import ClarificationAnswerSummary from '../clarification/ClarificationAnswerSummary';
 import ContextBadgeList from './ContextBadgeList';
-import StreamingWaitIndicator from './StreamingWaitIndicator';
 import BubbleTools, { CopyButton } from './BubbleTools';
 import { SourceReferences } from '../chat/SourceReferences';
 import CollapsibleMessage from './CollapsibleMessage';
@@ -322,89 +310,9 @@ const MessageBubble = memo(
       msg.subtaskStatus === 'RUNNING' ||
       msg.subtaskStatus === 'PENDING' ||
       msg.subtaskStatus === 'PROCESSING' ||
+      msg.subtaskStatus === 'CANCELLING' ||
       isWaiting ||
       msg.isWaiting;
-
-    const renderProgressBar = (status: string, _progress: number) => {
-      const normalizedStatus = (status ?? '').toUpperCase();
-
-      // Get status configuration (icon, label key, colors)
-      const getStatusConfig = (statusKey: string) => {
-        switch (statusKey) {
-          case 'RUNNING':
-            return {
-              icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
-              labelKey: 'messages.status_running',
-              bgClass: 'bg-primary/10',
-              textClass: 'text-primary',
-            };
-          case 'PENDING':
-            return {
-              icon: <Clock className="h-3.5 w-3.5" />,
-              labelKey: 'messages.status_pending',
-              bgClass: 'bg-amber-500/10',
-              textClass: 'text-amber-600 dark:text-amber-400',
-            };
-          case 'PROCESSING':
-            return {
-              icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
-              labelKey: 'messages.status_processing',
-              bgClass: 'bg-blue-500/10',
-              textClass: 'text-blue-600 dark:text-blue-400',
-            };
-          case 'COMPLETED':
-            return {
-              icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-              labelKey: 'messages.status_completed',
-              bgClass: 'bg-green-500/10',
-              textClass: 'text-green-600 dark:text-green-400',
-            };
-          case 'FAILED':
-            return {
-              icon: <XCircle className="h-3.5 w-3.5" />,
-              labelKey: 'messages.status_failed',
-              bgClass: 'bg-red-500/10',
-              textClass: 'text-red-600 dark:text-red-400',
-            };
-          case 'CANCELLED':
-            return {
-              icon: <Ban className="h-3.5 w-3.5" />,
-              labelKey: 'messages.status_cancelled',
-              bgClass: 'bg-gray-500/10',
-              textClass: 'text-gray-600 dark:text-gray-400',
-            };
-          case 'CANCELLING':
-            return {
-              icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
-              labelKey: 'messages.status_cancelling',
-              bgClass: 'bg-orange-500/10',
-              textClass: 'text-orange-600 dark:text-orange-400',
-            };
-          default:
-            return {
-              icon: <Loader2 className="h-3.5 w-3.5" />,
-              labelKey: 'messages.status_running',
-              bgClass: 'bg-primary/10',
-              textClass: 'text-primary',
-            };
-        }
-      };
-
-      const config = getStatusConfig(normalizedStatus);
-
-      return (
-        <div className="mt-3">
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${config.bgClass} ${config.textClass}`}
-            >
-              {config.icon}
-              <span>{t(config.labelKey) || status}</span>
-            </span>
-          </div>
-        </div>
-      );
-    };
 
     const renderMarkdownResult = (rawResult: string, promptPart?: string) => {
       const trimmed = (rawResult ?? '').trim();
@@ -415,13 +323,7 @@ const MessageBubble = memo(
       // Markdown parsers don't recognize **'text'** or **text**。 as bold
       // Convert these patterns to HTML <strong> tags for proper rendering
       normalizedResult = normalizedResult.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-      const progressMatch = normalizedResult.match(/^__PROGRESS_BAR__:(.*?):(\d+)$/);
-      if (progressMatch) {
-        const status = progressMatch[1];
-        const progress = parseInt(progressMatch[2], 10) || 0;
-        return renderProgressBar(status, progress);
-      }
+      normalizedResult = normalizedResult.replace(/^__PROGRESS_BAR__:.*?:\d+$/gm, '');
 
       // Helper to extract text content from React children
       const extractText = (node: React.ReactNode): string => {
@@ -688,11 +590,8 @@ const MessageBubble = memo(
           }
         }
 
-        const progressMatch = line.match(/__PROGRESS_BAR__:(.*?):(\d+)/);
-        if (progressMatch) {
-          const status = progressMatch[1];
-          const progress = parseInt(progressMatch[2], 10) || 0;
-          return <React.Fragment key={idx}>{renderProgressBar(status, progress)}</React.Fragment>;
+        if (line.includes('__PROGRESS_BAR__:')) {
+          return null;
         }
 
         // Use SmartTextLine to detect and render URLs (images and links) in plain text
@@ -1296,12 +1195,7 @@ const MessageBubble = memo(
                 }}
               />
             </>
-          ) : (
-            <div className="flex items-center gap-2 text-text-muted">
-              <span className="animate-pulse">●</span>
-              <span className="text-sm">{t('messages.thinking') || 'Thinking...'}</span>
-            </div>
-          )}
+          ) : null}
         </div>
       );
     };
@@ -1333,9 +1227,9 @@ const MessageBubble = memo(
           className={`flex ${shouldAlignRight ? 'max-w-[75%] w-auto' : isUserTypeMessage ? 'max-w-[75%] w-auto' : 'w-full'} flex-col ${shouldAlignRight ? 'items-end' : 'items-start'}`}
         >
           {/* Show thinking display for AI messages */}
-          {!isUserTypeMessage && msg.thinking && (
+          {!isUserTypeMessage && (msg.subtaskStatus || msg.thinking) && (
             <ThinkingDisplay
-              thinking={msg.thinking}
+              thinking={msg.thinking ?? null}
               taskId={selectedTaskDetail?.id ?? null}
               taskStatus={msg.subtaskStatus}
               taskPhase={selectedTaskDetail?.status_phase}
@@ -1372,17 +1266,10 @@ const MessageBubble = memo(
               </div>
             )}
             {isUserTypeMessage && <ContextBadgeList contexts={msg.contexts || undefined} />}
-            {/* Show waiting indicator when streaming but no content yet */}
-            {isWaiting || msg.isWaiting ? (
-              <StreamingWaitIndicator isWaiting={true} />
-            ) : (
-              <>
-                {/* Show recovered content if available, otherwise show normal content */}
-                {msg.recoveredContent && msg.subtaskStatus === 'RUNNING'
-                  ? renderRecoveredContent()
-                  : renderMessageBody(msg, index)}
-              </>
-            )}
+            {/* Show recovered content if available, otherwise show normal content */}
+            {msg.recoveredContent && msg.subtaskStatus === 'RUNNING'
+              ? renderRecoveredContent()
+              : renderMessageBody(msg, index)}
             {/* Show incomplete notice for completed but incomplete messages */}
             {msg.isIncomplete && msg.subtaskStatus !== 'RUNNING' && renderRecoveryNotice()}
 
