@@ -16,7 +16,7 @@ English | [简体中文](README_zh.md)
 
 <img src="./docs/assets/images/example.gif" width="75%" alt="Demo"/>
 
-[Quick Start](#-quick-start) · [Documentation](docs/en/README.md) · [Development Guide](docs/en/guides/developer/setup.md)
+[Quick Start](#-quick-start) · [Documentation](docs/README.md) · [Development Guide](docs/guides/developer/setup.md)
 
 </div>
 
@@ -91,7 +91,7 @@ Frontend (Next.js) → Backend (FastAPI) → Executor Manager → Executors (Cla
 - **Ghost** (prompt) + **Shell** (environment) + **Model** = **Bot**
 - Multiple **Bots** + **Collaboration Mode** = **Team**
 
-> See [Core Concepts](docs/en/concepts/core-concepts.md) | [YAML Spec](docs/en/reference/yaml-specification.md)
+> See [Core Concepts](docs/concepts/core-concepts.md) | [YAML Spec](docs/reference/yaml-specification.md)
 
 ---
 
@@ -145,7 +145,7 @@ codex mcp list
 
 Troubleshooting: if you see `chrome-devtools-mcp does not support Node ...`, upgrade Node to `>= 20.19.0` (or configure Codex to use a newer Node/`npx`).
 
-> For Wegent's built-in MCP (Chat Shell) configuration, see `docs/zh/guides/developer/config-web-search-and-mcp.md`.
+> For Wegent's built-in MCP (Chat Shell) configuration, see `docs/guides/developer/config-web-search-and-mcp.md`.
 
 ## 📞 Support
 

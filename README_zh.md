@@ -16,7 +16,7 @@
 
 <img src="./docs/assets/images/example.gif" width="75%" alt="演示"/>
 
-[快速开始](#-快速开始) · [文档](docs/zh/README.md) · [开发指南](docs/zh/guides/developer/setup.md)
+[快速开始](#-快速开始) · [文档](docs/README.md) · [开发指南](docs/guides/developer/setup.md)
 
 </div>
 
@@ -91,7 +91,7 @@ Frontend (Next.js) → Backend (FastAPI) → Executor Manager → Executors (Cla
 - **Ghost** (提示词) + **Shell** (执行环境) + **Model** = **Bot**
 - 多个 **Bot** + **协作模式** = **Team**
 
-> 详见 [核心概念](docs/zh/concepts/core-concepts.md) | [YAML 规范](docs/zh/reference/yaml-specification.md)
+> 详见 [核心概念](docs/concepts/core-concepts.md) | [YAML 规范](docs/reference/yaml-specification.md)
 
 ---
 
@@ -145,7 +145,7 @@ codex mcp list
 
 常见问题：如果提示 `chrome-devtools-mcp does not support Node ...`，请升级 Node 到 `>= 20.19.0`（或在 Codex 配置中指定更新的 Node/`npx`）。
 
-> Wegent 内部的 MCP（Chat Shell）开关与服务列表请参考：`docs/zh/guides/developer/config-web-search-and-mcp.md`。
+> Wegent 内部的 MCP（Chat Shell）开关与服务列表请参考：`docs/guides/developer/config-web-search-and-mcp.md`。
 
 ## 📞 支持
 

@@ -159,14 +159,14 @@ systemctl daemon-reload
 - 组件复用：先查 `src/components/ui/`、`src/components/common/`、`src/features/*/components/`，能组合就不新建。
 
 ## 深入阅读（中文）
-- 架构/CRD：`docs/zh/concepts/architecture.md`、`core-concepts.md`
-- YAML 规范：`docs/zh/reference/yaml-specification.md`
-- 技能系统：`docs/zh/concepts/skill-system.md`
-- 前端设计系统：`docs/zh/guides/developer/frontend-design-system.md`
-- 消息流 & useUnifiedMessages：`docs/zh/guides/developer/chat-message-flow.md`
-- i18n 规范：`docs/zh/guides/developer/i18n-rules.md`
-- WEB_SEARCH / MCP 配置：`docs/zh/guides/developer/config-web-search-and-mcp.md`
-- 开发/测试/迁移：`docs/zh/guides/developer/{setup,testing,database-migrations}.md`
+- 架构/CRD：`docs/concepts/architecture.md`、`core-concepts.md`
+- YAML 规范：`docs/reference/yaml-specification.md`
+- 技能系统：`docs/concepts/skill-system.md`
+- 前端设计系统：`docs/guides/developer/frontend-design-system.md`
+- 消息流 & useUnifiedMessages：`docs/guides/developer/chat-message-flow.md`
+- i18n 规范：`docs/guides/developer/i18n-rules.md`
+- WEB_SEARCH / MCP 配置：`docs/guides/developer/config-web-search-and-mcp.md`
+- 开发/测试/迁移：`docs/guides/developer/{setup,testing,database-migrations}.md`
 
 ---
 

@@ -442,9 +442,8 @@ The test suite includes:
 Coverage reports are uploaded to Codecov.
 
 For detailed testing documentation, see:
-- 📖 [Complete Testing Guide (English)](./docs/en/guides/developer/testing.md) - Comprehensive test framework documentation
-- 📖 [完整测试指南（中文）](./docs/zh/guides/developer/testing.md) - 综合测试框架文档
-- 📖 [Developer Setup Guide](./docs/en/guides/developer/setup.md) - Testing section
+- 📖 [完整测试指南](./docs/guides/developer/testing.md) - 综合测试框架文档
+- 📖 [Developer Setup Guide](./docs/guides/developer/setup.md) - Testing section
 
 ## 📚 Documentation Requirements
 

@@ -52,7 +52,7 @@ DOC_REMINDERS=()
 # -----------------------------------------------------------------------------
 API_FILES=$(echo "$CHANGED_FILES" | grep -E "^backend/app/api/.*\.py$" || true)
 if [ -n "$API_FILES" ]; then
-    DOC_REMINDERS+=("  - backend/app/api/ files changed → Check docs/en/guides/ for API documentation updates")
+    DOC_REMINDERS+=("  - backend/app/api/ files changed → Check docs/guides/ for API documentation updates")
 fi
 
 # -----------------------------------------------------------------------------

@@ -1,7 +1,5 @@
 # 配置检索器（Retriever）用于 RAG
 
-[English](../../en/guides/user/configuring-retrievers.md) | 简体中文
-
 > ⚠️ **实验性功能**：RAG（检索增强生成）功能目前正在积极开发中。API、配置和行为可能在未来版本中发生变化。
 
 ## 概述

@@ -1,7 +1,5 @@
 # YAML 定义格式
 
-[English](../en/reference/yaml-specification.md) | 简体中文
-
 本文档详细说明了 Wegent 平台中各个核心概念的 YAML 配置格式。每个定义都遵循 Kubernetes 风格的声明式 API 设计。
 
 ## 目录

@@ -4,7 +4,7 @@ This directory contains database migration scripts for the Wegent Backend applic
 
 ## Quick Reference
 
-For detailed documentation, see: [`docs/en/guides/developer/database-migrations.md`](../../docs/en/guides/developer/database-migrations.md)
+For detailed documentation, see: [`docs/guides/developer/database-migrations.md`](../../docs/guides/developer/database-migrations.md)
 
 ### Common Commands
 
@@ -42,7 +42,6 @@ alembic/
 
 ## For More Information
 
-- [Database Migrations Guide (English)](../../docs/en/guides/developer/database-migrations.md)
-- [数据库迁移指南（中文）](../../docs/zh/guides/developer/database-migrations.md)
+- [数据库迁移指南](../../docs/guides/developer/database-migrations.md)
 - [Alembic Documentation](https://alembic.sqlalchemy.org/)
 - [SQLAlchemy Documentation](https://docs.sqlalchemy.org/)
