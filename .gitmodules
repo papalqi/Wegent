@@ -1,0 +1,3 @@
+[submodule "tools/wegent-agent-kit"]
+	path = tools/wegent-agent-kit
+	url = git@github.com:papalqi/wegent-agent-kit.git
