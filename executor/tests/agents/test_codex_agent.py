@@ -193,6 +193,39 @@ class TestCodexAgent:
         assert cmd[cmd.index("-C") + 1] == "/tmp/cwd"
         assert cmd[cmd.index("--model") + 1] == "gpt-test"
 
+    def test_build_command_includes_resume_when_session_available(self):
+        task_data = {
+            "task_id": 1,
+            "subtask_id": 1,
+            "prompt": "hello",
+            "resume_session_id": "thread_123",
+            "retry_mode": "resume",
+            "user": {"name": "test", "user_name": "test"},
+            "bot": [{"shell_type": "codex"}],
+        }
+
+        agent = CodexAgent(task_data)
+        cmd = agent._build_command("/tmp/cwd")
+
+        resume_idx = cmd.index("resume")
+        assert cmd[resume_idx + 1] == "thread_123"
+
+    def test_build_command_ignores_resume_when_new_session_requested(self):
+        task_data = {
+            "task_id": 1,
+            "subtask_id": 1,
+            "prompt": "hello",
+            "resume_session_id": "thread_123",
+            "retry_mode": "new_session",
+            "user": {"name": "test", "user_name": "test"},
+            "bot": [{"shell_type": "codex"}],
+        }
+
+        agent = CodexAgent(task_data)
+        cmd = agent._build_command("/tmp/cwd")
+
+        assert "resume" not in cmd
+
     @pytest.mark.asyncio
     async def test_async_execute_streams_and_completes(self, tmp_path, monkeypatch):
         monkeypatch.setattr(codex_agent_module.config, "WORKSPACE_ROOT", str(tmp_path))
@@ -234,12 +267,19 @@ class TestCodexAgent:
         agent.options["cwd"] = str(tmp_path)
         agent.state_manager = _FakeStateManager()
 
+        thread_started = {
+            "type": "thread.started",
+            "thread": {"id": "thread_123"},
+        }
         event = {
             "type": "item.completed",
             "item": {"type": "agent_message", "text": "hello"},
         }
         fake_proc = _FakeProcess(
-            stdout_lines=[json.dumps(event).encode("utf-8") + b"\n"]
+            stdout_lines=[
+                json.dumps(thread_started).encode("utf-8") + b"\n",
+                json.dumps(event).encode("utf-8") + b"\n",
+            ]
         )
 
         async def _fake_create_subprocess_exec(*args, **kwargs):
@@ -262,6 +302,10 @@ class TestCodexAgent:
         assert json.dumps(event) in events_path.read_text(encoding="utf-8")
         assert any(
             p[0] == 100 and p[1] == TaskStatus.COMPLETED.value
+            for p in agent.state_manager.progress_calls
+        )
+        assert any(
+            p[3].get("resume_session_id") == "thread_123"
             for p in agent.state_manager.progress_calls
         )
         assert ("completed", "hello") in agent.state_manager.workbench_status_calls
