@@ -15,6 +15,7 @@ import type {
 } from '@/types/api';
 import { Bot, Download, AlertCircle, User, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import MarkdownEditor from '@uiw/react-markdown-editor';
@@ -33,6 +34,7 @@ import type { ClarificationData, FinalPromptData, ClarificationAnswer } from '@/
 import type { SourceReference } from '@/types/socket';
 import { useTraceAction } from '@/hooks/useTraceAction';
 import { useMessageFeedback } from '@/hooks/useMessageFeedback';
+import { useToast } from '@/hooks/use-toast';
 import { SmartLink, SmartImage, SmartTextLine } from '@/components/common/SmartUrlRenderer';
 import { formatDateTime } from '@/utils/dateTime';
 export interface Message {
@@ -60,6 +62,10 @@ export interface Message {
     thinking?: unknown[];
     workbench?: Record<string, unknown>;
     shell_type?: string; // Shell type (Chat, ClaudeCode, Agno, etc.)
+    /** Code Shell session identifiers for resume semantics */
+    resume_session_id?: string;
+    session_id?: string;
+    retry_mode?: 'resume' | 'new_session';
     /** Raw Codex `codex exec --json` event stream (persisted on backend for refresh replay) */
     codex_events?: unknown[];
     sources?: SourceReference[]; // RAG knowledge base sources
@@ -127,7 +133,7 @@ export interface MessageBubbleProps {
    */
   isCurrentUserMessage?: boolean;
   /** Callback when user clicks retry button for failed messages */
-  onRetry?: (message: Message) => void;
+  onRetry?: (message: Message, retryMode?: 'resume' | 'new_session') => void;
   /** Message type for feedback storage key differentiation */
   feedbackMessageType?: 'original' | 'correction';
   /** Whether this is a group chat (for enabling message collapsing) */
@@ -247,6 +253,7 @@ const MessageBubble = memo(
   }: MessageBubbleProps) {
     // Use trace hook for telemetry (auto-includes user and task context)
     const { trace } = useTraceAction();
+    const { toast } = useToast();
 
     // Use feedback hook for managing like/dislike state with localStorage persistence
     const { feedback, handleLike, handleDislike } = useMessageFeedback({
@@ -264,6 +271,9 @@ const MessageBubble = memo(
 
     // Determine if this is a user-type message (for styling purposes)
     const isUserTypeMessage = msg.type === 'user';
+    const isCodeShellMessage =
+      !isUserTypeMessage &&
+      (msg.result?.shell_type === 'Codex' || msg.result?.shell_type === 'ClaudeCode');
 
     // Determine if this message should be right-aligned (current user's message)
     // For group chat: only current user's messages are right-aligned
@@ -1249,6 +1259,11 @@ const MessageBubble = memo(
               <div className="flex items-center gap-2 mb-2 text-xs opacity-80">
                 {headerIcon}
                 <span className="font-semibold">{headerLabel}</span>
+                {isCodeShellMessage && (
+                  <Badge variant="info" size="sm">
+                    {t('chat:messages.resume') || 'Resume'}
+                  </Badge>
+                )}
                 {timestampLabel && <span>{timestampLabel}</span>}
                 {msg.isRecovered && (
                   <span className="text-primary text-xs">
@@ -1292,23 +1307,54 @@ const MessageBubble = memo(
                 </div>
 
                 {/* Retry button - positioned like BubbleTools for consistency */}
-                {onRetry && (
-                  <div className="absolute bottom-2 left-2 flex items-center gap-1 z-10">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onRetry(msg)}
-                          className="h-8 w-8 hover:bg-muted"
-                        >
-                          <RefreshCw className="h-4 w-4 text-text-muted" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{t('actions.retry') || '重试'}</TooltipContent>
-                    </Tooltip>
-                  </div>
-                )}
+                {onRetry &&
+                  (isCodeShellMessage ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          const shellType = msg.result?.shell_type;
+                          const resumeSessionId = msg.result?.resume_session_id;
+                          if (shellType === 'Codex' && !resumeSessionId) {
+                            toast({
+                              variant: 'destructive',
+                              title:
+                                t('chat:errors.no_resume_session') ||
+                                '没有可恢复会话，请用新会话重试',
+                            });
+                            return;
+                          }
+                          onRetry(msg, 'resume');
+                        }}
+                      >
+                        {t('chat:actions.retry_resume') || 'Resume 重试'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onRetry(msg, 'new_session')}
+                      >
+                        {t('chat:actions.retry_new_session') || '新会话重试'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 z-10">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onRetry(msg)}
+                            className="h-8 w-8 hover:bg-muted"
+                          >
+                            <RefreshCw className="h-4 w-4 text-text-muted" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t('actions.retry') || '重试'}</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  ))}
               </div>
             )}
 

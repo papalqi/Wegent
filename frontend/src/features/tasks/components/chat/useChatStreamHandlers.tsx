@@ -81,12 +81,15 @@ export interface ChatStreamHandlers {
 
   // Actions
   handleSendMessage: (overrideMessage?: string) => Promise<void>;
-  handleRetry: (message: {
-    content: string;
-    type: string;
-    error?: string;
-    subtaskId?: number;
-  }) => Promise<void>;
+  handleRetry: (
+    message: {
+      content: string;
+      type: string;
+      error?: string;
+      subtaskId?: number;
+    },
+    retryMode?: 'resume' | 'new_session'
+  ) => Promise<void>;
   handleCancelTask: () => Promise<void>;
   stopStream: () => Promise<void>;
   resetStreamingState: () => void;
@@ -585,7 +588,10 @@ export function useChatStreamHandlers({
 
   // Handle retry for failed messages
   const handleRetry = useCallback(
-    async (message: { content: string; type: string; error?: string; subtaskId?: number }) => {
+    async (
+      message: { content: string; type: string; error?: string; subtaskId?: number },
+      retryMode?: 'resume' | 'new_session'
+    ) => {
       if (!message.subtaskId) {
         toast({
           variant: 'destructive',
@@ -623,7 +629,8 @@ export function useChatStreamHandlers({
               message.subtaskId!,
               modelId,
               modelType,
-              forceOverride
+              forceOverride,
+              retryMode
             );
 
             if (result.error) {

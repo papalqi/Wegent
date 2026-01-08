@@ -11,6 +11,8 @@
     "regenerate": "Regenerate",
     "stop": "Stop",
     "retry": "Retry",
+    "retry_resume": "Retry (Resume)",
+    "retry_new_session": "Retry (New Session)",
     "view_error": "View error"
   },
   "status": {
@@ -57,6 +59,7 @@
     "phase_failed": "Failed",
     "phase_cancelled": "Cancelled",
     "phase_elapsed": "{{seconds}}s",
+    "resume": "Resume",
     "recovered": "Recovered",
     "content_recovered": "Content Recovered",
     "content_recovered_desc": "Content has been recovered after page refresh",
@@ -177,6 +180,7 @@
   "errors": {
     "request_failed": "LLM API request failed",
     "request_failed_retry": "LLM API request failed, please click retry",
+    "no_resume_session": "No resumable session found, please retry with a new session",
     "model_unsupported": "Current model is not supported, please switch to a different model",
     "payload_too_large": "Content too large: conversation history or attachment exceeds limit, please start a new conversation or reduce attachment size",
     "llm_unsupported": "Current model does not support this request (e.g., multi-modal messages). Please switch to a different model",

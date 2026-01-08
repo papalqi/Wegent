@@ -128,7 +128,7 @@ interface MessagesAreaProps {
   onContentChange?: () => void;
   onSendMessage?: (content: string) => void;
   isGroupChat?: boolean;
-  onRetry?: (message: Message) => void;
+  onRetry?: (message: Message, retryMode?: 'resume' | 'new_session') => void;
   // Correction mode props
   enableCorrectionMode?: boolean;
   correctionModelId?: string | null;
