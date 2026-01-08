@@ -23,6 +23,7 @@ class TestSettings:
         assert s.API_PREFIX == "/api"
         assert s.ENABLE_API_DOCS is True
         assert s.CODEX_SHELL_ENABLED is True
+        assert s.CODE_SHELL_RESUME_ENABLED is True
         assert s.ALGORITHM == "HS256"
         assert s.ACCESS_TOKEN_EXPIRE_MINUTES == 10080  # 7 days
 
@@ -33,6 +34,7 @@ class TestSettings:
         monkeypatch.setenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120")
         monkeypatch.setenv("ENABLE_API_DOCS", "false")
         monkeypatch.setenv("CODEX_SHELL_ENABLED", "false")
+        monkeypatch.setenv("CODE_SHELL_RESUME_ENABLED", "false")
 
         s = Settings()
 
@@ -41,6 +43,7 @@ class TestSettings:
         assert s.ACCESS_TOKEN_EXPIRE_MINUTES == 120
         assert s.ENABLE_API_DOCS is False
         assert s.CODEX_SHELL_ENABLED is False
+        assert s.CODE_SHELL_RESUME_ENABLED is False
 
     def test_settings_database_url(self):
         """Test database URL configuration"""

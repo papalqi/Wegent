@@ -17,6 +17,7 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session, aliased, joinedload
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.core.config import settings
 from app.models.kind import Kind
 from app.models.subtask import Subtask, SubtaskRole, SubtaskStatus
 from app.models.task import TaskResource
@@ -145,6 +146,12 @@ def reset_subtask_for_retry(
         existing_shell_type = existing_result.get("shell_type")
         if isinstance(existing_shell_type, str) and existing_shell_type:
             resolved_shell_type = existing_shell_type
+
+    if (
+        resolved_shell_type in ("Codex", "ClaudeCode")
+        and not settings.CODE_SHELL_RESUME_ENABLED
+    ):
+        retry_mode = "new_session"
 
     preserved_result: dict[str, Any] = {}
     if resolved_shell_type:

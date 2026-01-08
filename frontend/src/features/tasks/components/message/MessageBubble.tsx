@@ -37,6 +37,7 @@ import { useMessageFeedback } from '@/hooks/useMessageFeedback';
 import { useToast } from '@/hooks/use-toast';
 import { SmartLink, SmartImage, SmartTextLine } from '@/components/common/SmartUrlRenderer';
 import { formatDateTime } from '@/utils/dateTime';
+import { isCodeShellResumeEnabled } from '@/lib/runtime-config';
 export interface Message {
   type: 'user' | 'ai';
   content: string;
@@ -309,6 +310,7 @@ const MessageBubble = memo(
     const isCodeShellMessage =
       !isUserTypeMessage &&
       (normalizedShellType === 'codex' || normalizedShellType === 'claudecode');
+    const codeShellResumeEnabled = isCodeShellResumeEnabled();
 
     // Determine if this message should be right-aligned (current user's message)
     // For group chat: only current user's messages are right-aligned
@@ -1294,7 +1296,7 @@ const MessageBubble = memo(
               <div className="flex items-center gap-2 mb-2 text-xs opacity-80">
                 {headerIcon}
                 <span className="font-semibold">{headerLabel}</span>
-                {isCodeShellMessage && (
+                {isCodeShellMessage && codeShellResumeEnabled && (
                   <Badge variant="info" size="sm">
                     {t('chat:messages.resume') || 'Resume'}
                   </Badge>
@@ -1344,38 +1346,46 @@ const MessageBubble = memo(
                 {/* Retry button - positioned like BubbleTools for consistency */}
                 {onRetry &&
                   (isCodeShellMessage ? (
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => {
-                          const resumeSessionId =
-                            msg.result?.resume_session_id ||
-                            getStringField(debugResult, 'resume_session_id') ||
-                            getStringField(subtaskResult, 'resume_session_id');
+                    codeShellResumeEnabled ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            const resumeSessionId =
+                              msg.result?.resume_session_id ||
+                              getStringField(debugResult, 'resume_session_id') ||
+                              getStringField(subtaskResult, 'resume_session_id');
 
-                          if (normalizedShellType === 'codex' && !resumeSessionId) {
-                            toast({
-                              variant: 'destructive',
-                              title:
-                                t('chat:errors.no_resume_session') ||
-                                '没有可恢复会话，请用新会话重试',
-                            });
-                            return;
-                          }
-                          onRetry(msg, 'resume');
-                        }}
-                      >
-                        {t('chat:actions.retry_resume') || 'Resume 重试'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onRetry(msg, 'new_session')}
-                      >
-                        {t('chat:actions.retry_new_session') || '新会话重试'}
-                      </Button>
-                    </div>
+                            if (normalizedShellType === 'codex' && !resumeSessionId) {
+                              toast({
+                                variant: 'destructive',
+                                title:
+                                  t('chat:errors.no_resume_session') ||
+                                  '没有可恢复会话，请用新会话重试',
+                              });
+                              return;
+                            }
+                            onRetry(msg, 'resume');
+                          }}
+                        >
+                          {t('chat:actions.retry_resume') || 'Resume 重试'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onRetry(msg, 'new_session')}
+                        >
+                          {t('chat:actions.retry_new_session') || '新会话重试'}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => onRetry(msg)}>
+                          {t('actions.retry') || '重试'}
+                        </Button>
+                      </div>
+                    )
                   ) : (
                     <div className="absolute bottom-2 left-2 flex items-center gap-1 z-10">
                       <Tooltip>

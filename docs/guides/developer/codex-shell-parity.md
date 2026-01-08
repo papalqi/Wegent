@@ -22,9 +22,32 @@
 | MCP servers | ClaudeCode 提取 MCP 配置并进行变量替换后传给运行时。 | 相同行为（含变量替换规则）。 | 手工：配置 `${{user.name}}` 等占位符，运行时接收到替换后的配置。 |
 | Git CLI 鉴权与代理 | 设置 git env；`gh`/`glab` 鉴权；可选 `REPO_PROXY_CONFIG` 配置代理。 | 相同行为。 | 手工：token 存在时可鉴权；代理配置写入 git config。 |
 | 流式输出 + workbench/thinking | Executor 在 RUNNING 回调中持续更新 `result.value/thinking/workbench`，后端按增量发送 `chat:chunk`。 | 相同语义：Codex 必须以增量方式更新 `result.value`，前端才能流式展示。 | E2E：发送消息→看到 chunk 流式输出→done；刷新后内容保持。 |
+| 会话续聊/恢复上下文 | 默认按 `session_id` 续聊；`retry_mode=new_session` 时使用后端下发的新 `session_id` 并回传 `result.session_id`。 | 默认按 `resume_session_id` 续聊：执行 `codex exec resume <SESSION_ID>`；`retry_mode=new_session` 时执行 `codex exec` 并回传新的 `result.resume_session_id`。 | E2E：同一 Task 多轮对话默认续聊；失败后双按钮重试；新会话重试后后续默认续聊。 |
 | 取消 | ClaudeCode 支持取消并清理 client/process。 | Codex 支持取消（停止子进程、标记取消、清理资源）。 | 手工：运行中取消后不再继续 chunk，最终状态符合契约。 |
 | 可观测性与安全 | 敏感信息脱敏；关键阶段日志/链路追踪。 | 相同行为。 | Code review：日志/结果不泄露密钥；关键阶段可定位。 |
 | 镜像校验 | Executor Manager 仅对支持的 shell 做镜像依赖检查。 | `/executor-manager/images/validate` 支持 Codex，并增加 Codex 依赖检查项。 | API：校验 Codex 镜像返回 checks + valid。 |
+
+## 会话续聊/恢复上下文（实现要点）
+
+### Codex：`resume_session_id` → `codex exec resume <SESSION_ID>`
+
+- Executor（CodexAgent）从 Codex CLI 的 `thread.started` 事件中提取 `thread_id`，写入 `result.resume_session_id` 并持久化。
+- Backend 在下一轮下发该 Task 的 subtask 时，把上一轮保存的 `resume_session_id` 带入 task payload 的 `resume_session_id` 字段。
+- Executor 在 `retry_mode!=new_session` 且存在 `resume_session_id` 时，调用：`codex exec resume <SESSION_ID> --json -`。
+
+### ClaudeCode：`session_id` 续聊与新会话切换
+
+- 默认使用 `session_id` 续聊；若缺省则回退为 `task_id`。
+- 当 `retry_mode=new_session` 时，Backend 生成新的 `session_id` 下发；Executor 回传 `result.session_id`，Backend 持久化后用于后续续聊。
+
+## 回滚开关（feature flag）
+
+通过环境变量 `CODE_SHELL_RESUME_ENABLED` 控制“默认续聊 + 双按钮重试入口”。默认值为 `true`。
+
+- `CODE_SHELL_RESUME_ENABLED=true`：前端展示 Resume Badge，失败时提供 `Resume 重试/新会话重试` 两个按钮；后端按 `resume_session_id/session_id` 默认续聊。
+- `CODE_SHELL_RESUME_ENABLED=false`：后端强制 Code Shell 走新会话（Codex 不下发 `resume_session_id`；ClaudeCode 下发新的 `session_id`），前端隐藏 Resume Badge 与双按钮入口，仅保留通用“重试”。
+
+注意：该开关仅影响 Code Shell（Codex/ClaudeCode）的会话语义，不影响 `chat:resume`（断线续流）与普通 Chat。
 
 ## 推荐的端到端 Smoke 用例
 

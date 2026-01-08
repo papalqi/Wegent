@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     # Shell feature flags
     # Set CODEX_SHELL_ENABLED=false to disable Codex selection and execution.
     CODEX_SHELL_ENABLED: bool = True
+    # Set CODE_SHELL_RESUME_ENABLED=false to force Code Shell tasks to start new sessions.
+    # This disables resume semantics (Codex: resume_session_id, ClaudeCode: session_id reuse).
+    CODE_SHELL_RESUME_ENABLED: bool = True
 
     # JWT configuration
     SECRET_KEY: str = "secret-key"

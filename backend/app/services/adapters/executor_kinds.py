@@ -5,6 +5,7 @@
 import asyncio
 import logging
 import threading
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -1147,8 +1148,16 @@ class ExecutorKindsService(
             if retry_mode in ("resume", "new_session"):
                 session_payload["retry_mode"] = retry_mode
 
+            code_shell_resume_enabled = settings.CODE_SHELL_RESUME_ENABLED
+            if (
+                primary_shell_type in ("Codex", "ClaudeCode")
+                and not code_shell_resume_enabled
+            ):
+                retry_mode = "new_session"
+                session_payload["retry_mode"] = "new_session"
+
             if primary_shell_type == "Codex":
-                if retry_mode != "new_session":
+                if code_shell_resume_enabled and retry_mode != "new_session":
                     resume_session_id = _extract_result_str_field(
                         subtask.result, "resume_session_id"
                     ) or _extract_result_str_field(
@@ -1157,10 +1166,15 @@ class ExecutorKindsService(
                     if resume_session_id:
                         session_payload["resume_session_id"] = resume_session_id
             elif primary_shell_type == "ClaudeCode":
-                session_id = _extract_result_str_field(
-                    subtask.result, "session_id"
-                ) or _extract_result_str_field(previous_assistant_result, "session_id")
-                session_payload["session_id"] = session_id or str(subtask.task_id)
+                if not code_shell_resume_enabled:
+                    session_payload["session_id"] = str(uuid.uuid4())
+                else:
+                    session_id = _extract_result_str_field(
+                        subtask.result, "session_id"
+                    ) or _extract_result_str_field(
+                        previous_assistant_result, "session_id"
+                    )
+                    session_payload["session_id"] = session_id or str(subtask.task_id)
 
             task_payload = {
                 "subtask_id": subtask.id,

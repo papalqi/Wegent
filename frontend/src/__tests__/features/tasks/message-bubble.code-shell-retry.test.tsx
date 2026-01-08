@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 
 import MessageBubble from '@/features/tasks/components/message/MessageBubble';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { clearRuntimeConfigCache } from '@/lib/runtime-config';
 
 const toastMock = jest.fn();
 jest.mock('@/hooks/use-toast', () => ({
@@ -77,6 +78,7 @@ function renderMessageBubble(
 describe('MessageBubble code shell retry', () => {
   beforeEach(() => {
     toastMock.mockClear();
+    clearRuntimeConfigCache();
   });
 
   it('calls onRetry with retryMode for Code Shell messages', () => {
@@ -121,5 +123,41 @@ describe('MessageBubble code shell retry', () => {
 
     expect(onRetry).not.toHaveBeenCalled();
     expect(toastMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides Code Shell dual retry buttons when resume flag is disabled', () => {
+    const previousValue = process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED;
+    process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED = 'false';
+    clearRuntimeConfigCache();
+
+    try {
+      const onRetry = jest.fn();
+      const msg: React.ComponentProps<typeof MessageBubble>['msg'] = {
+        type: 'ai',
+        content: '',
+        timestamp: Date.now(),
+        status: 'error',
+        error: 'boom',
+        subtaskId: 103,
+        botName: 'Codex Bot',
+        result: { shell_type: 'Codex', resume_session_id: 'thread_123' },
+      };
+
+      renderMessageBubble(msg, onRetry);
+
+      expect(screen.queryByRole('button', { name: 'Resume 重试' })).toBeNull();
+      expect(screen.queryByRole('button', { name: '新会话重试' })).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: '重试' }));
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      expect(onRetry.mock.calls[0]?.[1]).toBeUndefined();
+    } finally {
+      if (previousValue === undefined) {
+        delete process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED;
+      } else {
+        process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED = previousValue;
+      }
+      clearRuntimeConfigCache();
+    }
   });
 });

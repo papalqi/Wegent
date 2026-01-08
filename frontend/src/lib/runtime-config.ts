@@ -21,6 +21,8 @@ export interface RuntimeConfig {
   socketDirectUrl: string;
   /** Enable chat context feature (knowledge base background) */
   enableChatContext: boolean;
+  /** Enable Code Shell resume semantics (Codex resume_session_id, ClaudeCode session_id reuse) */
+  codeShellResumeEnabled: boolean;
 }
 
 // Cache for runtime config to avoid repeated API calls
@@ -61,6 +63,8 @@ export const fetchRuntimeConfig = async (): Promise<RuntimeConfig> => {
         apiUrl: process.env.NEXT_PUBLIC_API_URL || '',
         socketDirectUrl: process.env.NEXT_PUBLIC_SOCKET_DIRECT_URL || '',
         enableChatContext: process.env.NEXT_PUBLIC_ENABLE_CHAT_CONTEXT === 'true',
+        codeShellResumeEnabled:
+          process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED?.toLowerCase() !== 'false',
       };
       runtimeConfigCache = fallback;
       return fallback;
@@ -85,6 +89,8 @@ export const getRuntimeConfigSync = (): RuntimeConfig => {
     apiUrl: process.env.NEXT_PUBLIC_API_URL || '',
     socketDirectUrl: process.env.NEXT_PUBLIC_SOCKET_DIRECT_URL || '',
     enableChatContext: process.env.NEXT_PUBLIC_ENABLE_CHAT_CONTEXT === 'true',
+    codeShellResumeEnabled:
+      process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED?.toLowerCase() !== 'false',
   };
 };
 
@@ -139,6 +145,14 @@ export const getSocketUrl = (): string => {
 export const isChatContextEnabled = (): boolean => {
   const config = getRuntimeConfigSync();
   return config.enableChatContext;
+};
+
+/**
+ * Check if Code Shell resume semantics are enabled
+ */
+export const isCodeShellResumeEnabled = (): boolean => {
+  const config = getRuntimeConfigSync();
+  return config.codeShellResumeEnabled;
 };
 
 /**
