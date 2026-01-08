@@ -48,7 +48,7 @@ from app.models.kind import Kind
 from app.models.subtask import Subtask, SubtaskRole, SubtaskStatus
 from app.models.task import TaskResource
 from app.models.user import User
-from app.schemas.kind import Task, Team
+from app.schemas.kind import Bot, Shell, Task, Team
 
 # Import from services/chat modules
 from app.services.chat.access import (
@@ -1048,7 +1048,88 @@ class ChatNamespace(socketio.AsyncNamespace):
 
             # Reset retry state in DB. For executor-based tasks, the task itself must
             # also be set back to PENDING so executor_manager can dispatch it again.
-            reset_subtask_for_retry(db, failed_ai_subtask)
+            shell_type: Optional[str] = None
+            if isinstance(failed_ai_subtask.result, dict):
+                existing_shell_type = failed_ai_subtask.result.get("shell_type")
+                if isinstance(existing_shell_type, str) and existing_shell_type:
+                    shell_type = existing_shell_type
+
+            if not shell_type:
+                try:
+                    if (
+                        isinstance(failed_ai_subtask.bot_ids, list)
+                        and len(failed_ai_subtask.bot_ids) > 0
+                    ):
+                        bot_id = failed_ai_subtask.bot_ids[0]
+                        bot = (
+                            db.query(Kind)
+                            .filter(Kind.id == bot_id, Kind.is_active == True)
+                            .first()
+                        )
+                        if bot and bot.json:
+                            bot_crd = Bot.model_validate(bot.json)
+                            shell_ref = bot_crd.spec.shellRef
+
+                            # Follow the same selection priority as executor_kinds:
+                            # default namespace -> user shell first, then public shell.
+                            is_group = (
+                                shell_ref.namespace and shell_ref.namespace != "default"
+                            )
+                            shell = None
+                            if is_group:
+                                shell = (
+                                    db.query(Kind)
+                                    .filter(
+                                        Kind.kind == "Shell",
+                                        Kind.name == shell_ref.name,
+                                        Kind.namespace == shell_ref.namespace,
+                                        Kind.is_active == True,
+                                    )
+                                    .first()
+                                )
+                            else:
+                                shell = (
+                                    db.query(Kind)
+                                    .filter(
+                                        Kind.user_id == bot.user_id,
+                                        Kind.kind == "Shell",
+                                        Kind.name == shell_ref.name,
+                                        Kind.namespace == shell_ref.namespace,
+                                        Kind.is_active == True,
+                                    )
+                                    .first()
+                                )
+                                if not shell:
+                                    shell = (
+                                        db.query(Kind)
+                                        .filter(
+                                            Kind.user_id == 0,
+                                            Kind.kind == "Shell",
+                                            Kind.name == shell_ref.name,
+                                            Kind.is_active == True,
+                                        )
+                                        .first()
+                                    )
+
+                            if shell and shell.json:
+                                shell_crd = Shell.model_validate(shell.json)
+                                shell_type = shell_crd.spec.shellType
+                except Exception as e:
+                    logger.warning(
+                        "[WS] chat:retry failed to resolve shell_type: %s", e
+                    )
+
+            logger.info(
+                "[WS] chat:retry applying retry_mode=%s shell_type=%s",
+                getattr(payload, "retry_mode", None),
+                shell_type,
+            )
+            reset_subtask_for_retry(
+                db,
+                failed_ai_subtask,
+                retry_mode=payload.retry_mode,
+                shell_type=shell_type,
+            )
             reset_task_for_retry(db, task)
 
             try:

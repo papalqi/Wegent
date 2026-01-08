@@ -77,6 +77,34 @@ def _merge_executor_subtask_result(existing: Any, incoming: Any) -> Any:
     return merged
 
 
+def _extract_result_value_for_prompt(value: Any) -> str:
+    """Extract prompt-safe result text from a Subtask.result payload.
+
+    Subtask.result is a JSON dict and may contain internal control fields (e.g.
+    session ids). Only `result.value` is allowed to be injected into prompts.
+    """
+
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        raw = value.get("value")
+        if raw is None:
+            return ""
+        return raw if isinstance(raw, str) else str(raw)
+    return str(value)
+
+
+def _extract_result_str_field(value: Any, key: str) -> Optional[str]:
+    if not isinstance(value, dict):
+        return None
+    raw = value.get(key)
+    if isinstance(raw, str) and raw:
+        return raw
+    return None
+
+
 class ExecutorKindsService(
     BaseService[Kind, SubtaskExecutorUpdate, SubtaskExecutorUpdate]
 ):
@@ -819,18 +847,18 @@ class ExecutorKindsService(
             )
 
             next_subtask = None
-            previous_subtask_results = ""
+            previous_assistant_result: Any = None
 
             user_prompt = ""
             user_subtask = None
             for i, related in enumerate(related_subtasks):
                 if related.role == SubtaskRole.USER:
                     user_prompt = related.prompt
-                    previous_subtask_results = ""
+                    previous_assistant_result = None
                     user_subtask = related
                     continue
                 if related.message_id < subtask.message_id:
-                    previous_subtask_results = related.result
+                    previous_assistant_result = related.result
                 if related.message_id == subtask.message_id:
                     if i < len(related_subtasks) - 1:
                         next_subtask = related_subtasks[i + 1]
@@ -842,10 +870,9 @@ class ExecutorKindsService(
             if user_prompt:
                 aggregated_prompt = user_prompt
             # Previous subtask result
-            if previous_subtask_results != "":
-                aggregated_prompt += (
-                    f"\nPrevious execution result: {previous_subtask_results}"
-                )
+            previous_value = _extract_result_value_for_prompt(previous_assistant_result)
+            if previous_value:
+                aggregated_prompt += f"\nPrevious execution result: {previous_value}"
             # Get task information from tasks table
             task = (
                 db.query(TaskResource)
@@ -1112,43 +1139,66 @@ class ExecutorKindsService(
                     f"Found {len(attachments_data)} attachments for subtask {subtask.id}"
                 )
 
-            formatted_subtasks.append(
-                {
-                    "subtask_id": subtask.id,
-                    "subtask_next_id": next_subtask.id if next_subtask else None,
-                    "task_id": subtask.task_id,
-                    "type": type,
-                    "executor_name": subtask.executor_name,
-                    "executor_namespace": subtask.executor_namespace,
-                    "subtask_title": subtask.title,
-                    "task_title": task_crd.spec.title,
-                    "user": {
-                        "id": user.id if user else None,
-                        "name": user.user_name if user else None,
-                        "git_domain": git_info.get("git_domain") if git_info else None,
-                        "git_token": git_info.get("git_token") if git_info else None,
-                        "git_id": git_info.get("git_id") if git_info else None,
-                        "git_login": git_info.get("git_login") if git_info else None,
-                        "git_email": git_info.get("git_email") if git_info else None,
-                        "user_name": git_info.get("user_name") if git_info else None,
-                    },
-                    "bot": bots,
-                    "team_id": team.id,
-                    "mode": collaboration_model,
-                    "git_domain": git_domain,
-                    "git_repo": git_repo,
-                    "git_repo_id": git_repo_id,
-                    "branch_name": branch_name,
-                    "git_url": git_url,
-                    "prompt": aggregated_prompt,
-                    "auth_token": auth_token,
-                    "attachments": attachments_data,
-                    "status": subtask.status,
-                    "progress": subtask.progress,
-                    "created_at": subtask.created_at,
-                    "updated_at": subtask.updated_at,
-                }
+            session_payload: Dict[str, Any] = {}
+            primary_shell_type = (
+                bots[0].get("shell_type") if bots and isinstance(bots[0], dict) else ""
             )
+            retry_mode = _extract_result_str_field(subtask.result, "retry_mode")
+            if retry_mode in ("resume", "new_session"):
+                session_payload["retry_mode"] = retry_mode
+
+            if primary_shell_type == "Codex":
+                if retry_mode != "new_session":
+                    resume_session_id = _extract_result_str_field(
+                        subtask.result, "resume_session_id"
+                    ) or _extract_result_str_field(
+                        previous_assistant_result, "resume_session_id"
+                    )
+                    if resume_session_id:
+                        session_payload["resume_session_id"] = resume_session_id
+            elif primary_shell_type == "ClaudeCode":
+                session_id = _extract_result_str_field(
+                    subtask.result, "session_id"
+                ) or _extract_result_str_field(previous_assistant_result, "session_id")
+                session_payload["session_id"] = session_id or str(subtask.task_id)
+
+            task_payload = {
+                "subtask_id": subtask.id,
+                "subtask_next_id": next_subtask.id if next_subtask else None,
+                "task_id": subtask.task_id,
+                "type": type,
+                "executor_name": subtask.executor_name,
+                "executor_namespace": subtask.executor_namespace,
+                "subtask_title": subtask.title,
+                "task_title": task_crd.spec.title,
+                "user": {
+                    "id": user.id if user else None,
+                    "name": user.user_name if user else None,
+                    "git_domain": git_info.get("git_domain") if git_info else None,
+                    "git_token": git_info.get("git_token") if git_info else None,
+                    "git_id": git_info.get("git_id") if git_info else None,
+                    "git_login": git_info.get("git_login") if git_info else None,
+                    "git_email": git_info.get("git_email") if git_info else None,
+                    "user_name": git_info.get("user_name") if git_info else None,
+                },
+                "bot": bots,
+                "team_id": team.id,
+                "mode": collaboration_model,
+                "git_domain": git_domain,
+                "git_repo": git_repo,
+                "git_repo_id": git_repo_id,
+                "branch_name": branch_name,
+                "git_url": git_url,
+                "prompt": aggregated_prompt,
+                "auth_token": auth_token,
+                "attachments": attachments_data,
+                "status": subtask.status,
+                "progress": subtask.progress,
+                "created_at": subtask.created_at,
+                "updated_at": subtask.updated_at,
+            }
+            task_payload.update(session_payload)
+            formatted_subtasks.append(task_payload)
 
         # Log before returning the formatted response
         subtask_ids = [item.get("subtask_id") for item in formatted_subtasks]
