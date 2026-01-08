@@ -126,7 +126,13 @@ class ClaudeCodeAgent(Agent):
         """
         super().__init__(task_data)
         self.client = None
-        self.session_id = self.task_id
+        session_id = task_data.get("session_id")
+        self.session_id = (
+            session_id.strip()
+            if isinstance(session_id, str) and session_id.strip()
+            else str(self.task_id)
+        )
+        self.retry_mode = task_data.get("retry_mode") or "resume"
         self.prompt = task_data.get("prompt", "")
         self.project_path = None
 
@@ -746,7 +752,14 @@ class ClaudeCodeAgent(Agent):
 
             # Report starting progress using state manager
             self.state_manager.report_progress(
-                progress, TaskStatus.RUNNING.value, "${{thinking.initialize_agent}}"
+                progress,
+                TaskStatus.RUNNING.value,
+                "${{thinking.initialize_agent}}",
+                extra_result={
+                    "value": "",
+                    "shell_type": "ClaudeCode",
+                    "session_id": self.session_id,
+                },
             )
             # Check if currently running in coroutine
             try:
@@ -818,7 +831,14 @@ class ClaudeCodeAgent(Agent):
 
             # Report starting progress using state manager
             self.state_manager.report_progress(
-                60, TaskStatus.RUNNING.value, "${{thinking.initialize_agent}}"
+                60,
+                TaskStatus.RUNNING.value,
+                "${{thinking.initialize_agent}}",
+                extra_result={
+                    "value": "",
+                    "shell_type": "ClaudeCode",
+                    "session_id": self.session_id,
+                },
             )
 
             # Add trace event for state manager initialization
