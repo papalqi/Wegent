@@ -114,6 +114,10 @@ export interface ChatResumePayload {
 export interface ChatRetryPayload {
   task_id: number;
   subtask_id: number;
+  retry_mode?: 'resume' | 'new_session';
+  force_override_bot_model?: string;
+  force_override_bot_model_type?: string;
+  use_model_override?: boolean;
 }
 
 export interface TaskJoinPayload {
