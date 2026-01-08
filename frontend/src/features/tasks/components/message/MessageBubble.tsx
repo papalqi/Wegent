@@ -271,9 +271,44 @@ const MessageBubble = memo(
 
     // Determine if this is a user-type message (for styling purposes)
     const isUserTypeMessage = msg.type === 'user';
+
+    const normalizeShellType = (value: string | undefined): string | undefined => {
+      if (typeof value !== 'string') return undefined;
+      const normalized = value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      return normalized || undefined;
+    };
+
+    const isRecord = (value: unknown): value is Record<string, unknown> => {
+      return typeof value === 'object' && value !== null && !Array.isArray(value);
+    };
+
+    const getStringField = (obj: unknown, key: string): string | undefined => {
+      if (!isRecord(obj)) return undefined;
+      const value = obj[key];
+      if (typeof value !== 'string') return undefined;
+      const trimmed = value.trim();
+      return trimmed || undefined;
+    };
+
+    const debugResult = isRecord(msg.debug) ? msg.debug.result : undefined;
+    const subtaskResult = msg.subtaskId
+      ? selectedTaskDetail?.subtasks?.find(st => st.id === msg.subtaskId)?.result
+      : undefined;
+
+    const shellType =
+      msg.result?.shell_type ||
+      getStringField(debugResult, 'shell_type') ||
+      getStringField(subtaskResult, 'shell_type') ||
+      selectedTaskDetail?.team?.bots?.[0]?.bot?.shell_type ||
+      selectedTaskDetail?.team?.agent_type;
+    const normalizedShellType = normalizeShellType(shellType);
+
     const isCodeShellMessage =
       !isUserTypeMessage &&
-      (msg.result?.shell_type === 'Codex' || msg.result?.shell_type === 'ClaudeCode');
+      (normalizedShellType === 'codex' || normalizedShellType === 'claudecode');
 
     // Determine if this message should be right-aligned (current user's message)
     // For group chat: only current user's messages are right-aligned
@@ -1314,9 +1349,12 @@ const MessageBubble = memo(
                         size="sm"
                         variant="secondary"
                         onClick={() => {
-                          const shellType = msg.result?.shell_type;
-                          const resumeSessionId = msg.result?.resume_session_id;
-                          if (shellType === 'Codex' && !resumeSessionId) {
+                          const resumeSessionId =
+                            msg.result?.resume_session_id ||
+                            getStringField(debugResult, 'resume_session_id') ||
+                            getStringField(subtaskResult, 'resume_session_id');
+
+                          if (normalizedShellType === 'codex' && !resumeSessionId) {
                             toast({
                               variant: 'destructive',
                               title:
