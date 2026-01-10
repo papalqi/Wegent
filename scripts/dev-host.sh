@@ -25,6 +25,11 @@ Modes:
   --dev   Start with hot reload (backend --reload, frontend next dev) [default]
   --prod  Build frontend and start production servers (backend no reload, frontend next start)
 
+Systemd:
+  If wegent.service is running, this script will take over by stopping it with SIGKILL
+  (to avoid triggering start.sh cleanup that would stop Docker containers). Disable this
+  behavior with --no-systemd-takeover.
+
 Environment:
   Reads (lowest precedence first): .env.defaults, .env, .env.local
   Respects already-exported variables (does not override).
@@ -89,6 +94,9 @@ FRONTEND_PID_FILE="${RUN_DIR}/frontend.pid"
 BACKEND_PGID=""
 FRONTEND_PGID=""
 CLEANUP_ARMED="false"
+SYSTEMD_TAKEOVER="true"
+TOOK_OVER_SYSTEMD="false"
+ORIGINAL_SYSTEMD_RESTART=""
 
 kill_process_group() {
   local pgid="$1"
@@ -188,6 +196,15 @@ cleanup() {
   stop_from_pidfile "$FRONTEND_PID_FILE"
   stop_from_pidfile "$BACKEND_PID_FILE"
 
+  if [ "$TOOK_OVER_SYSTEMD" = "true" ] && have systemctl; then
+    if [ -n "$ORIGINAL_SYSTEMD_RESTART" ]; then
+      systemctl set-property wegent.service "Restart=${ORIGINAL_SYSTEMD_RESTART}" >/dev/null 2>&1 || true
+    else
+      systemctl set-property wegent.service Restart=on-failure >/dev/null 2>&1 || true
+    fi
+    systemctl reset-failed wegent.service >/dev/null 2>&1 || true
+  fi
+
   exit "$exit_code"
 }
 
@@ -196,9 +213,39 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 ensure_no_systemd_runner() {
-  if have systemctl && systemctl is-active --quiet wegent.service; then
-    die "wegent.service is running. Disable/stop it before using this script to avoid cleanup stopping Docker."
+  if ! have systemctl; then
+    return 0
   fi
+  if ! systemctl is-active --quiet wegent.service; then
+    return 0
+  fi
+
+  if [ "$SYSTEMD_TAKEOVER" != "true" ]; then
+    die "wegent.service is running. Stop it first, or re-run without --no-systemd-takeover."
+  fi
+
+  echo "Detected wegent.service running; taking over host ports without touching Docker..."
+  ORIGINAL_SYSTEMD_RESTART="$(systemctl show -p Restart --value wegent.service 2>/dev/null || true)"
+  if [ -z "$ORIGINAL_SYSTEMD_RESTART" ]; then
+    ORIGINAL_SYSTEMD_RESTART="on-failure"
+  fi
+
+  # Prevent auto-restart while we develop.
+  systemctl set-property wegent.service Restart=no >/dev/null 2>&1 || true
+
+  # Kill the service cgroup without running start.sh cleanup (SIGKILL bypasses traps).
+  systemctl kill -s SIGKILL wegent.service >/dev/null 2>&1 || true
+
+  local i
+  for i in {1..20}; do
+    if ! systemctl is-active --quiet wegent.service; then
+      break
+    fi
+    sleep 0.5
+  done
+
+  systemctl reset-failed wegent.service >/dev/null 2>&1 || true
+  TOOK_OVER_SYSTEMD="true"
 }
 
 main() {
@@ -210,6 +257,10 @@ main() {
         ;;
       --prod)
         MODE="prod"
+        shift
+        ;;
+      --no-systemd-takeover)
+        SYSTEMD_TAKEOVER="false"
         shift
         ;;
       --backend-port)
@@ -331,4 +382,3 @@ main() {
 }
 
 main "$@"
-
