@@ -9,6 +9,7 @@
 import os
 from collections import OrderedDict
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from executor.callback.callback_client import CallbackClient
@@ -187,11 +188,33 @@ class Agent:
             f"Agent[{self.get_name()}][{self.task_id}] user_config: {mask_sensitive_data(user_config)}"
         )
 
-        project_path = os.path.join(config.WORKSPACE_ROOT, str(self.task_id), repo_name)
+        repo_dir = self.task_data.get("repo_dir")
+        using_persistent_repo_dir = isinstance(repo_dir, str) and repo_dir.strip() != ""
+        if using_persistent_repo_dir:
+            project_path = repo_dir.strip()
+        else:
+            project_path = os.path.join(
+                config.WORKSPACE_ROOT, str(self.task_id), repo_name
+            )
         if self.project_path is None:
             self.project_path = project_path
 
-        if not os.path.exists(project_path):
+        should_clone = True
+        if os.path.exists(project_path):
+            if os.path.isdir(project_path):
+                entries = os.listdir(project_path)
+                if (Path(project_path) / ".git").exists():
+                    should_clone = False
+                elif entries:
+                    # Treat non-empty directory (e.g. P4 workspace) as already prepared.
+                    should_clone = False
+                elif not using_persistent_repo_dir:
+                    # Backward-compatible: skip cloning for pre-existing task-scoped dirs.
+                    should_clone = False
+            else:
+                should_clone = False
+
+        if should_clone:
             success, error_msg = git_util.clone_repo(
                 git_url, branch_name, project_path, username, git_token
             )
