@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type WebSocket } from '@playwright/test';
 
 function jsonResponse(body: unknown) {
   return {
@@ -300,7 +300,10 @@ test.describe('Code Shell retry_mode', () => {
     });
 
     const socketIoWebsocketPromise = page
-      .waitForEvent('websocket', ws => ws.url().includes('/socket.io'), { timeout: 15_000 })
+      .waitForEvent('websocket', {
+        predicate: (ws: WebSocket) => ws.url().includes('/socket.io'),
+        timeout: 15_000,
+      })
       .catch(() => null);
 
     await page.goto('/tasks');
@@ -593,7 +596,10 @@ test.describe('Code Shell retry_mode', () => {
     });
 
     const socketIoWebsocketPromise = page
-      .waitForEvent('websocket', ws => ws.url().includes('/socket.io'), { timeout: 15_000 })
+      .waitForEvent('websocket', {
+        predicate: (ws: WebSocket) => ws.url().includes('/socket.io'),
+        timeout: 15_000,
+      })
       .catch(() => null);
 
     await page.goto('/tasks');
