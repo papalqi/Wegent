@@ -16,6 +16,7 @@ import os
 import subprocess
 import time
 from email import utils
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -588,6 +589,9 @@ class DockerExecutor(Executor):
         # Add workspace mount
         self._add_workspace_mount(cmd)
 
+        # Add persistent repo mount (host sibling of Wegent root)
+        self._add_persistent_repo_mount(cmd, task)
+
         # Add network configuration
         self._add_network_config(cmd)
 
@@ -624,6 +628,32 @@ class DockerExecutor(Executor):
         executor_workspace = os.getenv("EXECUTOR_WORKSPACE", "")  # Fix spelling error
         if executor_workspace:
             cmd.extend(["-v", f"{executor_workspace}:{WORKSPACE_MOUNT_PATH}"])
+
+    def _add_persistent_repo_mount(self, cmd: List[str], task: Dict[str, Any]) -> None:
+        """
+        Mount host persistent repo root into executor container.
+
+        The root is fixed to: dirname(WEGENT_ROOT_HOST)/wegent_repos
+        """
+        from shared.utils.persistent_repo import (
+            PERSIST_REPO_MOUNT_PATH,
+            compute_persistent_repo_root,
+        )
+
+        wegent_root_host = (os.getenv("WEGENT_ROOT_HOST") or "").strip()
+        needs_persist_mount = isinstance(task.get("repo_dir"), str) and task.get(
+            "repo_dir", ""
+        ).startswith(PERSIST_REPO_MOUNT_PATH + "/")
+
+        if not wegent_root_host:
+            if needs_persist_mount:
+                raise ValueError(
+                    "WEGENT_ROOT_HOST is required to mount persistent repo directory"
+                )
+            return
+
+        persist_root = compute_persistent_repo_root(Path(wegent_root_host))
+        cmd.extend(["-v", f"{persist_root}:{PERSIST_REPO_MOUNT_PATH}"])
 
     def _add_network_config(self, cmd: List[str]) -> None:
         """Add network configuration"""

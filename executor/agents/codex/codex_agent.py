@@ -268,6 +268,30 @@ class CodexAgent(Agent):
 
     def pre_execute(self) -> TaskStatus:
         try:
+            repo_dir = self.task_data.get("repo_dir")
+            if isinstance(repo_dir, str) and repo_dir.strip():
+                repo_dir = repo_dir.strip()
+                os.makedirs(repo_dir, exist_ok=True)
+                try:
+                    from shared.utils.persistent_repo import detect_repo_vcs
+
+                    repo_vcs, is_p4 = detect_repo_vcs(Path(repo_dir))
+                    self.task_data["repo_vcs"] = repo_vcs or ""
+                    self.task_data["is_p4"] = is_p4
+                    logger.info(
+                        "Detected repo_vcs=%s is_p4=%s repo_dir=%s",
+                        repo_vcs,
+                        is_p4,
+                        repo_dir,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to detect repo VCS for %s: %s", repo_dir, e)
+
+                if not self.options.get("cwd"):
+                    self.options["cwd"] = repo_dir
+                    self.project_path = repo_dir
+                    logger.info("Set cwd to %s", repo_dir)
+
             git_url = self.task_data.get("git_url")
             if git_url:
                 self.download_code()
@@ -346,10 +370,19 @@ class CodexAgent(Agent):
 
         cwd = self.options.get("cwd") or ""
         git_url = self.task_data.get("git_url") or ""
+        repo_dir = self.task_data.get("repo_dir") or ""
+        repo_vcs = self.task_data.get("repo_vcs") or ""
+        is_p4 = self.task_data.get("is_p4")
         if cwd:
             parts.append(f"Current working directory: {cwd}")
         if git_url:
             parts.append(f"Project url: {git_url}")
+        if isinstance(repo_dir, str) and repo_dir.strip():
+            parts.append(f"Persistent repo directory: {repo_dir.strip()}")
+        if isinstance(repo_vcs, str) and repo_vcs.strip():
+            parts.append(f"repo_vcs: {repo_vcs.strip()}")
+        if isinstance(is_p4, bool):
+            parts.append(f"is_p4: {is_p4}")
 
         return "\n\n".join(p for p in parts if p)
 

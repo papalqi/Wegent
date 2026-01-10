@@ -683,6 +683,30 @@ class ClaudeCodeAgent(Agent):
             TaskStatus: Pre-execution status
         """
         try:
+            repo_dir = self.task_data.get("repo_dir")
+            if isinstance(repo_dir, str) and repo_dir.strip():
+                repo_dir = repo_dir.strip()
+                os.makedirs(repo_dir, exist_ok=True)
+                try:
+                    from shared.utils.persistent_repo import detect_repo_vcs
+
+                    repo_vcs, is_p4 = detect_repo_vcs(Path(repo_dir))
+                    self.task_data["repo_vcs"] = repo_vcs or ""
+                    self.task_data["is_p4"] = is_p4
+                    logger.info(
+                        "Detected repo_vcs=%s is_p4=%s repo_dir=%s",
+                        repo_vcs,
+                        is_p4,
+                        repo_dir,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to detect repo VCS for %s: %s", repo_dir, e)
+
+                if "cwd" not in self.options and os.path.exists(repo_dir):
+                    self.options["cwd"] = repo_dir
+                    self.project_path = repo_dir
+                    logger.info(f"Set cwd to {repo_dir}")
+
             git_url = self.task_data.get("git_url")
             # Download code if git_url is provided
             if git_url and git_url != "":
@@ -953,14 +977,21 @@ class ClaudeCodeAgent(Agent):
 
             # Prepare prompt
             prompt = self.prompt
+            repo_dir = self.task_data.get("repo_dir") or ""
+            repo_vcs = self.task_data.get("repo_vcs") or ""
+            is_p4 = self.task_data.get("is_p4")
             if self.options.get("cwd"):
-                prompt = (
-                    prompt
-                    + "\nCurrent working directory: "
-                    + self.options.get("cwd")
-                    + "\n project url:"
-                    + self.task_data.get("git_url")
+                prompt = prompt + "\nCurrent working directory: " + self.options.get(
+                    "cwd"
                 )
+            if self.task_data.get("git_url"):
+                prompt = prompt + "\nProject url: " + self.task_data.get("git_url")
+            if isinstance(repo_dir, str) and repo_dir.strip():
+                prompt = prompt + "\nPersistent repo directory: " + repo_dir.strip()
+            if isinstance(repo_vcs, str) and repo_vcs.strip():
+                prompt = prompt + "\nrepo_vcs: " + repo_vcs.strip()
+            if isinstance(is_p4, bool):
+                prompt = prompt + "\nis_p4: " + str(is_p4)
 
             progress = 75
             # Update current progress

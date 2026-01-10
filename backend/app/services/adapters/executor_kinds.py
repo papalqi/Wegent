@@ -7,6 +7,7 @@ import logging
 import threading
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -933,6 +934,42 @@ class ExecutorKindsService(
                     # Handle workspaces with incomplete repository data
                     pass
 
+            repo_dir = ""
+            repo_vcs = ""
+            is_p4 = False
+            workspace_db_id = workspace.id if workspace else None
+
+            if workspace_db_id:
+                try:
+                    from shared.utils.persistent_repo import (
+                        PERSIST_REPO_MOUNT_PATH,
+                        compute_persistent_repo_root,
+                        detect_repo_vcs,
+                        find_wegent_root,
+                        workspace_persistent_repo_dir,
+                    )
+
+                    wegent_root = find_wegent_root(Path(__file__))
+                    persist_root = compute_persistent_repo_root(wegent_root)
+                    persist_root.mkdir(parents=True, exist_ok=True)
+
+                    host_repo_dir = workspace_persistent_repo_dir(
+                        persist_root, workspace_db_id
+                    )
+                    host_repo_dir.mkdir(parents=True, exist_ok=True)
+
+                    detected_vcs, detected_is_p4 = detect_repo_vcs(host_repo_dir)
+                    repo_vcs = detected_vcs or ""
+                    is_p4 = detected_is_p4
+
+                    repo_dir = f"{PERSIST_REPO_MOUNT_PATH}/{host_repo_dir.name}"
+                except Exception as e:
+                    logger.warning(
+                        "Failed to prepare persistent repo dir for workspace %s: %s",
+                        workspace_db_id,
+                        e,
+                    )
+
             # Build user git information - query user by user_id
             user = db.query(User).filter(User.id == subtask.user_id).first()
             git_info = (
@@ -1215,6 +1252,10 @@ class ExecutorKindsService(
                 "git_repo_id": git_repo_id,
                 "branch_name": branch_name,
                 "git_url": git_url,
+                "workspace_id": workspace_db_id,
+                "repo_dir": repo_dir,
+                "repo_vcs": repo_vcs,
+                "is_p4": is_p4,
                 "prompt": aggregated_prompt,
                 "auth_token": auth_token,
                 "attachments": attachments_data,

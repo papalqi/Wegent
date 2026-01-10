@@ -136,6 +136,19 @@ FRONTEND_HOST="${WEGENT_FRONTEND_HOST:-0.0.0.0}"
 # Runtime workspace for executor containers (host path)
 EXECUTOR_WORKSPACE="${WEGENT_EXECUTOR_WORKSPACE:-${HOME}/wecode-bot}"
 
+# Host persistent repo root (fixed sibling directory; not configurable)
+WEGENT_ROOT_HOST="${ROOT_DIR}"
+PERSIST_REPO_ROOT="$(realpath "${ROOT_DIR}/../wegent_repos")"
+WEGENT_ROOT_REAL="$(realpath "${ROOT_DIR}")"
+PERSIST_PARENT_REAL="$(realpath "${ROOT_DIR}/..")"
+if [ "${PERSIST_REPO_ROOT}" != "${PERSIST_PARENT_REAL}/wegent_repos" ]; then
+  die "Invalid persistent repo root: ${PERSIST_REPO_ROOT}"
+fi
+if [[ "${PERSIST_REPO_ROOT}" == "${WEGENT_ROOT_REAL}"* ]]; then
+  die "Persistent repo root must not be inside Wegent root: ${PERSIST_REPO_ROOT}"
+fi
+mkdir -p "${PERSIST_REPO_ROOT}"
+
 # Docker image overrides (useful for forks publishing to GHCR)
 detect_image_prefix() {
   if [ -n "${WEGENT_IMAGE_PREFIX:-}" ]; then
@@ -781,6 +794,7 @@ main() {
         -e EXECUTOR_IMAGE="${EXECUTOR_IMAGE}"
         -e EXECUTOR_PORT_RANGE_MIN=10001
         -e EXECUTOR_PORT_RANGE_MAX=10100
+        -e WEGENT_ROOT_HOST="${WEGENT_ROOT_HOST}"
         -e EXECUTOR_WORKSPACE="${EXECUTOR_WORKSPACE}"
         -e EXECUTOR_WORKSPCE="${EXECUTOR_WORKSPACE}"
         -v /var/run/docker.sock:/var/run/docker.sock
