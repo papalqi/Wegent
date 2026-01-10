@@ -22,8 +22,8 @@ Usage: ./scripts/dev-host.sh [--dev|--prod] [--backend-port PORT] [--frontend-po
 This script restarts Backend + Frontend on the host and keeps Docker services untouched.
 
 Modes:
-  --dev   Start with hot reload (backend --reload, frontend next dev) [default]
-  --prod  Build frontend and start production servers (backend no reload, frontend next start)
+  --dev   Start with hot reload (backend --reload, frontend next dev)
+  --prod  Build frontend and start production servers (backend no reload, frontend next start) [default]
 
 Systemd:
   If wegent.service is running, this script will take over by stopping it with SIGKILL
@@ -77,7 +77,7 @@ load_env_file "${WEGENT_ENV_DEFAULTS_FILE:-${ROOT_DIR}/.env.defaults}"
 load_env_file "${WEGENT_ENV_FILE:-${ROOT_DIR}/.env}"
 load_env_file "${WEGENT_ENV_LOCAL_FILE:-${ROOT_DIR}/.env.local}"
 
-MODE="dev"
+MODE="prod"
 BACKEND_PORT="${WEGENT_BACKEND_PORT:-8000}"
 FRONTEND_PORT="${WEGENT_FRONTEND_PORT:-3000}"
 FRONTEND_HOST="${WEGENT_FRONTEND_HOST:-0.0.0.0}"

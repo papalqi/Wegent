@@ -53,6 +53,8 @@ def _run(
             list(cmd),
             cwd=str(cwd) if cwd else None,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             timeout=timeout_s,
             check=False,
@@ -61,10 +63,14 @@ def _run(
         return CmdResult(127, "", f"{exc}")
     except subprocess.TimeoutExpired as exc:
         stdout = (
-            exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+            exc.stdout.decode("utf-8", errors="replace")
+            if isinstance(exc.stdout, bytes)
+            else (exc.stdout or "")
         )
         stderr = (
-            exc.stderr.decode() if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+            exc.stderr.decode("utf-8", errors="replace")
+            if isinstance(exc.stderr, bytes)
+            else (exc.stderr or "")
         )
         return CmdResult(124, stdout, f"timeout after {timeout_s}s\n{stderr}")
 
