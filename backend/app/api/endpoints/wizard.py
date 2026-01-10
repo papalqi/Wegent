@@ -52,6 +52,130 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _get_header_value(
+    headers: dict[str, Any], header_name: str, default: str = ""
+) -> str:
+    """
+    Get a header value from a dict with case-insensitive key matching.
+
+    Args:
+        headers: Header dict
+        header_name: Header key to look for
+        default: Default value when not found
+
+    Returns:
+        Header value as string, or default
+    """
+    if not isinstance(headers, dict):
+        return default
+
+    target = header_name.lower()
+    for k, v in headers.items():
+        if isinstance(k, str) and k.lower() == target:
+            return str(v) if v is not None else default
+
+    return default
+
+
+def _has_auth_for_provider(model_config: dict[str, Any]) -> bool:
+    """
+    Determine if model_config contains any authentication material.
+
+    Notes:
+    - Prefer api_key when present.
+    - Allow provider-specific auth headers via default_headers for advanced setups.
+    """
+    if model_config.get("api_key"):
+        return True
+
+    default_headers = model_config.get("default_headers") or {}
+    if not isinstance(default_headers, dict):
+        return False
+
+    model_type = str(model_config.get("model", "openai") or "openai").lower()
+    if model_type == "claude":
+        return bool(_get_header_value(default_headers, "x-api-key"))
+    if model_type == "gemini":
+        return bool(_get_header_value(default_headers, "x-goog-api-key"))
+
+    # Default: OpenAI-compatible
+    return bool(_get_header_value(default_headers, "authorization"))
+
+
+def _is_known_official_endpoint(model_config: dict[str, Any]) -> bool:
+    """
+    Check if the base_url points to an official hosted provider endpoint.
+
+    This allows us to fail fast with a clearer error when api_key is missing,
+    while keeping compatibility with self-hosted OpenAI-compatible services
+    that may not require authentication.
+    """
+    model_type = str(model_config.get("model", "openai") or "openai").lower()
+    base_url = str(model_config.get("base_url", "") or "").lower()
+
+    if model_type == "claude":
+        return "api.anthropic.com" in base_url
+    if model_type == "gemini":
+        return "generativelanguage.googleapis.com" in base_url
+
+    # Default: OpenAI-compatible
+    return "api.openai.com" in base_url
+
+
+def _build_missing_api_key_detail(model_config: dict[str, Any]) -> str:
+    """
+    Build a user-facing error message for missing API key.
+    """
+    model_type = str(model_config.get("model", "openai") or "openai")
+    base_url = str(model_config.get("base_url", "") or "")
+    model_id = str(model_config.get("model_id", "") or "")
+
+    return (
+        "未检测到该模型的 API Key，无法调用大模型接口。"
+        f"(provider={model_type}, model_id={model_id or 'unknown'}, base_url={base_url or 'unknown'})\n"
+        "请先在「设置 → 模型」中为该模型配置 `api_key`，"
+        "或使用 `${ENV_VAR}` 占位符时确保后端环境变量已设置并重启后端。"
+    )
+
+
+def _looks_like_missing_api_key_error(error_text: str) -> bool:
+    """
+    Heuristically detect upstream 'missing API key' errors.
+
+    This is used as a fallback when base_url is not a known official endpoint.
+    """
+    if not error_text:
+        return False
+
+    text = str(error_text)
+
+    # Try structured parsing first (common for OpenAI-compatible error bodies).
+    try:
+        payload = json.loads(text)
+        message = ""
+        if isinstance(payload, dict):
+            err = payload.get("error")
+            if isinstance(err, dict):
+                message = str(err.get("message", "") or "")
+        if message:
+            lowered = message.lower()
+            if "api key" in lowered and (
+                "didn't provide" in lowered
+                or "provide your api key" in lowered
+                or "no api key" in lowered
+            ):
+                return True
+    except Exception:
+        pass
+
+    lowered = text.lower()
+    return ("api key" in lowered) and (
+        "didn't provide" in lowered
+        or "provide your api key" in lowered
+        or "no api key" in lowered
+    )
+
+
 def get_core_questions() -> List[CoreQuestion]:
     """Return simplified core questions for wizard step 1 - designed for non-technical users"""
     return [
@@ -211,6 +335,15 @@ async def _call_llm_for_wizard(
         f"has_api_key={bool(model_config.get('api_key'))}"
     )
 
+    # Fail fast when using official hosted endpoints without authentication.
+    if _is_known_official_endpoint(model_config) and not _has_auth_for_provider(
+        model_config
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=_build_missing_api_key_detail(model_config),
+        )
+
     # Use non-streaming chat
     try:
         response = await simple_chat_service.chat_completion(
@@ -221,6 +354,11 @@ async def _call_llm_for_wizard(
         return response
     except Exception as e:
         logger.error(f"[Wizard] LLM call failed: {e}")
+        if _looks_like_missing_api_key_error(str(e)):
+            raise HTTPException(
+                status_code=400,
+                detail=_build_missing_api_key_detail(model_config),
+            )
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate response: {str(e)}",
@@ -1084,6 +1222,14 @@ async def test_system_prompt(
             user_name=current_user.user_name or "",
         )
 
+        if _is_known_official_endpoint(model_config) and not _has_auth_for_provider(
+            model_config
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=_build_missing_api_key_detail(model_config),
+            )
+
         # Call the model with the user's system prompt and test message
         response = await simple_chat_service.chat_completion(
             message=request.test_message,
@@ -1205,6 +1351,14 @@ async def test_system_prompt_stream(
         user_id=current_user.id,
         user_name=current_user.user_name or "",
     )
+
+    if _is_known_official_endpoint(model_config) and not _has_auth_for_provider(
+        model_config
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=_build_missing_api_key_detail(model_config),
+        )
 
     # Use simple_chat_service.chat_stream in simple mode (no subtask_id/task_id)
     return await simple_chat_service.chat_stream(
