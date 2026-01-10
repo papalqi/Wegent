@@ -848,18 +848,28 @@ class ExecutorKindsService(
             )
 
             next_subtask = None
-            previous_assistant_result: Any = None
+            previous_assistant_result_for_prompt: Any = None
+            previous_assistant_result_for_session: Any = None
 
             user_prompt = ""
             user_subtask = None
             for i, related in enumerate(related_subtasks):
                 if related.role == SubtaskRole.USER:
                     user_prompt = related.prompt
-                    previous_assistant_result = None
+                    previous_assistant_result_for_prompt = None
                     user_subtask = related
                     continue
-                if related.message_id < subtask.message_id:
-                    previous_assistant_result = related.result
+                if (
+                    related.role == SubtaskRole.ASSISTANT
+                    and related.message_id < subtask.message_id
+                ):
+                    previous_assistant_result_for_prompt = related.result
+                    if (
+                        isinstance(related.bot_ids, list)
+                        and isinstance(subtask.bot_ids, list)
+                        and related.bot_ids == subtask.bot_ids
+                    ):
+                        previous_assistant_result_for_session = related.result
                 if related.message_id == subtask.message_id:
                     if i < len(related_subtasks) - 1:
                         next_subtask = related_subtasks[i + 1]
@@ -871,7 +881,9 @@ class ExecutorKindsService(
             if user_prompt:
                 aggregated_prompt = user_prompt
             # Previous subtask result
-            previous_value = _extract_result_value_for_prompt(previous_assistant_result)
+            previous_value = _extract_result_value_for_prompt(
+                previous_assistant_result_for_prompt
+            )
             if previous_value:
                 aggregated_prompt += f"\nPrevious execution result: {previous_value}"
             # Get task information from tasks table
@@ -1161,7 +1173,7 @@ class ExecutorKindsService(
                     resume_session_id = _extract_result_str_field(
                         subtask.result, "resume_session_id"
                     ) or _extract_result_str_field(
-                        previous_assistant_result, "resume_session_id"
+                        previous_assistant_result_for_session, "resume_session_id"
                     )
                     if resume_session_id:
                         session_payload["resume_session_id"] = resume_session_id
@@ -1172,7 +1184,7 @@ class ExecutorKindsService(
                     session_id = _extract_result_str_field(
                         subtask.result, "session_id"
                     ) or _extract_result_str_field(
-                        previous_assistant_result, "session_id"
+                        previous_assistant_result_for_session, "session_id"
                     )
                     session_payload["session_id"] = session_id or str(subtask.task_id)
 

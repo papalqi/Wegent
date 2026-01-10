@@ -199,6 +199,7 @@ Environment variables (optional):
   WEGENT_PUBLIC_HOST (default: localhost; use 'auto' to detect), WEGENT_PUBLIC_SCHEME (default: http)
   WEGENT_FRONTEND_HOST (default: 0.0.0.0; set to 127.0.0.1 to restrict to local only)
   WEGENT_MYSQL_PORT, WEGENT_REDIS_PORT, WEGENT_ELASTICSEARCH_PORT (must match docker-compose.yml port mapping)
+  WEGENT_REDIS_IMAGE (default: redis:7; e.g. ghcr.io/valkey-io/valkey:latest)
   WEGENT_ENABLE_RAG, WEGENT_EXECUTOR_WORKSPACE, WEGENT_FRONTEND_DEV_MODE
   WEGENT_IMAGE_PREFIX, WEGENT_EXECUTOR_MANAGER_IMAGE, WEGENT_EXECUTOR_IMAGE
   WEGENT_EXECUTOR_MANAGER_VERSION, WEGENT_EXECUTOR_VERSION

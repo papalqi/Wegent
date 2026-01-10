@@ -291,3 +291,37 @@ def test_executor_kinds_force_claude_new_session_when_resume_flag_disabled(
     session_id = payload["session_id"]
     assert session_id != "session_old"
     uuid.UUID(session_id)
+
+
+def test_executor_kinds_propagates_codex_resume_session_id_across_turns(
+    test_db: Session,
+    test_user: User,
+) -> None:
+    target = _seed_code_shell_task(
+        test_db,
+        user=test_user,
+        shell_type="Codex",
+        previous_session_field={"resume_session_id": "thread_123"},
+    )
+
+    svc = ExecutorKindsService(None)
+    payload = svc._format_subtasks_response(test_db, [target])["tasks"][0]
+
+    assert payload["resume_session_id"] == "thread_123"
+
+
+def test_executor_kinds_propagates_claude_session_id_across_turns(
+    test_db: Session,
+    test_user: User,
+) -> None:
+    target = _seed_code_shell_task(
+        test_db,
+        user=test_user,
+        shell_type="ClaudeCode",
+        previous_session_field={"session_id": "session_old"},
+    )
+
+    svc = ExecutorKindsService(None)
+    payload = svc._format_subtasks_response(test_db, [target])["tasks"][0]
+
+    assert payload["session_id"] == "session_old"
