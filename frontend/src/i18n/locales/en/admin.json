@@ -6,6 +6,7 @@
     "public_models": "Public Models",
     "public_retrievers": "Public Retrievers",
     "public_skills": "Public Skills",
+    "custom_config_models": "Internal Models",
     "api_keys": "API Keys",
     "system_config": "System Config",
     "database": "Database"
@@ -24,6 +25,52 @@
     "delete": "Delete",
     "reset": "Reset",
     "loading": "Loading..."
+  },
+  "custom_config_models": {
+    "title": "Internal Models",
+    "description": "Manage hidden custom-config models (spec.isCustomConfig=true). API keys are never shown here.",
+    "total_label": "Total: {{total}}",
+    "search_placeholder": "Search model/user...",
+    "search": "Search",
+    "show_inactive": "Show inactive",
+    "cleanup_orphans": "Cleanup orphans",
+    "no_models": "No internal models found",
+    "user_id": "User ID",
+    "namespace_label": "Namespace",
+    "model_id": "Model ID",
+    "base_url": "Base URL",
+    "referenced_by_bots": "Refs: {{count}} bot(s)",
+    "api_key_status": {
+      "empty": "No Key",
+      "placeholder": "Placeholder",
+      "set": "Set",
+      "unknown": "Unknown"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "delete_model": "Delete",
+    "force_delete": "Force delete (may break bots)",
+    "cleaned_result": "Deleted {{count}} model(s)",
+    "success": {
+      "deleted": "Model deleted",
+      "cleaned": "Cleanup completed"
+    },
+    "errors": {
+      "load_failed": "Failed to load internal models",
+      "delete_failed": "Failed to delete model",
+      "cleanup_preview_failed": "Failed to preview cleanup",
+      "cleanup_failed": "Cleanup failed"
+    },
+    "confirm": {
+      "delete_title": "Delete internal model",
+      "delete_message": "Delete \"{{name}}\"? This action may break bots referencing it.",
+      "referenced_warning": "This model is referenced by {{count}} active bot(s). Enable force delete to proceed.",
+      "cleanup_title": "Cleanup orphan internal models",
+      "cleanup_loading": "Loading preview...",
+      "cleanup_message": "This will delete {{count}} orphan model(s) not referenced by any active bot. Continue?"
+    }
   },
   "users": {
     "title": "User Management",

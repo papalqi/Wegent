@@ -105,6 +105,52 @@ class PublicModelListResponse(BaseModel):
     items: List[PublicModelResponse]
 
 
+# Custom Config Model Management Schemas
+class AdminCustomConfigModelRefBot(BaseModel):
+    """Reference bot info for a custom config model"""
+
+    id: int
+    user_id: int
+    namespace: str
+    name: str
+
+
+class AdminCustomConfigModelResponse(BaseModel):
+    """Admin custom config model response (sanitized)"""
+
+    id: int
+    user_id: int
+    user_name: Optional[str] = None
+    namespace: str
+    name: str
+    provider: Optional[str] = None
+    model_id: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key_status: Literal["EMPTY", "PLACEHOLDER", "SET", "UNKNOWN"] = "UNKNOWN"
+    referenced_by_bots: int = 0
+    referenced_bots: List[AdminCustomConfigModelRefBot] = Field(default_factory=list)
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AdminCustomConfigModelListResponse(BaseModel):
+    """Admin custom config model list response model"""
+
+    total: int
+    items: List[AdminCustomConfigModelResponse]
+
+
+class AdminCustomConfigModelCleanupResponse(BaseModel):
+    """Admin custom config model cleanup response model"""
+
+    candidates: int
+    deleted: int
+
+
 # System Stats Schemas
 class SystemStats(BaseModel):
     """System statistics model"""

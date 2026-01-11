@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import (
@@ -34,6 +35,10 @@ from app.models.kind import Kind
 from app.models.system_config import SystemConfig
 from app.models.user import User
 from app.schemas.admin import (
+    AdminCustomConfigModelCleanupResponse,
+    AdminCustomConfigModelListResponse,
+    AdminCustomConfigModelRefBot,
+    AdminCustomConfigModelResponse,
     AdminUserCreate,
     AdminUserListResponse,
     AdminUserResponse,
@@ -69,6 +74,68 @@ from app.services.user import user_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _is_truthy(value: Any) -> bool:
+    if value is True:
+        return True
+    if value is False or value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value == 1
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes"}
+    return False
+
+
+def _is_custom_config_model_json(model_json: Any) -> bool:
+    if not isinstance(model_json, dict):
+        return False
+    spec = model_json.get("spec") or {}
+    if not isinstance(spec, dict):
+        return False
+    return _is_truthy(spec.get("isCustomConfig"))
+
+
+def _extract_model_env(model_json: Dict[str, Any]) -> Dict[str, Any]:
+    spec = model_json.get("spec") or {}
+    if not isinstance(spec, dict):
+        return {}
+    model_config = spec.get("modelConfig") or {}
+    if not isinstance(model_config, dict):
+        return {}
+    env = model_config.get("env") or {}
+    return env if isinstance(env, dict) else {}
+
+
+def _get_api_key_status(api_key: Any) -> str:
+    if api_key is None:
+        return "EMPTY"
+    if not isinstance(api_key, str):
+        return "UNKNOWN"
+    if not api_key.strip():
+        return "EMPTY"
+    if "${" in api_key:
+        return "PLACEHOLDER"
+    return "SET"
+
+
+def _get_bot_model_ref(bot_json: Any) -> Optional[tuple[str, str]]:
+    if not isinstance(bot_json, dict):
+        return None
+    spec = bot_json.get("spec") or {}
+    if not isinstance(spec, dict):
+        return None
+    model_ref = spec.get("modelRef") or {}
+    if not isinstance(model_ref, dict):
+        return None
+    name = model_ref.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    namespace = model_ref.get("namespace") or "default"
+    if not isinstance(namespace, str) or not namespace.strip():
+        namespace = "default"
+    return (namespace, name.strip())
 
 
 # ==================== User Management Endpoints ====================
@@ -637,6 +704,234 @@ async def delete_public_model(
     db.commit()
 
     return None
+
+
+# ==================== Custom Config Model Management Endpoints ====================
+
+
+@router.get("/custom-config-models", response_model=AdminCustomConfigModelListResponse)
+async def list_custom_config_models(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=500),
+    include_inactive: bool = Query(False),
+    search: Optional[str] = Query(
+        None, description="Search by model name, user name, or user id"
+    ),
+    references_limit: int = Query(5, ge=0, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    List internal custom config models (spec.isCustomConfig=True).
+
+    Notes:
+    - These models are intentionally hidden from the unified model list and are
+      typically created by advanced configuration flows.
+    - Response is sanitized and never includes api_key or custom headers.
+    """
+    query = db.query(Kind).filter(Kind.kind == "Model")
+    if not include_inactive:
+        query = query.filter(Kind.is_active == True)
+
+    models = [m for m in query.all() if _is_custom_config_model_json(m.json)]
+
+    user_ids = {
+        m.user_id for m in models if isinstance(m.user_id, int) and m.user_id > 0
+    }
+    user_name_by_id: Dict[int, str] = {}
+    if user_ids:
+        users = db.query(User).filter(User.id.in_(user_ids)).all()
+        user_name_by_id = {u.id: u.user_name for u in users}
+
+    if search:
+        needle = search.strip().lower()
+        if needle:
+            filtered = []
+            for m in models:
+                if needle in (m.name or "").lower():
+                    filtered.append(m)
+                    continue
+                if needle in str(m.user_id):
+                    filtered.append(m)
+                    continue
+                user_name = user_name_by_id.get(m.user_id, "")
+                if needle and needle in user_name.lower():
+                    filtered.append(m)
+            models = filtered
+
+    models.sort(key=lambda m: m.updated_at or m.created_at, reverse=True)
+    total = len(models)
+
+    start = (page - 1) * limit
+    end = start + limit
+    page_models = models[start:end]
+
+    active_bots = (
+        db.query(Kind).filter(Kind.kind == "Bot", Kind.is_active == True).all()
+    )
+    referenced_by: Dict[tuple[str, str], List[AdminCustomConfigModelRefBot]] = {}
+    for bot in active_bots:
+        model_ref = _get_bot_model_ref(bot.json)
+        if not model_ref:
+            continue
+        referenced_by.setdefault(model_ref, []).append(
+            AdminCustomConfigModelRefBot(
+                id=bot.id,
+                user_id=bot.user_id,
+                namespace=bot.namespace,
+                name=bot.name,
+            )
+        )
+
+    items: List[AdminCustomConfigModelResponse] = []
+    for model in page_models:
+        model_json = model.json or {}
+        env = _extract_model_env(model_json) if isinstance(model_json, dict) else {}
+        api_key_status = _get_api_key_status(env.get("api_key"))
+
+        ref_key = (model.namespace, model.name)
+        refs = referenced_by.get(ref_key, [])
+        items.append(
+            AdminCustomConfigModelResponse(
+                id=model.id,
+                user_id=model.user_id,
+                user_name=user_name_by_id.get(model.user_id),
+                namespace=model.namespace,
+                name=model.name,
+                provider=(
+                    env.get("model") if isinstance(env.get("model"), str) else None
+                ),
+                model_id=(
+                    env.get("model_id")
+                    if isinstance(env.get("model_id"), str)
+                    else None
+                ),
+                base_url=(
+                    env.get("base_url")
+                    if isinstance(env.get("base_url"), str)
+                    else None
+                ),
+                api_key_status=api_key_status,
+                referenced_by_bots=len(refs),
+                referenced_bots=refs[:references_limit] if references_limit else [],
+                is_active=model.is_active,
+                created_at=model.created_at,
+                updated_at=model.updated_at,
+            )
+        )
+
+    return AdminCustomConfigModelListResponse(total=total, items=items)
+
+
+@router.delete(
+    "/custom-config-models/{model_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_custom_config_model(
+    model_id: int = Path(..., description="Model ID"),
+    force: bool = Query(False, description="Force deletion even if referenced by bots"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Delete a custom config model (admin only).
+
+    By default, deletion is blocked when the model is referenced by any active bot.
+    Use force=true to override.
+    """
+    model = db.query(Kind).filter(Kind.id == model_id, Kind.kind == "Model").first()
+    if not model or not _is_custom_config_model_json(model.json):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Custom config model with id {model_id} not found",
+        )
+
+    active_bots = (
+        db.query(Kind).filter(Kind.kind == "Bot", Kind.is_active == True).all()
+    )
+    references: List[str] = []
+    for bot in active_bots:
+        model_ref = _get_bot_model_ref(bot.json)
+        if not model_ref:
+            continue
+        if model_ref == (model.namespace, model.name):
+            references.append(f"{bot.namespace}/{bot.name}")
+
+    if references and not force:
+        preview = ", ".join(references[:10])
+        more = ""
+        if len(references) > 10:
+            more = f" (+{len(references) - 10} more)"
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Custom config model is referenced by {len(references)} active bot(s): "
+                f"{preview}{more}. Use force=true to delete."
+            ),
+        )
+
+    db.delete(model)
+    db.commit()
+    return None
+
+
+@router.post(
+    "/custom-config-models/cleanup-orphans",
+    response_model=AdminCustomConfigModelCleanupResponse,
+)
+async def cleanup_orphan_custom_config_models(
+    dry_run: bool = Query(
+        True, description="Only compute how many models would be deleted"
+    ),
+    older_than_days: int = Query(
+        0, ge=0, le=3650, description="Only delete models older than N days"
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Cleanup orphan custom config models (not referenced by any active bot).
+
+    Notes:
+    - This endpoint never touches non-custom models.
+    - Use older_than_days to avoid deleting recently created configs.
+    """
+    models = db.query(Kind).filter(Kind.kind == "Model", Kind.is_active == True).all()
+    custom_models = [m for m in models if _is_custom_config_model_json(m.json)]
+
+    active_bots = (
+        db.query(Kind).filter(Kind.kind == "Bot", Kind.is_active == True).all()
+    )
+    referenced_keys: set[tuple[str, str]] = set()
+    for bot in active_bots:
+        model_ref = _get_bot_model_ref(bot.json)
+        if model_ref:
+            referenced_keys.add(model_ref)
+
+    now = datetime.utcnow()
+    cutoff: Optional[datetime] = None
+    if older_than_days:
+        cutoff = now - timedelta(days=older_than_days)
+
+    orphans: List[Kind] = []
+    for model in custom_models:
+        if (model.namespace, model.name) in referenced_keys:
+            continue
+        model_time = model.updated_at or model.created_at
+        if cutoff and model_time and model_time > cutoff:
+            continue
+        orphans.append(model)
+
+    deleted = 0
+    if not dry_run and orphans:
+        for model in orphans:
+            db.delete(model)
+            deleted += 1
+        db.commit()
+
+    return AdminCustomConfigModelCleanupResponse(
+        candidates=len(orphans),
+        deleted=deleted if not dry_run else 0,
+    )
 
 
 # ==================== System Stats Endpoint ====================

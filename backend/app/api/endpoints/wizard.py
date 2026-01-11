@@ -77,6 +77,25 @@ def _get_header_value(
     return default
 
 
+def _is_custom_config_model_kind(model_kind: Kind) -> bool:
+    """
+    Determine whether a Kind(Model) is a private custom config model.
+
+    Notes:
+    - Custom config models (spec.isCustomConfig=True) are internal-only and are
+      intentionally hidden from the unified model list used by the frontend.
+    - Wizard should not pick these models automatically.
+    """
+    if not model_kind or not isinstance(model_kind.json, dict):
+        return False
+
+    spec = model_kind.json.get("spec") or {}
+    if not isinstance(spec, dict):
+        return False
+
+    return spec.get("isCustomConfig") is True
+
+
 def _has_auth_for_provider(model_config: dict[str, Any]) -> bool:
     """
     Determine if model_config contains any authentication material.
@@ -275,8 +294,10 @@ async def _call_llm_for_wizard(
                 Kind.kind == "Model",
                 Kind.is_active == True,
             )
+            .order_by(Kind.updated_at.desc())
             .all()
         )
+        user_models = [m for m in user_models if not _is_custom_config_model_kind(m)]
         logger.info(
             f"[Wizard] Found {len(user_models)} user models: {[m.name for m in user_models]}"
         )
@@ -294,6 +315,7 @@ async def _call_llm_for_wizard(
                 Kind.kind == "Model",
                 Kind.is_active == True,
             )
+            .order_by(Kind.updated_at.desc())
             .all()
         )
         logger.info(
@@ -1190,8 +1212,12 @@ async def test_system_prompt(
                         Kind.kind == "Model",
                         Kind.is_active == True,
                     )
+                    .order_by(Kind.updated_at.desc())
                     .all()
                 )
+                user_models = [
+                    m for m in user_models if not _is_custom_config_model_kind(m)
+                ]
                 if user_models:
                     model_kind = user_models[0]
 
@@ -1203,6 +1229,7 @@ async def test_system_prompt(
                         Kind.kind == "Model",
                         Kind.is_active == True,
                     )
+                    .order_by(Kind.updated_at.desc())
                     .all()
                 )
                 if public_models:
@@ -1306,8 +1333,10 @@ def _get_model_for_wizard(
             Kind.kind == "Model",
             Kind.is_active == True,
         )
+        .order_by(Kind.updated_at.desc())
         .all()
     )
+    user_models = [m for m in user_models if not _is_custom_config_model_kind(m)]
     if user_models:
         return user_models[0]
 
@@ -1319,6 +1348,7 @@ def _get_model_for_wizard(
             Kind.kind == "Model",
             Kind.is_active == True,
         )
+        .order_by(Kind.updated_at.desc())
         .all()
     )
     if public_models:

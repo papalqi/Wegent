@@ -6,6 +6,7 @@
     "public_models": "公共模型",
     "public_retrievers": "公共检索引擎",
     "public_skills": "公共技能",
+    "custom_config_models": "内部模型清理",
     "api_keys": "密钥管理",
     "system_config": "系统配置",
     "database": "数据库管理"
@@ -24,6 +25,52 @@
     "delete": "删除",
     "reset": "重置",
     "loading": "加载中..."
+  },
+  "custom_config_models": {
+    "title": "内部模型清理",
+    "description": "管理隐藏的自定义配置模型（spec.isCustomConfig=true）。此处不会展示任何 API Key。",
+    "total_label": "总计：{{total}}",
+    "search_placeholder": "搜索模型/用户...",
+    "search": "搜索",
+    "show_inactive": "显示已停用",
+    "cleanup_orphans": "清理孤儿模型",
+    "no_models": "暂无内部模型",
+    "user_id": "用户 ID",
+    "namespace_label": "命名空间",
+    "model_id": "模型 ID",
+    "base_url": "Base URL",
+    "referenced_by_bots": "引用：{{count}} 个 Bot",
+    "api_key_status": {
+      "empty": "未配置 Key",
+      "placeholder": "占位符",
+      "set": "已配置",
+      "unknown": "未知"
+    },
+    "status": {
+      "active": "启用",
+      "inactive": "停用"
+    },
+    "delete_model": "删除",
+    "force_delete": "强制删除（可能导致 Bot 失效）",
+    "cleaned_result": "已删除 {{count}} 个模型",
+    "success": {
+      "deleted": "模型已删除",
+      "cleaned": "清理完成"
+    },
+    "errors": {
+      "load_failed": "加载内部模型失败",
+      "delete_failed": "删除模型失败",
+      "cleanup_preview_failed": "获取清理预览失败",
+      "cleanup_failed": "清理失败"
+    },
+    "confirm": {
+      "delete_title": "删除内部模型",
+      "delete_message": "确定删除「{{name}}」吗？该操作可能导致引用它的 Bot 无法使用。",
+      "referenced_warning": "该模型被 {{count}} 个启用状态的 Bot 引用。开启“强制删除”才可继续。",
+      "cleanup_title": "清理孤儿内部模型",
+      "cleanup_loading": "正在加载预览...",
+      "cleanup_message": "将删除 {{count}} 个未被任何启用 Bot 引用的孤儿模型，是否继续？"
+    }
   },
   "users": {
     "title": "用户管理",
