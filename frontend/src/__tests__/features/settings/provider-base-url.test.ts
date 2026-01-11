@@ -15,6 +15,18 @@ describe('provider-base-url', () => {
       );
     });
 
+    it('does not append /v1 when input ends with #', () => {
+      expect(normalizeProviderBaseUrl('openai', 'https://example.com#')).toBe(
+        'https://example.com'
+      );
+      expect(normalizeProviderBaseUrl('openai', 'https://example.com/#')).toBe(
+        'https://example.com'
+      );
+      expect(normalizeProviderBaseUrl('openai', 'https://example.com/v1#')).toBe(
+        'https://example.com/v1'
+      );
+    });
+
     it('keeps /v1 and trims trailing slashes', () => {
       expect(normalizeProviderBaseUrl('openai', 'http://localhost:8000/v1/')).toBe(
         'http://localhost:8000/v1'
@@ -31,6 +43,12 @@ describe('provider-base-url', () => {
   describe('getProviderBaseUrlResolvedForDisplay', () => {
     it('returns default resolved base url when input is empty', () => {
       expect(getProviderBaseUrlResolvedForDisplay('openai', '')).toBe('https://api.openai.com/v1');
+    });
+
+    it('respects # marker to disable /v1 for display', () => {
+      expect(getProviderBaseUrlResolvedForDisplay('openai', 'https://example.com#')).toBe(
+        'https://example.com'
+      );
     });
   });
 });

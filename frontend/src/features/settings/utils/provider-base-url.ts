@@ -3,10 +3,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 export function normalizeProviderBaseUrl(providerType: string, baseUrlInput: string): string {
-  const trimmed = (baseUrlInput || '').trim().replace(/\/+$/, '');
+  const raw = (baseUrlInput || '').trim();
+  if (!raw) return '';
+
+  const disableV1Suffix = raw.endsWith('#');
+  const withoutMarker = disableV1Suffix ? raw.slice(0, -1) : raw;
+  const trimmed = withoutMarker.replace(/\/+$/, '');
   if (!trimmed) return '';
 
   if (providerType === 'openai' || providerType === 'openai-responses') {
+    if (disableV1Suffix) return trimmed;
     return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
   }
 

@@ -44,6 +44,32 @@ def test_provider_models_success(test_client, test_token, mocker):
     assert data["model_ids"] == ["gpt-4o", "text-embedding-3-large"]
 
 
+def test_provider_models_respects_hash_suffix(test_client, test_token, mocker):
+    async_get = AsyncMock(
+        return_value=httpx.Response(
+            200,
+            request=httpx.Request("GET", "https://example.com/models"),
+            json={"data": [{"id": "gpt-4o"}]},
+        )
+    )
+    mocker.patch("httpx.AsyncClient.get", async_get)
+
+    resp = test_client.post(
+        "/api/models/provider-models",
+        headers=_auth_headers(test_token),
+        json={
+            "provider_type": "openai",
+            "base_url": "https://example.com#",
+            "api_key": "sk-test",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["base_url_resolved"] == "https://example.com"
+    assert data["model_ids"] == ["gpt-4o"]
+
+
 def test_provider_models_invalid_base_url(test_client, test_token):
     resp = test_client.post(
         "/api/models/provider-models",

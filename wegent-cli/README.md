@@ -169,6 +169,28 @@ spec:
   skills: []
 ```
 
+### Model
+
+```yaml
+apiVersion: agent.wecode.io/v1
+kind: Model
+metadata:
+  name: my-model
+  namespace: default
+spec:
+  modelConfig:
+    env:
+      model: openai
+      model_id: gpt-4o-mini
+      # Use ${ENV_VAR} to avoid storing raw secrets in the DB/YAML file.
+      api_key: ${OPENAI_API_KEY}
+      base_url: https://api.openai.com/v1
+  protocol: openai
+  isCustomConfig: true
+status:
+  state: Available
+```
+
 ### Bot
 
 ```yaml
@@ -182,7 +204,10 @@ spec:
     name: my-ghost
     namespace: default
   shellRef:
-    name: claude-code
+    name: ClaudeCode
+    namespace: default
+  modelRef:
+    name: my-model
     namespace: default
 ```
 

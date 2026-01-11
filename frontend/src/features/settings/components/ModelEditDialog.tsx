@@ -317,6 +317,11 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
     return getProviderBaseUrlResolvedForDisplay(providerType, baseUrl);
   }, [providerType, baseUrl]);
 
+  const baseUrlRawForAdapterRequest = React.useMemo(() => {
+    const trimmed = baseUrl.trim();
+    return trimmed || undefined;
+  }, [baseUrl]);
+
   const baseUrlResolvedForRequest = React.useMemo(() => {
     if (!baseUrl.trim()) return undefined;
     const resolved = normalizeProviderBaseUrl(providerType, baseUrl);
@@ -379,7 +384,7 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
       const result = await modelApis.getProviderModels({
         provider_type: providerType,
         api_key: apiKey,
-        base_url: baseUrlResolvedForRequest,
+        base_url: baseUrlRawForAdapterRequest,
         custom_headers: Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
       });
 
@@ -436,7 +441,7 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
           provider_type: providerType,
           model_id: finalModelId,
           api_key: apiKey,
-          base_url: baseUrlResolvedForRequest,
+          base_url: baseUrlRawForAdapterRequest,
           custom_headers: Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
           probe_targets: probeTargets,
         });

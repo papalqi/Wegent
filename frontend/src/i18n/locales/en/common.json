@@ -762,7 +762,7 @@
     "provider_hint": "Agno uses OpenAI protocol, Claude Code uses Anthropic protocol, Gemini uses Google protocol",
     "api_key": "API Key",
     "base_url": "Base URL",
-    "base_url_hint": "Leave empty for default endpoint, fill in for proxy or custom endpoint",
+    "base_url_hint": "Leave empty for default endpoint, fill in for proxy or custom endpoint. For OpenAI/OpenAI-Responses: end with # to disable auto-appending /v1",
     "base_url_resolved": "Resolved URL",
     "model_id": "Model ID",
     "select_model_id": "Select Model ID",
