@@ -540,28 +540,21 @@ def _extract_model_config(model_spec: Dict[str, Any]) -> Dict[str, Any]:
         f"[model_resolver] _extract_model_config: DEFAULT_HEADERS keys = {list(default_headers.keys()) if default_headers else 'empty'}"
     )
 
-    # Log extracted values (mask API key)
-    masked_key = (
-        f"{api_key[:8]}...{api_key[-4:]}"
-        if api_key and len(api_key) > 12
-        else ("***" if api_key else "EMPTY")
-    )
+    # Log extracted values (do NOT log any API key material)
+    if not api_key:
+        api_key_state = "EMPTY"
+    elif "${" in api_key:
+        api_key_state = "PLACEHOLDER"
+    else:
+        api_key_state = "SET"
     logger.info(
-        f"[model_resolver] _extract_model_config: api_key={masked_key}, base_url={base_url}, model_id={model_id}, model_type={model_type}"
+        f"[model_resolver] _extract_model_config: api_key={api_key_state}, base_url={base_url}, model_id={model_id}, model_type={model_type}"
     )
 
     # Decrypt API key if encrypted (only if it doesn't look like a placeholder)
     if api_key and "${" not in api_key:
         try:
             decrypted_key = decrypt_api_key(api_key)
-            masked_decrypted = (
-                f"{decrypted_key[:8]}...{decrypted_key[-4:]}"
-                if decrypted_key and len(decrypted_key) > 12
-                else ("***" if decrypted_key else "EMPTY")
-            )
-            logger.info(
-                f"[model_resolver] _extract_model_config: decrypted api_key={masked_decrypted}"
-            )
             api_key = decrypted_key
         except Exception as e:
             logger.warning(f"Failed to decrypt API key, using as-is: {e}")

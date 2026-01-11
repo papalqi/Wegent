@@ -177,6 +177,10 @@ EXECUTOR_MANAGER_IMAGE="${WEGENT_EXECUTOR_MANAGER_IMAGE:-${IMAGE_PREFIX}/wegent-
 # Default to Codex-enabled tag to avoid per-release version bumps.
 EXECUTOR_IMAGE="${WEGENT_EXECUTOR_IMAGE:-${IMAGE_PREFIX}/wegent-executor:${WEGENT_EXECUTOR_VERSION:-latest-codex}}"
 
+# When an image tag is missing locally, prefer pulling it from the registry (faster than local builds).
+# Fall back to local build if pull fails (e.g., tag not published, offline).
+PULL_MISSING_IMAGES="${WEGENT_PULL_MISSING_IMAGES:-true}"
+
 BACKEND_PGID=""
 FRONTEND_PGID=""
 CLEANUP_ARMED="false"
@@ -205,7 +209,7 @@ Options:
   --dev                          Start frontend in development mode (skip build, use next dev)
   -h, --help                     Show help
 
-Environment variables (optional):
+  Environment variables (optional):
   WEGENT_FRONTEND_PORT, WEGENT_BACKEND_PORT, WEGENT_EXECUTOR_MANAGER_PORT
   WEGENT_PUBLIC_HOST (default: localhost; use 'auto' to detect), WEGENT_PUBLIC_SCHEME (default: http)
   WEGENT_FRONTEND_HOST (default: 0.0.0.0; set to 127.0.0.1 to restrict to local only)
@@ -215,6 +219,7 @@ Environment variables (optional):
   WEGENT_PERSIST_REPO_ROOT (host path for persistent repos; default: ../wegent_repos; must be outside Wegent root)
   WEGENT_IMAGE_PREFIX, WEGENT_EXECUTOR_MANAGER_IMAGE, WEGENT_EXECUTOR_IMAGE
   WEGENT_EXECUTOR_MANAGER_VERSION, WEGENT_EXECUTOR_VERSION
+  WEGENT_PULL_MISSING_IMAGES (default: true; pull images when missing locally)
   REDIS_PASSWORD (required for docker-compose.yml redis auth; auto-generated if missing)
 EOF
 }
@@ -507,6 +512,15 @@ maybe_build_image() {
   old_id="$(docker image inspect "$image" -f '{{.Id}}' 2>/dev/null || true)"
 
   local built="false"
+  if [ "$image_ts" -eq 0 ] && [ "${PULL_MISSING_IMAGES}" = "true" ]; then
+    echo -e "${YELLOW}  ${label} image not found locally, pulling ${image}...${NC}"
+    if docker pull "$image"; then
+      echo -e "${GREEN}  Pulled ${label} image: ${image}${NC}"
+      printf -v "$flag_var" '%s' "$built"
+      return 0
+    fi
+    echo -e "${YELLOW}  Pull failed, falling back to local build for ${label}.${NC}"
+  fi
   if [ "$image_ts" -lt "$source_ts" ] || [ "$image_ts" -eq 0 ]; then
     echo -e "${YELLOW}  Building ${label} image from local source (tag: ${image})...${NC}"
     ensure_dockerfile_base_images "$dockerfile"

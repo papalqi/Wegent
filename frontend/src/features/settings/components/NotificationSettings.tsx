@@ -18,6 +18,14 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { modelApis } from '@/apis/models';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useUser } from '@/features/common/UserContext';
 import { userApis } from '@/apis/user';
 import type { UserPreferences } from '@/types/api';
@@ -31,6 +39,8 @@ export default function NotificationSettings() {
   const [supported, setSupported] = useState(true);
   const [sendKey, setSendKey] = useState<'enter' | 'cmd_enter'>('enter');
   const [searchKey, setSearchKey] = useState<'cmd_k' | 'cmd_f' | 'disabled'>('cmd_k');
+  const [wizardModelName, setWizardModelName] = useState('');
+  const [wizardModels, setWizardModels] = useState<Array<{ name: string; label: string }>>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -45,10 +55,39 @@ export default function NotificationSettings() {
     if (user) {
       const userSendKey = user.preferences?.send_key || 'enter';
       const userSearchKey = user.preferences?.search_key || 'cmd_k';
+      const userWizardModelName = user.preferences?.wizard_model_name || '';
       setSendKey(userSendKey);
       setSearchKey(userSearchKey);
+      setWizardModelName(userWizardModelName);
     }
   }, [user]);
+
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        const response = await modelApis.getUnifiedModels(
+          undefined,
+          false,
+          'personal',
+          undefined,
+          'llm'
+        );
+        const items = response.data || [];
+
+        const mapped = items.map(m => ({
+          name: m.name,
+          label: m.displayName || m.name,
+        }));
+
+        setWizardModels(mapped);
+      } catch (error) {
+        console.error('Failed to fetch models for wizard settings:', error);
+        setWizardModels([]);
+      }
+    };
+
+    fetchModels();
+  }, []);
 
   const handleToggle = async () => {
     if (!supported) {
@@ -124,6 +163,34 @@ export default function NotificationSettings() {
       });
       // Revert to previous value
       setSearchKey(user?.preferences?.search_key || 'cmd_k');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleWizardModelChange = async (value: string) => {
+    const nextModelName = value === '__auto__' ? '' : value;
+    setWizardModelName(nextModelName);
+    setIsSaving(true);
+
+    try {
+      const preferences: UserPreferences = {
+        send_key: user?.preferences?.send_key || 'enter',
+        search_key: user?.preferences?.search_key || 'cmd_k',
+        wizard_model_name: nextModelName,
+      };
+      await userApis.updateUser({ preferences });
+      await refresh();
+      toast({
+        title: t('common:wizard_model.save_success'),
+      });
+    } catch (error) {
+      console.error('Failed to save wizard model preference:', error);
+      toast({
+        variant: 'destructive',
+        title: t('common:wizard_model.save_failed'),
+      });
+      setWizardModelName(user?.preferences?.wizard_model_name || '');
     } finally {
       setIsSaving(false);
     }
@@ -223,6 +290,33 @@ export default function NotificationSettings() {
             </Label>
           </div>
         </RadioGroup>
+      </div>
+
+      {/* Wizard Model Setting */}
+      <div className="p-4 bg-base border border-border rounded-lg">
+        <div className="mb-3">
+          <h3 className="text-sm font-medium text-text-primary">
+            {t('common:wizard_model.title')}
+          </h3>
+          <p className="text-xs text-text-muted mt-1">{t('common:wizard_model.description')}</p>
+        </div>
+        <Select
+          value={wizardModelName || '__auto__'}
+          onValueChange={handleWizardModelChange}
+          disabled={isSaving}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder={t('common:wizard_model.placeholder')} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__auto__">{t('common:wizard_model.option_auto')}</SelectItem>
+            {wizardModels.map(m => (
+              <SelectItem key={m.name} value={m.name}>
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Restart Onboarding Button */}

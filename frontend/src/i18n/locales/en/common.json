@@ -553,6 +553,14 @@
     "save_success": "Search shortcut key saved",
     "save_failed": "Failed to save search shortcut key"
   },
+  "wizard_model": {
+    "title": "Wizard Model",
+    "description": "Model used by the “Create Agent” wizard (follow-ups, recommendations, prompt generation, etc.)",
+    "placeholder": "Select a model",
+    "option_auto": "Auto select (most recently updated model)",
+    "save_success": "Wizard model saved",
+    "save_failed": "Failed to save wizard model"
+  },
   "guide": {
     "title": "Welcome",
     "description": "Before you can start using the app, please complete the setup below first!",

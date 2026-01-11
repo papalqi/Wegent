@@ -96,6 +96,38 @@ def _is_custom_config_model_kind(model_kind: Kind) -> bool:
     return spec.get("isCustomConfig") is True
 
 
+def _get_user_preferred_wizard_model_name(user: User) -> Optional[str]:
+    """
+    Get user's preferred wizard model name from user.preferences.
+
+    Notes:
+    - Stored as JSON string in DB; we keep parsing local to wizard.
+    - Empty / missing value means "auto-select".
+    """
+    if not user or not getattr(user, "preferences", None):
+        return None
+
+    prefs_raw = getattr(user, "preferences", None)
+    if not prefs_raw:
+        return None
+
+    prefs: dict[str, Any] = {}
+    if isinstance(prefs_raw, str):
+        try:
+            parsed = json.loads(prefs_raw)
+            prefs = parsed if isinstance(parsed, dict) else {}
+        except (json.JSONDecodeError, TypeError):
+            prefs = {}
+    elif isinstance(prefs_raw, dict):
+        prefs = prefs_raw
+
+    name = prefs.get("wizard_model_name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+
+    return None
+
+
 def _has_auth_for_provider(model_config: dict[str, Any]) -> bool:
     """
     Determine if model_config contains any authentication material.
@@ -248,95 +280,12 @@ async def _call_llm_for_wizard(
     Returns the LLM response as a string.
 
     Model selection priority:
-    1. If WIZARD_MODEL_NAME is configured, use that public model
-    2. Otherwise, try user's models first
-    3. Fall back to any available public model
+    1. Use user's preference: user.preferences.wizard_model_name
+    2. Use server configured model: WIZARD_MODEL_NAME (public model)
+    3. Auto-select: latest updated personal non-custom model
+    4. Fall back to any available public model
     """
-    model_kind = None
-
-    logger.info(
-        f"[Wizard] Looking for model. WIMODEL_NAME={settings.WIZARD_MODEL_NAME}, "
-        f"user_id={user.id}"
-    )
-
-    # Priority 1: Use configured wizard model if specified
-    if settings.WIZARD_MODEL_NAME:
-        logger.info(
-            f"[Wizard] Priority 1: Looking for configured model '{settings.WIZARD_MODEL_NAME}'"
-        )
-        model_kind = (
-            db.query(Kind)
-            .filter(
-                Kind.user_id == 0,  # Public model
-                Kind.kind == "Model",
-                Kind.name == settings.WIZARD_MODEL_NAME,
-                Kind.is_active == True,
-            )
-            .first()
-        )
-        if model_kind:
-            logger.info(f"[Wizard] Found configured model: {model_kind.name}")
-        else:
-            logger.warning(
-                f"[Wizard] Configured WIZARD_MODEL_NAME '{settings.WIZARD_MODEL_NAME}' not found, "
-                "falling back to other available models"
-            )
-
-    # Priority 2: Try user's models
-    if not model_kind:
-        logger.info(
-            f"[Wizard] Priority 2: Looking for user's models (user_id={user.id})"
-        )
-        user_models = (
-            db.query(Kind)
-            .filter(
-                Kind.user_id == user.id,
-                Kind.kind == "Model",
-                Kind.is_active == True,
-            )
-            .order_by(Kind.updated_at.desc())
-            .all()
-        )
-        user_models = [m for m in user_models if not _is_custom_config_model_kind(m)]
-        logger.info(
-            f"[Wizard] Found {len(user_models)} user models: {[m.name for m in user_models]}"
-        )
-        if user_models:
-            model_kind = user_models[0]
-            logger.info(f"[Wizard] Using user model: {model_kind.name}")
-
-    # Priority 3: Fall back to any public model
-    if not model_kind:
-        logger.info("[Wizard] Priority 3: Looking for any public model (user_id=0)")
-        public_models = (
-            db.query(Kind)
-            .filter(
-                Kind.user_id == 0,
-                Kind.kind == "Model",
-                Kind.is_active == True,
-            )
-            .order_by(Kind.updated_at.desc())
-            .all()
-        )
-        logger.info(
-            f"[Wizard] Found {len(public_models)} public models: {[m.name for m in public_models]}"
-        )
-        if public_models:
-            model_kind = public_models[0]
-            logger.info(f"[Wizard] Using public model: {model_kind.name}")
-
-    if not model_kind:
-        # Log all models in the database for debugging
-        all_models = db.query(Kind).filter(Kind.kind == "Model").all()
-        logger.error(
-            f"[Wizard] No available models found! "
-            f"All models in DB: {[(m.id, m.name, m.user_id, m.is_active) for m in all_models]}"
-        )
-        raise HTTPException(
-            status_code=400,
-            detail="No available models found. Please configure a model first, "
-            "or set WIZARD_MODEL_NAME in environment variables.",
-        )
+    model_kind = _get_model_for_wizard(db, user)
 
     model_json = model_kind.json or {}
     logger.info(f"[Wizard] Model '{model_kind.name}' found, extracting config...")
@@ -1289,9 +1238,10 @@ def _get_model_for_wizard(
 
     Model selection priority:
     1. If model_name is specified, use that model
-    2. If WIZARD_MODEL_NAME is configured, use that public model
-    3. Otherwise, try user's models first
-    4. Fall back to any available public model
+    2. If user preference wizard_model_name is set, use it
+    3. If WIZARD_MODEL_NAME is configured, use that public model
+    4. Otherwise, try user's models first (non-custom)
+    5. Fall back to any available public model
     """
     model_kind = None
 
@@ -1310,7 +1260,44 @@ def _get_model_for_wizard(
         if model_kind:
             return model_kind
 
-    # Priority 1: Use configured wizard model if specified
+    # Priority 1: User preference (per-user settings)
+    preferred_model_name = _get_user_preferred_wizard_model_name(user)
+    if preferred_model_name:
+        logger.info(
+            "[Wizard] Using preferred wizard model from user preferences: %s",
+            preferred_model_name,
+        )
+        model_kind = (
+            db.query(Kind)
+            .filter(
+                Kind.kind == "Model",
+                Kind.is_active == True,
+                Kind.name == preferred_model_name,
+                Kind.user_id == user.id,
+            )
+            .first()
+        )
+        if not model_kind:
+            model_kind = (
+                db.query(Kind)
+                .filter(
+                    Kind.user_id == 0,
+                    Kind.kind == "Model",
+                    Kind.is_active == True,
+                    Kind.name == preferred_model_name,
+                )
+                .first()
+            )
+
+        if model_kind:
+            return model_kind
+
+        logger.warning(
+            "[Wizard] Preferred wizard model '%s' not found or inactive. Falling back to auto-select.",
+            preferred_model_name,
+        )
+
+    # Priority 2: Use configured wizard model if specified
     if settings.WIZARD_MODEL_NAME:
         model_kind = (
             db.query(Kind)
@@ -1325,7 +1312,7 @@ def _get_model_for_wizard(
         if model_kind:
             return model_kind
 
-    # Priority 2: Try user's models
+    # Priority 3: Try user's models
     user_models = (
         db.query(Kind)
         .filter(
@@ -1340,7 +1327,7 @@ def _get_model_for_wizard(
     if user_models:
         return user_models[0]
 
-    # Priority 3: Fall back to any public model
+    # Priority 4: Fall back to any public model
     public_models = (
         db.query(Kind)
         .filter(
@@ -1356,7 +1343,7 @@ def _get_model_for_wizard(
 
     raise HTTPException(
         status_code=400,
-        detail="No available models found for testing.",
+        detail="No available models found. Please configure a model first, or set WIZARD_MODEL_NAME.",
     )
 
 

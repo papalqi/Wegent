@@ -14,6 +14,9 @@ class UserPreferences(BaseModel):
 
     send_key: Literal["enter", "cmd_enter"] = "enter"
     search_key: Literal["cmd_k", "cmd_f", "disabled"] = "cmd_k"
+    # Preferred model name for wizard LLM calls (follow-ups, prompt generation, etc.).
+    # Empty/None means auto-select.
+    wizard_model_name: Optional[str] = None
 
 
 class Token(BaseModel):
