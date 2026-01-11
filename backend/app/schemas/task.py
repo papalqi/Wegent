@@ -35,6 +35,7 @@ class TaskBase(BaseModel):
     git_repo_id: Optional[int] = None
     git_domain: Optional[str] = None
     branch_name: Optional[str] = None
+    repo_dir: Optional[str] = ""
     prompt: str
     status: TaskStatus = TaskStatus.PENDING
     progress: int = 0
@@ -56,6 +57,9 @@ class TaskCreate(BaseModel):
     git_repo_id: Optional[int] = 0
     git_domain: Optional[str] = ""
     branch_name: Optional[str] = ""
+    repo_dir: Optional[str] = (
+        ""  # Executor working directory (e.g. /wegent_repos/<dir>)
+    )
     prompt: str
     type: Optional[str] = "online"  # online、offline
     task_type: Optional[str] = "chat"  # chat、code
@@ -125,9 +129,12 @@ class TaskDetail(BaseModel):
     git_repo_id: Optional[int] = None
     git_domain: Optional[str] = None
     branch_name: str
+    repo_dir: Optional[str] = ""
     prompt: str
     status: TaskStatus = TaskStatus.PENDING
     progress: int = 0
+    status_phase: Optional[str] = None
+    progress_text: Optional[str] = None
     result: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
     created_at: datetime
@@ -176,3 +183,25 @@ class TaskLiteListResponse(BaseModel):
 
     total: int
     items: list[TaskLite]
+
+
+class TaskExecutorContainerStatus(BaseModel):
+    """
+    Executor container status for a task.
+
+    status meanings:
+    - running: container exists and is running
+    - exited: container exists but not running (exited/paused/etc.)
+    - not_found: container is missing or already deleted/cleaned
+    - unknown: status can't be determined (e.g., no executor_name yet, or check failed)
+    """
+
+    task_id: int
+    executor_name: Optional[str] = None
+    status: str
+    state: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class TaskExecutorContainerStatusBatchResponse(BaseModel):
+    items: List[TaskExecutorContainerStatus]

@@ -17,7 +17,16 @@ import type { Model } from '../selector/ModelSelector';
 import { useMultiAttachment } from '@/hooks/useMultiAttachment';
 import { userApis } from '@/apis/user';
 import { correctionApis } from '@/apis/correction';
-import { getLastTeamIdByMode, saveLastTeamByMode, saveLastRepo } from '@/utils/userPreferences';
+import {
+  CodeWorkspaceMode,
+  getLastCodeRepoDir,
+  getLastCodeWorkspaceMode,
+  getLastTeamIdByMode,
+  saveLastCodeRepoDir,
+  saveLastCodeWorkspaceMode,
+  saveLastRepo,
+  saveLastTeamByMode,
+} from '@/utils/userPreferences';
 import { useTaskContext } from '../../contexts/taskContext';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 
@@ -42,6 +51,12 @@ export interface ChatAreaState {
   // Branch state
   selectedBranch: GitBranch | null;
   setSelectedBranch: (branch: GitBranch | null) => void;
+
+  // Code workspace state (code tasks only)
+  codeWorkspaceMode: CodeWorkspaceMode;
+  setCodeWorkspaceMode: (mode: CodeWorkspaceMode) => void;
+  repoDir: string;
+  setRepoDir: (repoDir: string) => void;
 
   // Model state
   selectedModel: Model | null;
@@ -148,6 +163,16 @@ export function useChatAreaState({
   // Repository and branch state
   const [selectedRepo, setSelectedRepo] = useState<GitRepoInfo | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<GitBranch | null>(null);
+
+  // Code workspace state (code tasks only)
+  const [codeWorkspaceMode, setCodeWorkspaceMode] = useState<CodeWorkspaceMode>(() => {
+    if (typeof window === 'undefined') return 'dir';
+    return getLastCodeWorkspaceMode() || 'dir';
+  });
+  const [repoDir, setRepoDir] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return getLastCodeRepoDir() || '';
+  });
 
   // Model state
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
@@ -320,6 +345,32 @@ export function useChatAreaState({
     }
   }, [selectedRepo]);
 
+  useEffect(() => {
+    if (taskType !== 'code') return;
+    saveLastCodeWorkspaceMode(codeWorkspaceMode);
+  }, [taskType, codeWorkspaceMode]);
+
+  useEffect(() => {
+    if (taskType !== 'code') return;
+    saveLastCodeRepoDir(repoDir);
+  }, [taskType, repoDir]);
+
+  useEffect(() => {
+    if (taskType !== 'code') return;
+    if (!selectedTaskDetail) return;
+
+    const taskRepoDir = (selectedTaskDetail.repo_dir || '').trim();
+    if (taskRepoDir) {
+      setCodeWorkspaceMode('dir');
+      setRepoDir(taskRepoDir);
+      return;
+    }
+
+    if ((selectedTaskDetail.git_repo || '').trim()) {
+      setCodeWorkspaceMode('repo');
+    }
+  }, [taskType, selectedTaskDetail]);
+
   // Handle external team selection for new tasks
   useEffect(() => {
     if (selectedTeamForNewTask && !selectedTaskDetail) {
@@ -355,6 +406,12 @@ export function useChatAreaState({
     // Branch state
     selectedBranch,
     setSelectedBranch,
+
+    // Code workspace state (code tasks only)
+    codeWorkspaceMode,
+    setCodeWorkspaceMode,
+    repoDir,
+    setRepoDir,
 
     // Model state
     selectedModel,

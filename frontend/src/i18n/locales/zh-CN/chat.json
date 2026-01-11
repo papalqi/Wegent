@@ -11,6 +11,8 @@
     "regenerate": "重新生成",
     "stop": "停止",
     "retry": "重试",
+    "retry_resume": "Resume 重试",
+    "retry_new_session": "新会话重试",
     "view_error": "查看错误"
   },
   "status": {
@@ -57,6 +59,7 @@
     "phase_failed": "执行失败",
     "phase_cancelled": "已取消",
     "phase_elapsed": "{{seconds}}秒",
+    "resume": "Resume",
     "recovered": "已恢复",
     "content_recovered": "已恢复内容",
     "content_recovered_desc": "页面刷新后已恢复之前的内容",
@@ -177,6 +180,7 @@
   "errors": {
     "request_failed": "请求大模型接口失败",
     "request_failed_retry": "请求大模型接口失败, 请点击重试",
+    "no_resume_session": "没有可恢复会话，请用新会话重试",
     "model_unsupported": "当前模型不支持请切换大模型",
     "payload_too_large": "内容过长：对话历史或附件超出限制，请开始新对话或减小附件大小",
     "llm_unsupported": "当前模型不支持此请求（如多模态消息），请更换其他模型",

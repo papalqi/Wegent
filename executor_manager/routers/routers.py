@@ -229,7 +229,12 @@ async def callback_handler(request: CallbackRequest, http_request: Request):
             request.result and request.result.get("validation_id")
         )
         if is_validation_task:
-            await _forward_validation_callback(request)
+            forward_success = await _forward_validation_callback(request)
+            if not forward_success:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Failed to forward validation callback for task {request.task_id}",
+                )
             # For validation tasks, we only need to forward to backend for Redis update
             # No need to update task status in database (validation tasks don't exist in DB)
             logger.info(
@@ -256,17 +261,23 @@ async def callback_handler(request: CallbackRequest, http_request: Request):
             logger.warning(
                 f"Failed to update status for task {request.task_id}: {result}"
             )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to update backend task status for task {request.task_id}: {result}",
+            )
         logger.info(f"Successfully processed callback for task {request.task_id}")
         return {
             "status": "success",
             "message": f"Successfully processed callback for task {request.task_id}",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error processing callback: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _forward_validation_callback(request: CallbackRequest):
+async def _forward_validation_callback(request: CallbackRequest) -> bool:
     """Forward validation task callback to Backend for Redis status update"""
     import httpx
 
@@ -278,7 +289,7 @@ async def _forward_validation_callback(request: CallbackRequest):
         logger.warning(
             f"Validation callback for task {request.task_id} has no validation_id, skipping forward"
         )
-        return
+        return True
 
     # Map callback status to validation status (case-insensitive)
     status_lower = request.status.lower() if request.status else ""
@@ -322,12 +333,15 @@ async def _forward_validation_callback(request: CallbackRequest):
                 logger.info(
                     f"Successfully forwarded validation callback: {validation_id} -> {validation_status}, valid={valid_value}"
                 )
+                return True
             else:
                 logger.warning(
                     f"Failed to forward validation callback: {response.status_code} {response.text}"
                 )
+                return False
     except Exception as e:
         logger.error(f"Error forwarding validation callback: {e}")
+        return False
 
 
 @app.post("/executor-manager/tasks/receive")
@@ -406,6 +420,20 @@ async def get_executor_load(http_request: Request):
         return result
     except Exception as e:
         logger.error(f"Error getting executor load: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/executor-manager/executor/status")
+async def get_executor_status(executor_name: str, http_request: Request):
+    try:
+        client_ip = http_request.client.host if http_request.client else "unknown"
+        logger.info(
+            f"Received request to get executor status: {executor_name} from {client_ip}"
+        )
+        executor = ExecutorDispatcher.get_executor(EXECUTOR_DISPATCHER_MODE)
+        return executor.get_executor_status(executor_name)
+    except Exception as e:
+        logger.error(f"Error getting executor status for '{executor_name}': {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

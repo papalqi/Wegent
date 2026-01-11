@@ -6,8 +6,10 @@
     "public_models": "公共模型",
     "public_retrievers": "公共检索引擎",
     "public_skills": "公共技能",
+    "custom_config_models": "内部模型清理",
     "api_keys": "密钥管理",
-    "system_config": "系统配置"
+    "system_config": "系统配置",
+    "database": "数据库管理"
   },
   "stats": {
     "total_users": "总用户数",
@@ -23,6 +25,52 @@
     "delete": "删除",
     "reset": "重置",
     "loading": "加载中..."
+  },
+  "custom_config_models": {
+    "title": "内部模型清理",
+    "description": "管理隐藏的自定义配置模型（spec.isCustomConfig=true）。此处不会展示任何 API Key。",
+    "total_label": "总计：{{total}}",
+    "search_placeholder": "搜索模型/用户...",
+    "search": "搜索",
+    "show_inactive": "显示已停用",
+    "cleanup_orphans": "清理孤儿模型",
+    "no_models": "暂无内部模型",
+    "user_id": "用户 ID",
+    "namespace_label": "命名空间",
+    "model_id": "模型 ID",
+    "base_url": "Base URL",
+    "referenced_by_bots": "引用：{{count}} 个 Bot",
+    "api_key_status": {
+      "empty": "未配置 Key",
+      "placeholder": "占位符",
+      "set": "已配置",
+      "unknown": "未知"
+    },
+    "status": {
+      "active": "启用",
+      "inactive": "停用"
+    },
+    "delete_model": "删除",
+    "force_delete": "强制删除（可能导致 Bot 失效）",
+    "cleaned_result": "已删除 {{count}} 个模型",
+    "success": {
+      "deleted": "模型已删除",
+      "cleaned": "清理完成"
+    },
+    "errors": {
+      "load_failed": "加载内部模型失败",
+      "delete_failed": "删除模型失败",
+      "cleanup_preview_failed": "获取清理预览失败",
+      "cleanup_failed": "清理失败"
+    },
+    "confirm": {
+      "delete_title": "删除内部模型",
+      "delete_message": "确定删除「{{name}}」吗？该操作可能导致引用它的 Bot 无法使用。",
+      "referenced_warning": "该模型被 {{count}} 个启用状态的 Bot 引用。开启“强制删除”才可继续。",
+      "cleanup_title": "清理孤儿内部模型",
+      "cleanup_loading": "正在加载预览...",
+      "cleanup_message": "将删除 {{count}} 个未被任何启用 Bot 引用的孤儿模型，是否继续？"
+    }
   },
   "users": {
     "title": "用户管理",
@@ -356,6 +404,41 @@
       "load_failed": "加载个人密钥失败",
       "delete_failed": "删除个人密钥失败",
       "toggle_failed": "切换个人密钥状态失败"
+    }
+  },
+  "database": {
+    "title": "数据库管理",
+    "description": "导出和导入数据库备份文件",
+    "export": {
+      "title": "导出数据库",
+      "description": "将整个数据库导出为 SQL 备份文件",
+      "button": "导出数据库",
+      "exporting": "正在导出...",
+      "success": "导出成功",
+      "success_description": "数据库已成功导出，文件已开始下载",
+      "failed": "导出失败",
+      "failed_description": "数据库导出过程中发生错误",
+      "note": "导出的 SQL 文件包含完整的数据库结构和数据，可用于恢复数据库。"
+    },
+    "import": {
+      "title": "导入数据库",
+      "description": "从 SQL 备份文件恢复数据库",
+      "button": "选择 SQL 文件",
+      "importing": "正在导入...",
+      "selected_file": "已选择文件",
+      "success": "导入成功",
+      "success_description": "数据库已成功从 {{filename}} 导入（大小: {{size}} MB）",
+      "failed": "导入失败",
+      "failed_description": "数据库导入过程中发生错误",
+      "invalid_file": "无效的文件",
+      "invalid_file_description": "请选择 .sql 格式的文件",
+      "file_too_large": "文件过大",
+      "file_too_large_description": "文件大小不能超过 500 MB",
+      "warning_title": "警告：数据库导入操作",
+      "warning_message": "此操作将修改数据库，可能会覆盖或删除现有数据。请确保您已备份当前数据库。",
+      "warning_emphasis": "此操作无法撤销！",
+      "confirm_import": "确认导入",
+      "note": "仅支持 .sql 格式的 MySQL 备份文件，最大文件大小为 500 MB。导入前请确保已备份当前数据库。"
     }
   }
 }

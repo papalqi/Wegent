@@ -16,6 +16,7 @@ import os
 import subprocess
 import time
 from email import utils
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -23,15 +24,25 @@ import requests
 from executor_manager.config.config import EXECUTOR_ENV
 from executor_manager.executors.base import Executor
 from executor_manager.executors.docker.constants import (
-    CONTAINER_OWNER, DEFAULT_API_ENDPOINT, DEFAULT_DOCKER_HOST, DEFAULT_LOCALE,
-    DEFAULT_PROGRESS_COMPLETE, DEFAULT_PROGRESS_RUNNING, DEFAULT_TASK_ID,
-    DEFAULT_TIMEZONE, DOCKER_SOCKET_PATH, WORKSPACE_MOUNT_PATH)
-from executor_manager.executors.docker.utils import (build_callback_url,
-                                                     check_container_ownership,
-                                                     delete_container,
-                                                     find_available_port,
-                                                     get_container_ports,
-                                                     get_running_task_details)
+    CONTAINER_OWNER,
+    DEFAULT_API_ENDPOINT,
+    DEFAULT_DOCKER_HOST,
+    DEFAULT_LOCALE,
+    DEFAULT_PROGRESS_COMPLETE,
+    DEFAULT_PROGRESS_RUNNING,
+    DEFAULT_TASK_ID,
+    DEFAULT_TIMEZONE,
+    DOCKER_SOCKET_PATH,
+    WORKSPACE_MOUNT_PATH,
+)
+from executor_manager.executors.docker.utils import (
+    build_callback_url,
+    check_container_ownership,
+    delete_container,
+    find_available_port,
+    get_container_ports,
+    get_running_task_details,
+)
 from executor_manager.utils.executor_name import generate_executor_name
 from shared.logger import setup_logger
 from shared.status import TaskStatus
@@ -214,7 +225,9 @@ class DockerExecutor(Executor):
         headers = {}
         try:
             from shared.telemetry.context import (
-                get_request_id, inject_trace_context_to_headers)
+                get_request_id,
+                inject_trace_context_to_headers,
+            )
 
             # Inject W3C Trace Context headers for distributed tracing
             headers = inject_trace_context_to_headers(headers)
@@ -576,6 +589,9 @@ class DockerExecutor(Executor):
         # Add workspace mount
         self._add_workspace_mount(cmd)
 
+        # Add persistent repo mount (host sibling of Wegent root)
+        self._add_persistent_repo_mount(cmd, task)
+
         # Add network configuration
         self._add_network_config(cmd)
 
@@ -612,6 +628,30 @@ class DockerExecutor(Executor):
         executor_workspace = os.getenv("EXECUTOR_WORKSPACE", "")  # Fix spelling error
         if executor_workspace:
             cmd.extend(["-v", f"{executor_workspace}:{WORKSPACE_MOUNT_PATH}"])
+
+    def _add_persistent_repo_mount(self, cmd: List[str], task: Dict[str, Any]) -> None:
+        """
+        Mount host persistent repo root into executor container.
+
+        The root is provided by the host via WEGENT_PERSIST_REPO_ROOT_HOST.
+        """
+        from shared.utils.persistent_repo import (
+            PERSIST_REPO_MOUNT_PATH,
+        )
+
+        persist_root_host = (os.getenv("WEGENT_PERSIST_REPO_ROOT_HOST") or "").strip()
+        needs_persist_mount = isinstance(task.get("repo_dir"), str) and task.get(
+            "repo_dir", ""
+        ).startswith(PERSIST_REPO_MOUNT_PATH + "/")
+
+        if not persist_root_host:
+            if needs_persist_mount:
+                raise ValueError(
+                    "WEGENT_PERSIST_REPO_ROOT_HOST is required to mount persistent repo directory"
+                )
+            return
+
+        cmd.extend(["-v", f"{persist_root_host}:{PERSIST_REPO_MOUNT_PATH}"])
 
     def _add_network_config(self, cmd: List[str]) -> None:
         """Add network configuration"""
@@ -732,6 +772,38 @@ class DockerExecutor(Executor):
                 "error_msg": f"Error deleting container: {str(e)}",
             }
 
+    def get_executor_status(self, executor_name: str) -> Dict[str, Any]:
+        """
+        Get a Docker container status.
+
+        Security note: only returns status for containers owned by executor_manager.
+        """
+        if not executor_name:
+            return {"status": "failed", "error_msg": "executor_name is required"}
+
+        try:
+            if not check_container_ownership(executor_name):
+                return {"status": "success", "exists": False, "state": None}
+
+            inspect_cmd = [
+                "docker",
+                "inspect",
+                "--format",
+                "{{.State.Status}}",
+                executor_name,
+            ]
+            inspect_result = subprocess.run(
+                inspect_cmd, check=False, capture_output=True, text=True
+            )
+            if inspect_result.returncode != 0:
+                return {"status": "success", "exists": False, "state": None}
+
+            state = inspect_result.stdout.strip() or None
+            return {"status": "success", "exists": True, "state": state}
+        except Exception as e:
+            logger.error(f"Error getting container status for {executor_name}: {e}")
+            return {"status": "failed", "error_msg": f"Error: {str(e)}"}
+
     def cancel_task(self, task_id: int) -> Dict[str, Any]:
         """
         Cancel a running task by calling the executor's cancel API.
@@ -806,7 +878,9 @@ class DockerExecutor(Executor):
                 headers = {}
                 try:
                     from shared.telemetry.context import (
-                        get_request_id, inject_trace_context_to_headers)
+                        get_request_id,
+                        inject_trace_context_to_headers,
+                    )
 
                     # Inject W3C Trace Context headers for distributed tracing
                     headers = inject_trace_context_to_headers(headers)

@@ -84,7 +84,7 @@ def _get_cache_key(url: str) -> str:
 def _get_redis_client():
     """Get Redis client instance"""
     try:
-        return redis.from_url(settings.REDIS_URL)
+        return redis.from_url(settings.get_redis_url())
     except Exception as e:
         logger.warning(f"Failed to connect to Redis: {e}")
         return None

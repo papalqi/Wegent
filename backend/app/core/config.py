@@ -4,6 +4,7 @@
 
 from pathlib import Path
 from typing import Any, Mapping, Tuple, Type
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from dotenv import dotenv_values
 from pydantic_settings import (
@@ -64,10 +65,14 @@ class Settings(BaseSettings):
     EXECUTOR_CANCEL_TASK_URL: str = (
         "http://localhost:8001/executor-manager/tasks/cancel"
     )
+    EXECUTOR_STATUS_URL: str = "http://localhost:8001/executor-manager/executor/status"
 
     # Shell feature flags
     # Set CODEX_SHELL_ENABLED=false to disable Codex selection and execution.
     CODEX_SHELL_ENABLED: bool = True
+    # Set CODE_SHELL_RESUME_ENABLED=false to force Code Shell tasks to start new sessions.
+    # This disables resume semantics (Codex: resume_session_id, ClaudeCode: session_id reuse).
+    CODE_SHELL_RESUME_ENABLED: bool = True
 
     # JWT configuration
     SECRET_KEY: str = "secret-key"
@@ -81,6 +86,27 @@ class Settings(BaseSettings):
     # Cache configuration
     REPO_CACHE_EXPIRED_TIME: int = 7200  # 2 hour in seconds
     REPO_UPDATE_INTERVAL_SECONDS: int = 3600  # 1 hour in seconds
+
+    # PR operator / PR Action Gateway (write operations are disabled by default)
+    PR_ACTION_WRITE_ENABLED: bool = False
+    # Comma-separated allowlist of repo full names: "owner/repo,org/repo2"
+    PR_ACTION_REPO_ALLOWLIST: str = ""
+    # Comma-separated allowlist of base branches: "main,master,release/*" (exact match for now)
+    PR_ACTION_BASE_BRANCH_ALLOWLIST: str = ""
+    # External provider HTTP timeout in seconds (bounded, no infinite waits)
+    PR_ACTION_HTTP_TIMEOUT_SECONDS: float = 10.0
+
+    # PR policy engine (used by PR Action Gateway)
+    # Head branch naming rule (regex). Empty means no restriction.
+    PR_POLICY_HEAD_BRANCH_REGEX: str = r"^wegent-[A-Za-z0-9][A-Za-z0-9._/-]{0,63}$"
+    # Diff threshold rules. 0 means no limit.
+    PR_POLICY_MAX_CHANGED_FILES: int = 0
+    PR_POLICY_MAX_DIFF_LINES: int = 0
+    # Comma-separated glob patterns and/or prefixes for forbidden paths.
+    # Examples: ".env,**/.env*,**/*.pem,secrets/**"
+    PR_POLICY_FORBIDDEN_PATH_PATTERNS: str = ""
+    # Comma-separated required check names (CI/status checks). Empty means no requirement.
+    PR_POLICY_REQUIRED_CHECKS: str = ""
 
     # Task limits
     MAX_RUNNING_TASKS_PER_USER: int = 10
@@ -132,6 +158,84 @@ class Settings(BaseSettings):
 
     # Redis configuration
     REDIS_URL: str = "redis://127.0.0.1:6379/0"
+    REDIS_PASSWORD: str | None = None
+
+    def get_redis_url(self) -> str:
+        """
+        Build a Redis URL with optional password injection.
+
+        Supports the common pattern:
+        - REDIS_URL without auth + REDIS_PASSWORD provided via environment
+        - REDIS_URL already contains auth: returned as-is
+        """
+        if not self.REDIS_URL:
+            return self.REDIS_URL
+
+        if not self.REDIS_PASSWORD:
+            return self.REDIS_URL
+
+        parts = urlsplit(self.REDIS_URL)
+        if parts.username or parts.password:
+            return self.REDIS_URL
+
+        host = parts.hostname or ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+
+        netloc = host
+        if parts.port is not None:
+            netloc = f"{netloc}:{parts.port}"
+
+        password = quote(self.REDIS_PASSWORD, safe="")
+        netloc = f":{password}@{netloc}"
+
+        return urlunsplit(
+            (
+                parts.scheme,
+                netloc,
+                parts.path,
+                parts.query,
+                parts.fragment,
+            )
+        )
+
+    def get_redis_url_safe(self) -> str:
+        """
+        Return a Redis URL safe for logging (password redacted).
+        """
+        url = self.get_redis_url()
+        if not url:
+            return url
+
+        parts = urlsplit(url)
+        if not parts.password and not parts.username:
+            return url
+
+        host = parts.hostname or ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+
+        netloc = host
+        if parts.port is not None:
+            netloc = f"{netloc}:{parts.port}"
+
+        username = parts.username or ""
+        if username:
+            auth = f"{quote(username, safe='')}:***"
+        else:
+            auth = ":***"
+
+        netloc = f"{auth}@{netloc}"
+
+        return urlunsplit(
+            (
+                parts.scheme,
+                netloc,
+                parts.path,
+                parts.query,
+                parts.fragment,
+            )
+        )
 
     # Team sharing configuration
     TEAM_SHARE_BASE_URL: str = "http://localhost:3000/chat"

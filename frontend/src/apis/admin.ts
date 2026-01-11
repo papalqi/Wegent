@@ -81,6 +81,43 @@ export interface AdminPublicModelUpdate {
   is_active?: boolean;
 }
 
+// Custom Config Model Types (internal, hidden from unified model list)
+export type ApiKeyStatus = 'EMPTY' | 'PLACEHOLDER' | 'SET' | 'UNKNOWN';
+
+export interface AdminCustomConfigModelRefBot {
+  id: number;
+  user_id: number;
+  namespace: string;
+  name: string;
+}
+
+export interface AdminCustomConfigModel {
+  id: number;
+  user_id: number;
+  user_name: string | null;
+  namespace: string;
+  name: string;
+  provider: string | null;
+  model_id: string | null;
+  base_url: string | null;
+  api_key_status: ApiKeyStatus;
+  referenced_by_bots: number;
+  referenced_bots: AdminCustomConfigModelRefBot[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminCustomConfigModelListResponse {
+  total: number;
+  items: AdminCustomConfigModel[];
+}
+
+export interface AdminCustomConfigModelCleanupResponse {
+  candidates: number;
+  deleted: number;
+}
+
 // System Stats Types
 export interface SystemStats {
   total_users: number;
@@ -293,6 +330,59 @@ export const adminApis = {
     return apiClient.delete(`/admin/public-models/${modelId}`);
   },
 
+  // ==================== Custom Config Model Cleanup ====================
+
+  /**
+   * Get list of all custom config models (internal models hidden from unified list)
+   */
+  async getCustomConfigModels(
+    page: number = 1,
+    limit: number = 50,
+    includeInactive: boolean = false,
+    search?: string,
+    referencesLimit: number = 5
+  ): Promise<AdminCustomConfigModelListResponse> {
+    const params = new URLSearchParams();
+    params.append('page', String(page));
+    params.append('limit', String(limit));
+    params.append('references_limit', String(referencesLimit));
+    if (includeInactive) {
+      params.append('include_inactive', 'true');
+    }
+    if (search) {
+      params.append('search', search);
+    }
+    return apiClient.get(`/admin/custom-config-models?${params.toString()}`);
+  },
+
+  /**
+   * Delete a custom config model (force=true allows deletion when referenced by active bots)
+   */
+  async deleteCustomConfigModel(modelId: number, force: boolean = false): Promise<void> {
+    const params = new URLSearchParams();
+    if (force) {
+      params.append('force', 'true');
+    }
+    return apiClient.delete(
+      `/admin/custom-config-models/${modelId}${params.toString() ? `?${params.toString()}` : ''}`
+    );
+  },
+
+  /**
+   * Cleanup orphan custom config models (not referenced by any active bot)
+   */
+  async cleanupCustomConfigModelOrphans(
+    dryRun: boolean = true,
+    olderThanDays: number = 0
+  ): Promise<AdminCustomConfigModelCleanupResponse> {
+    const params = new URLSearchParams();
+    params.append('dry_run', dryRun ? 'true' : 'false');
+    if (olderThanDays) {
+      params.append('older_than_days', String(olderThanDays));
+    }
+    return apiClient.post(`/admin/custom-config-models/cleanup-orphans?${params.toString()}`);
+  },
+
   // ==================== System Stats ====================
 
   /**
@@ -432,5 +522,62 @@ export const adminApis = {
    */
   async deletePublicRetriever(retrieverId: number): Promise<void> {
     return apiClient.delete(`/admin/public-retrievers/${retrieverId}`);
+  },
+
+  // ==================== Database Management ====================
+
+  /**
+   * Export database as SQL dump file
+   */
+  async exportDatabase(): Promise<Blob> {
+    const { getApiBaseUrl } = await import('@/lib/runtime-config');
+    const { getToken } = await import('./user');
+    const baseURL = getApiBaseUrl();
+    const token = getToken();
+
+    const response = await fetch(`${baseURL}/admin/database/export`, {
+      method: 'GET',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to export database' }));
+      throw new Error(error.detail || 'Failed to export database');
+    }
+
+    return response.blob();
+  },
+
+  /**
+   * Import database from SQL dump file
+   */
+  async importDatabase(
+    file: File
+  ): Promise<{ success: boolean; message: string; file_size_mb: number }> {
+    const { getApiBaseUrl } = await import('@/lib/runtime-config');
+    const { getToken } = await import('./user');
+    const baseURL = getApiBaseUrl();
+    const token = getToken();
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${baseURL}/admin/database/import`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+        // Don't set Content-Type, let browser set it with boundary
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to import database' }));
+      throw new Error(error.detail || 'Failed to import database');
+    }
+
+    return response.json();
   },
 };

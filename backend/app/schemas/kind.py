@@ -370,6 +370,8 @@ class Repository(BaseModel):
 class WorkspaceSpec(BaseModel):
     """Workspace specification"""
 
+    # Optional working directory inside executor container (e.g. /wegent_repos/<dir>)
+    repoDir: Optional[str] = None
     repository: Repository
 
 

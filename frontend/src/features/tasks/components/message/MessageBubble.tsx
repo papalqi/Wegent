@@ -13,19 +13,9 @@ import type {
   Attachment,
   SubtaskContextBrief,
 } from '@/types/api';
-import {
-  Bot,
-  Download,
-  AlertCircle,
-  Loader2,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Ban,
-  User,
-  RefreshCw,
-} from 'lucide-react';
+import { Bot, Download, AlertCircle, User, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import MarkdownEditor from '@uiw/react-markdown-editor';
@@ -35,7 +25,6 @@ import ClarificationForm from '../clarification/ClarificationForm';
 import FinalPromptMessage from './FinalPromptMessage';
 import ClarificationAnswerSummary from '../clarification/ClarificationAnswerSummary';
 import ContextBadgeList from './ContextBadgeList';
-import StreamingWaitIndicator from './StreamingWaitIndicator';
 import BubbleTools, { CopyButton } from './BubbleTools';
 import { SourceReferences } from '../chat/SourceReferences';
 import CollapsibleMessage from './CollapsibleMessage';
@@ -45,8 +34,10 @@ import type { ClarificationData, FinalPromptData, ClarificationAnswer } from '@/
 import type { SourceReference } from '@/types/socket';
 import { useTraceAction } from '@/hooks/useTraceAction';
 import { useMessageFeedback } from '@/hooks/useMessageFeedback';
+import { useToast } from '@/hooks/use-toast';
 import { SmartLink, SmartImage, SmartTextLine } from '@/components/common/SmartUrlRenderer';
 import { formatDateTime } from '@/utils/dateTime';
+import { isCodeShellResumeEnabled } from '@/lib/runtime-config';
 export interface Message {
   type: 'user' | 'ai';
   content: string;
@@ -72,6 +63,10 @@ export interface Message {
     thinking?: unknown[];
     workbench?: Record<string, unknown>;
     shell_type?: string; // Shell type (Chat, ClaudeCode, Agno, etc.)
+    /** Code Shell session identifiers for resume semantics */
+    resume_session_id?: string;
+    session_id?: string;
+    retry_mode?: 'resume' | 'new_session';
     /** Raw Codex `codex exec --json` event stream (persisted on backend for refresh replay) */
     codex_events?: unknown[];
     sources?: SourceReference[]; // RAG knowledge base sources
@@ -139,7 +134,7 @@ export interface MessageBubbleProps {
    */
   isCurrentUserMessage?: boolean;
   /** Callback when user clicks retry button for failed messages */
-  onRetry?: (message: Message) => void;
+  onRetry?: (message: Message, retryMode?: 'resume' | 'new_session') => void;
   /** Message type for feedback storage key differentiation */
   feedbackMessageType?: 'original' | 'correction';
   /** Whether this is a group chat (for enabling message collapsing) */
@@ -259,6 +254,7 @@ const MessageBubble = memo(
   }: MessageBubbleProps) {
     // Use trace hook for telemetry (auto-includes user and task context)
     const { trace } = useTraceAction();
+    const { toast } = useToast();
 
     // Use feedback hook for managing like/dislike state with localStorage persistence
     const { feedback, handleLike, handleDislike } = useMessageFeedback({
@@ -276,6 +272,45 @@ const MessageBubble = memo(
 
     // Determine if this is a user-type message (for styling purposes)
     const isUserTypeMessage = msg.type === 'user';
+
+    const normalizeShellType = (value: string | undefined): string | undefined => {
+      if (typeof value !== 'string') return undefined;
+      const normalized = value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      return normalized || undefined;
+    };
+
+    const isRecord = (value: unknown): value is Record<string, unknown> => {
+      return typeof value === 'object' && value !== null && !Array.isArray(value);
+    };
+
+    const getStringField = (obj: unknown, key: string): string | undefined => {
+      if (!isRecord(obj)) return undefined;
+      const value = obj[key];
+      if (typeof value !== 'string') return undefined;
+      const trimmed = value.trim();
+      return trimmed || undefined;
+    };
+
+    const debugResult = isRecord(msg.debug) ? msg.debug.result : undefined;
+    const subtaskResult = msg.subtaskId
+      ? selectedTaskDetail?.subtasks?.find(st => st.id === msg.subtaskId)?.result
+      : undefined;
+
+    const shellType =
+      msg.result?.shell_type ||
+      getStringField(debugResult, 'shell_type') ||
+      getStringField(subtaskResult, 'shell_type') ||
+      selectedTaskDetail?.team?.bots?.[0]?.bot?.shell_type ||
+      selectedTaskDetail?.team?.agent_type;
+    const normalizedShellType = normalizeShellType(shellType);
+
+    const isCodeShellMessage =
+      !isUserTypeMessage &&
+      (normalizedShellType === 'codex' || normalizedShellType === 'claudecode');
+    const codeShellResumeEnabled = isCodeShellResumeEnabled();
 
     // Determine if this message should be right-aligned (current user's message)
     // For group chat: only current user's messages are right-aligned
@@ -322,89 +357,9 @@ const MessageBubble = memo(
       msg.subtaskStatus === 'RUNNING' ||
       msg.subtaskStatus === 'PENDING' ||
       msg.subtaskStatus === 'PROCESSING' ||
+      msg.subtaskStatus === 'CANCELLING' ||
       isWaiting ||
       msg.isWaiting;
-
-    const renderProgressBar = (status: string, _progress: number) => {
-      const normalizedStatus = (status ?? '').toUpperCase();
-
-      // Get status configuration (icon, label key, colors)
-      const getStatusConfig = (statusKey: string) => {
-        switch (statusKey) {
-          case 'RUNNING':
-            return {
-              icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
-              labelKey: 'messages.status_running',
-              bgClass: 'bg-primary/10',
-              textClass: 'text-primary',
-            };
-          case 'PENDING':
-            return {
-              icon: <Clock className="h-3.5 w-3.5" />,
-              labelKey: 'messages.status_pending',
-              bgClass: 'bg-amber-500/10',
-              textClass: 'text-amber-600 dark:text-amber-400',
-            };
-          case 'PROCESSING':
-            return {
-              icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
-              labelKey: 'messages.status_processing',
-              bgClass: 'bg-blue-500/10',
-              textClass: 'text-blue-600 dark:text-blue-400',
-            };
-          case 'COMPLETED':
-            return {
-              icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-              labelKey: 'messages.status_completed',
-              bgClass: 'bg-green-500/10',
-              textClass: 'text-green-600 dark:text-green-400',
-            };
-          case 'FAILED':
-            return {
-              icon: <XCircle className="h-3.5 w-3.5" />,
-              labelKey: 'messages.status_failed',
-              bgClass: 'bg-red-500/10',
-              textClass: 'text-red-600 dark:text-red-400',
-            };
-          case 'CANCELLED':
-            return {
-              icon: <Ban className="h-3.5 w-3.5" />,
-              labelKey: 'messages.status_cancelled',
-              bgClass: 'bg-gray-500/10',
-              textClass: 'text-gray-600 dark:text-gray-400',
-            };
-          case 'CANCELLING':
-            return {
-              icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
-              labelKey: 'messages.status_cancelling',
-              bgClass: 'bg-orange-500/10',
-              textClass: 'text-orange-600 dark:text-orange-400',
-            };
-          default:
-            return {
-              icon: <Loader2 className="h-3.5 w-3.5" />,
-              labelKey: 'messages.status_running',
-              bgClass: 'bg-primary/10',
-              textClass: 'text-primary',
-            };
-        }
-      };
-
-      const config = getStatusConfig(normalizedStatus);
-
-      return (
-        <div className="mt-3">
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${config.bgClass} ${config.textClass}`}
-            >
-              {config.icon}
-              <span>{t(config.labelKey) || status}</span>
-            </span>
-          </div>
-        </div>
-      );
-    };
 
     const renderMarkdownResult = (rawResult: string, promptPart?: string) => {
       const trimmed = (rawResult ?? '').trim();
@@ -415,13 +370,7 @@ const MessageBubble = memo(
       // Markdown parsers don't recognize **'text'** or **text**。 as bold
       // Convert these patterns to HTML <strong> tags for proper rendering
       normalizedResult = normalizedResult.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-      const progressMatch = normalizedResult.match(/^__PROGRESS_BAR__:(.*?):(\d+)$/);
-      if (progressMatch) {
-        const status = progressMatch[1];
-        const progress = parseInt(progressMatch[2], 10) || 0;
-        return renderProgressBar(status, progress);
-      }
+      normalizedResult = normalizedResult.replace(/^__PROGRESS_BAR__:.*?:\d+$/gm, '');
 
       // Helper to extract text content from React children
       const extractText = (node: React.ReactNode): string => {
@@ -688,11 +637,8 @@ const MessageBubble = memo(
           }
         }
 
-        const progressMatch = line.match(/__PROGRESS_BAR__:(.*?):(\d+)/);
-        if (progressMatch) {
-          const status = progressMatch[1];
-          const progress = parseInt(progressMatch[2], 10) || 0;
-          return <React.Fragment key={idx}>{renderProgressBar(status, progress)}</React.Fragment>;
+        if (line.includes('__PROGRESS_BAR__:')) {
+          return null;
         }
 
         // Use SmartTextLine to detect and render URLs (images and links) in plain text
@@ -1296,12 +1242,7 @@ const MessageBubble = memo(
                 }}
               />
             </>
-          ) : (
-            <div className="flex items-center gap-2 text-text-muted">
-              <span className="animate-pulse">●</span>
-              <span className="text-sm">{t('messages.thinking') || 'Thinking...'}</span>
-            </div>
-          )}
+          ) : null}
         </div>
       );
     };
@@ -1333,9 +1274,9 @@ const MessageBubble = memo(
           className={`flex ${shouldAlignRight ? 'max-w-[75%] w-auto' : isUserTypeMessage ? 'max-w-[75%] w-auto' : 'w-full'} flex-col ${shouldAlignRight ? 'items-end' : 'items-start'}`}
         >
           {/* Show thinking display for AI messages */}
-          {!isUserTypeMessage && msg.thinking && (
+          {!isUserTypeMessage && (msg.subtaskStatus || msg.thinking) && (
             <ThinkingDisplay
-              thinking={msg.thinking}
+              thinking={msg.thinking ?? null}
               taskId={selectedTaskDetail?.id ?? null}
               taskStatus={msg.subtaskStatus}
               taskPhase={selectedTaskDetail?.status_phase}
@@ -1355,6 +1296,11 @@ const MessageBubble = memo(
               <div className="flex items-center gap-2 mb-2 text-xs opacity-80">
                 {headerIcon}
                 <span className="font-semibold">{headerLabel}</span>
+                {isCodeShellMessage && codeShellResumeEnabled && (
+                  <Badge variant="info" size="sm">
+                    {t('chat:messages.resume') || 'Resume'}
+                  </Badge>
+                )}
                 {timestampLabel && <span>{timestampLabel}</span>}
                 {msg.isRecovered && (
                   <span className="text-primary text-xs">
@@ -1372,17 +1318,10 @@ const MessageBubble = memo(
               </div>
             )}
             {isUserTypeMessage && <ContextBadgeList contexts={msg.contexts || undefined} />}
-            {/* Show waiting indicator when streaming but no content yet */}
-            {isWaiting || msg.isWaiting ? (
-              <StreamingWaitIndicator isWaiting={true} />
-            ) : (
-              <>
-                {/* Show recovered content if available, otherwise show normal content */}
-                {msg.recoveredContent && msg.subtaskStatus === 'RUNNING'
-                  ? renderRecoveredContent()
-                  : renderMessageBody(msg, index)}
-              </>
-            )}
+            {/* Show recovered content if available, otherwise show normal content */}
+            {msg.recoveredContent && msg.subtaskStatus === 'RUNNING'
+              ? renderRecoveredContent()
+              : renderMessageBody(msg, index)}
             {/* Show incomplete notice for completed but incomplete messages */}
             {msg.isIncomplete && msg.subtaskStatus !== 'RUNNING' && renderRecoveryNotice()}
 
@@ -1405,30 +1344,74 @@ const MessageBubble = memo(
                 </div>
 
                 {/* Retry button - positioned like BubbleTools for consistency */}
-                {onRetry && (
-                  <div className="absolute bottom-2 left-2 flex items-center gap-1 z-10">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
+                {onRetry &&
+                  (isCodeShellMessage ? (
+                    codeShellResumeEnabled ? (
+                      <div className="flex flex-wrap gap-2">
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onRetry(msg)}
-                          className="h-8 w-8 hover:bg-muted"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            const resumeSessionId =
+                              msg.result?.resume_session_id ||
+                              getStringField(debugResult, 'resume_session_id') ||
+                              getStringField(subtaskResult, 'resume_session_id');
+
+                            if (normalizedShellType === 'codex' && !resumeSessionId) {
+                              toast({
+                                variant: 'destructive',
+                                title:
+                                  t('chat:errors.no_resume_session') ||
+                                  '没有可恢复会话，请用新会话重试',
+                              });
+                              return;
+                            }
+                            onRetry(msg, 'resume');
+                          }}
                         >
-                          <RefreshCw className="h-4 w-4 text-text-muted" />
+                          {t('chat:actions.retry_resume') || 'Resume 重试'}
                         </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{t('actions.retry') || '重试'}</TooltipContent>
-                    </Tooltip>
-                  </div>
-                )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onRetry(msg, 'new_session')}
+                        >
+                          {t('chat:actions.retry_new_session') || '新会话重试'}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => onRetry(msg)}>
+                          {t('actions.retry') || '重试'}
+                        </Button>
+                      </div>
+                    )
+                  ) : (
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 z-10">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onRetry(msg)}
+                            className="h-8 w-8 hover:bg-muted"
+                          >
+                            <RefreshCw className="h-4 w-4 text-text-muted" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t('actions.retry') || '重试'}</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  ))}
               </div>
             )}
 
             <MessageDebugPanel data={msg.debug} t={t} />
-            {msg.type === 'ai' && msg.result?.shell_type === 'Codex' && (
-              <CodexEventStreamPanel events={msg.result.codex_events} t={t} />
-            )}
+            {msg.type === 'ai' &&
+              Array.isArray(msg.result?.codex_events) &&
+              msg.result.codex_events.length > 0 && (
+                <CodexEventStreamPanel events={msg.result.codex_events} t={t} />
+              )}
 
             {/* Show copy button for user messages - visible on hover */}
             {isUserTypeMessage && (

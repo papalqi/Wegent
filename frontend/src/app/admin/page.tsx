@@ -15,8 +15,10 @@ import UserList from '@/features/admin/components/UserList';
 import PublicModelList from '@/features/admin/components/PublicModelList';
 import PublicRetrieverList from '@/features/admin/components/PublicRetrieverList';
 import PublicSkillList from '@/features/admin/components/PublicSkillList';
+import CustomConfigModelList from '@/features/admin/components/CustomConfigModelList';
 import ApiKeyManagement from '@/features/admin/components/ApiKeyManagement';
 import SystemConfigPanel from '@/features/admin/components/SystemConfigPanel';
+import DatabaseManagement from '@/features/admin/components/DatabaseManagement';
 import { UserProvider, useUser } from '@/features/common/UserContext';
 import { TaskContextProvider } from '@/features/tasks/contexts/taskContext';
 import { ChatStreamProvider } from '@/features/tasks/contexts/chatStreamContext';
@@ -66,8 +68,10 @@ function AdminContent() {
         'public-models',
         'public-retrievers',
         'public-skills',
+        'custom-config-models',
         'api-keys',
         'system-config',
+        'database',
       ].includes(tab)
     ) {
       return tab as AdminTabId;
@@ -119,10 +123,14 @@ function AdminContent() {
         return <PublicRetrieverList />;
       case 'public-skills':
         return <PublicSkillList />;
+      case 'custom-config-models':
+        return <CustomConfigModelList />;
       case 'api-keys':
         return <ApiKeyManagement />;
       case 'system-config':
         return <SystemConfigPanel />;
+      case 'database':
+        return <DatabaseManagement />;
       default:
         return <UserList />;
     }

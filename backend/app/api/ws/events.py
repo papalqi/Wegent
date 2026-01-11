@@ -120,6 +120,14 @@ class ChatSendPayload(BaseModel):
     contexts: Optional[List[ContextItem]] = Field(
         None, description="Context items (knowledge bases, etc.)"
     )
+    # Persistent working directory (optional, for code tasks)
+    repo_dir: Optional[str] = Field(
+        None,
+        description=(
+            "Working directory inside executor container. "
+            "Typically under /wegent_repos for persistent external repos."
+        ),
+    )
     # Repository info for code tasks
     git_url: Optional[str] = Field(None, description="Git repository URL")
     git_repo: Optional[str] = Field(None, description="Git repository name")
@@ -156,6 +164,13 @@ class ChatRetryPayload(BaseModel):
 
     task_id: int = Field(..., description="Task ID")
     subtask_id: int = Field(..., description="Failed AI subtask ID to retry")
+    retry_mode: Literal["resume", "new_session"] = Field(
+        "resume",
+        description=(
+            "Retry mode for Code Shell messages. "
+            "'resume' keeps the current session; 'new_session' forces a fresh session."
+        ),
+    )
     # Optional: Model to use for retry (overrides task metadata model if provided)
     force_override_bot_model: Optional[str] = Field(
         None, description="Model ID to override bot model for this retry"

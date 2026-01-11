@@ -4,7 +4,7 @@
 
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { ThinkingStep, TodoItem } from './types';
 import { useThinkingState } from './hooks/useThinkingState';
@@ -26,8 +26,6 @@ import TodoListDisplay from './components/TodoListDisplay';
 import SystemInfoDisplay from './components/SystemInfoDisplay';
 import ErrorDisplay from './components/ErrorDisplay';
 import ScrollToBottom from './components/ScrollToBottom';
-import { getTaskExecutionDisplay } from '@/utils/task-execution-phase';
-import { useTaskPhaseTimeline } from '@/hooks/use-task-phase-timeline';
 
 interface DetailedThinkingViewProps {
   thinking: ThinkingStep[] | null;
@@ -47,71 +45,9 @@ interface DetailedThinkingViewProps {
  */
 const DetailedThinkingView = memo(function DetailedThinkingView({
   thinking,
-  taskId,
   taskStatus,
-  taskPhase,
-  taskProgress,
-  taskProgressText,
-  taskErrorMessage,
-  taskUpdatedAt,
-  taskCompletedAt,
 }: DetailedThinkingViewProps) {
   const { t } = useTranslation();
-
-  const taskDisplay = useMemo(() => {
-    if (!taskStatus) return null;
-    return getTaskExecutionDisplay({
-      status: taskStatus as never,
-      progress: taskProgress ?? undefined,
-      statusPhase: taskPhase ?? undefined,
-    });
-  }, [taskPhase, taskProgress, taskStatus]);
-
-  const stageLabel = useMemo(() => {
-    if (!taskStatus || !taskDisplay) return null;
-    if (taskProgressText?.trim()) return taskProgressText;
-    return (
-      (taskStatus === 'CANCELLING'
-        ? t('chat:messages.status_cancelling')
-        : t(taskDisplay.labelKey)) || t('chat:messages.status_running')
-    );
-  }, [t, taskDisplay, taskProgressText, taskStatus]);
-
-  const stageId = useMemo(() => {
-    if (!taskStatus || !taskDisplay) return null;
-    if (taskProgressText?.trim()) return taskProgressText.trim();
-    if (taskPhase?.trim()) return taskPhase.trim();
-    return taskDisplay.phase;
-  }, [taskDisplay, taskPhase, taskProgressText, taskStatus]);
-
-  const eventAtMs = useMemo(() => {
-    const parsed = taskUpdatedAt ? Date.parse(taskUpdatedAt) : Number.NaN;
-    return Number.isFinite(parsed) ? parsed : Date.now();
-  }, [taskUpdatedAt]);
-
-  const terminalAtMs = useMemo(() => {
-    const parsed = taskCompletedAt ? Date.parse(taskCompletedAt) : Number.NaN;
-    return Number.isFinite(parsed) ? parsed : null;
-  }, [taskCompletedAt]);
-
-  const isTerminal =
-    taskStatus === 'COMPLETED' || taskStatus === 'FAILED' || taskStatus === 'CANCELLED';
-
-  const { timeline, nowMs } = useTaskPhaseTimeline({
-    taskId,
-    stageId,
-    stageLabel,
-    eventAtMs,
-    isTerminal,
-    terminalAtMs,
-  });
-
-  const formatSeconds = (ms: number) => {
-    const seconds = Math.max(0, Math.floor(ms / 1000));
-    return t('chat:messages.phase_elapsed', { seconds }) || `${seconds}s`;
-  };
-
-  const renderedTimeline = timeline.length > 0 ? timeline.slice(-8) : [];
 
   const {
     items,
@@ -163,6 +99,8 @@ const DetailedThinkingView = memo(function DetailedThinkingView({
       return formatCollapsedTitle();
     }
     if (isCompleted) {
+      if (taskStatus === 'FAILED') return t('tasks:thinking.execution_failed');
+      if (taskStatus === 'CANCELLED') return t('tasks:thinking.execution_cancelled');
       return t('tasks:thinking.execution_completed');
     }
     return t('chat:messages.thinking') || 'Thinking';
@@ -412,58 +350,6 @@ const DetailedThinkingView = memo(function DetailedThinkingView({
 
   return (
     <div className="w-full relative" data-thinking-inline>
-      {/* Task-level phase strip so users see pulling image/loading model inside bubble */}
-      {taskStatus && taskDisplay && stageLabel && (
-        <div className="mb-2 rounded-lg border border-border/60 bg-surface/70 p-3">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 text-xs font-semibold text-text-primary truncate">
-                {stageLabel}
-              </div>
-              {renderedTimeline.length > 0 && (
-                <div className="shrink-0 text-xs tabular-nums text-text-tertiary">
-                  {formatSeconds(nowMs - renderedTimeline[renderedTimeline.length - 1].startedAtMs)}
-                </div>
-              )}
-            </div>
-
-            {renderedTimeline.length > 1 && (
-              <div className="space-y-1">
-                {renderedTimeline.map((item, index) => {
-                  const isLast = index === renderedTimeline.length - 1;
-                  const endAtMs = item.endedAtMs ?? nowMs;
-                  const durationMs = Math.max(0, endAtMs - item.startedAtMs);
-                  return (
-                    <div
-                      key={`${item.id}-${item.startedAtMs}`}
-                      className="flex items-center justify-between gap-2 text-xs"
-                    >
-                      <div
-                        className={[
-                          'min-w-0 truncate',
-                          isLast ? 'text-text-primary' : 'text-text-tertiary',
-                        ].join(' ')}
-                      >
-                        {item.label}
-                      </div>
-                      <div className="shrink-0 tabular-nums text-text-tertiary">
-                        {formatSeconds(durationMs)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {taskErrorMessage?.trim() && (
-              <div className="rounded-md border border-red-500/20 bg-red-500/10 p-2">
-                <ErrorDisplay errorMessage={taskErrorMessage} />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       <ThinkingHeader
         title={getTitle()}
         isOpen={isOpen}

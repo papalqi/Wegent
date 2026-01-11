@@ -34,6 +34,7 @@ DEFAULT_DB_HOST="localhost"
 DEFAULT_DB_PORT=3306
 DEFAULT_REDIS_HOST="127.0.0.1"
 DEFAULT_REDIS_PORT=6379
+DEFAULT_REDIS_PASSWORD=""
 PYTHON_PATH=""
 
 PORT=$DEFAULT_PORT
@@ -42,6 +43,7 @@ DB_HOST=$DEFAULT_DB_HOST
 DB_PORT=$DEFAULT_DB_PORT
 REDIS_HOST=$DEFAULT_REDIS_HOST
 REDIS_PORT=$DEFAULT_REDIS_PORT
+REDIS_PASSWORD=$DEFAULT_REDIS_PASSWORD
 
 # Parse command line arguments
 # Parse command line arguments
@@ -71,6 +73,10 @@ while [[ $# -gt 0 ]]; do
             REDIS_PORT="$2"
             shift 2
             ;;
+        --redis-password)
+            REDIS_PASSWORD="$2"
+            shift 2
+            ;;
         --python)
             PYTHON_PATH="$2"
             shift 2
@@ -85,6 +91,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --db-port PORT       MySQL port (default: 3306)"
             echo "  --redis-host HOST    Redis host (default: 127.0.0.1)"
             echo "  --redis-port PORT    Redis port (default: 6379)"
+            echo "  --redis-password PW  Redis password (default: empty)"
             echo "  --python PATH        Python executable path (default: auto-detect)"
             echo "  -h, --help           Show this help message"
             echo ""
@@ -93,6 +100,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --port 8080                          # Use custom backend port"
             echo "  $0 --db-host 192.168.1.100 --db-port 3307   # Use remote MySQL"
             echo "  $0 --redis-host redis.example.com       # Use remote Redis"
+            echo "  $0 --redis-password yourpass            # Use Redis password"
             echo "  $0 --python /usr/local/bin/python3.12   # Use specific Python"
             exit 0
             ;;
@@ -344,7 +352,13 @@ echo ""
 # Step 6: Check Redis connection
 echo -e "${BLUE}[6/7] Checking Redis connection...${NC}"
 if command -v redis-cli &> /dev/null; then
-    if redis-cli -p "$REDIS_PORT" ping &> /dev/null; then
+    if [ -n "$REDIS_PASSWORD" ]; then
+        redis_auth_args=(--no-auth-warning -a "$REDIS_PASSWORD")
+    else
+        redis_auth_args=()
+    fi
+
+    if redis-cli -p "$REDIS_PORT" "${redis_auth_args[@]}" ping &> /dev/null; then
         echo -e "${GREEN}✓ Redis connection successful${NC}"
     else
         echo -e "${YELLOW}Warning: Cannot connect to Redis on port $REDIS_PORT${NC}"

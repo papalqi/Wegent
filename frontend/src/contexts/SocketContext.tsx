@@ -88,7 +88,8 @@ interface SocketContextType {
     subtaskId: number,
     modelId?: string,
     modelType?: string,
-    forceOverride?: boolean
+    forceOverride?: boolean,
+    retryMode?: 'resume' | 'new_session'
   ) => Promise<{ success: boolean; error?: string }>;
   /** Register chat event handlers */
   registerChatHandlers: (handlers: ChatEventHandlers) => () => void;
@@ -391,7 +392,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       subtaskId: number,
       modelId?: string,
       modelType?: string,
-      forceOverride: boolean = false
+      forceOverride: boolean = false,
+      retryMode?: 'resume' | 'new_session'
     ): Promise<{ success: boolean; error?: string }> => {
       if (!socket?.connected) {
         console.error('[Socket.IO] retryMessage failed - not connected');
@@ -401,6 +403,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       const payload = {
         task_id: taskId,
         subtask_id: subtaskId,
+        ...(retryMode ? { retry_mode: retryMode } : {}),
         force_override_bot_model: modelId,
         force_override_bot_model_type: modelType,
         use_model_override: forceOverride,

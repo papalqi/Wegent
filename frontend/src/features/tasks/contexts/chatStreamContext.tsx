@@ -199,6 +199,8 @@ export interface ChatMessageRequest {
     type: string;
     data: Record<string, unknown>;
   }>;
+  /** Working directory inside executor container (e.g. /wegent_repos/<dir>) */
+  repo_dir?: string;
   // Repository info for code tasks
   git_url?: string;
   git_repo?: string;
@@ -1231,6 +1233,7 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         force_override_bot_model_type: request.force_override_bot_model ? 'user' : undefined,
         is_group_chat: request.is_group_chat,
         contexts: request.contexts,
+        repo_dir: request.repo_dir,
         // Repository info for code tasks
         git_url: request.git_url,
         git_repo: request.git_repo,

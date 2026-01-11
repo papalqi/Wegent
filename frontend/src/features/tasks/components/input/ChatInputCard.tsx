@@ -99,6 +99,10 @@ export function ChatInputCard({
   selectedBranch,
   setSelectedBranch,
   selectedTaskDetail,
+  codeWorkspaceMode,
+  setCodeWorkspaceMode,
+  repoDir,
+  setRepoDir,
   enableDeepThinking,
   setEnableDeepThinking,
   enableClarification,
@@ -204,12 +208,17 @@ export function ChatInputCard({
             teamId={teamId}
             taskId={taskId}
             taskModelId={selectedTaskDetail?.model_id}
+            taskType={taskType}
             showRepositorySelector={showRepositorySelector}
             selectedRepo={selectedRepo}
             setSelectedRepo={setSelectedRepo}
             selectedBranch={selectedBranch}
             setSelectedBranch={setSelectedBranch}
             selectedTaskDetail={selectedTaskDetail}
+            codeWorkspaceMode={codeWorkspaceMode}
+            setCodeWorkspaceMode={setCodeWorkspaceMode}
+            repoDir={repoDir}
+            setRepoDir={setRepoDir}
             enableDeepThinking={enableDeepThinking}
             setEnableDeepThinking={setEnableDeepThinking}
             enableClarification={enableClarification}

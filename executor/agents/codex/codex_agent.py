@@ -33,6 +33,30 @@ logger = setup_logger("codex_agent")
 STREAM_READER_LIMIT = 1024 * 1024 * 4  # 4 MiB
 
 
+def _extract_thread_id_from_event(event: Dict[str, Any]) -> Optional[str]:
+    if event.get("type") != "thread.started":
+        return None
+
+    candidates: list[Any] = [
+        event.get("thread_id"),
+        event.get("threadId"),
+    ]
+    thread = event.get("thread")
+    if isinstance(thread, dict):
+        candidates.extend(
+            [
+                thread.get("id"),
+                thread.get("thread_id"),
+                thread.get("threadId"),
+            ]
+        )
+
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return None
+
+
 class CodexAgent(Agent):
     """
     Codex Agent that integrates with the @openai/codex CLI in non-interactive mode.
@@ -47,6 +71,8 @@ class CodexAgent(Agent):
     def __init__(self, task_data: Dict[str, Any]):
         super().__init__(task_data)
         self.session_id = self.task_id
+        self.resume_session_id: Optional[str] = None
+        self.retry_mode: str = "resume"
         self.prompt = task_data.get("prompt", "")
 
         self.options = self._extract_codex_options(task_data)
@@ -64,6 +90,14 @@ class CodexAgent(Agent):
         self._model: Optional[str] = None
         self._codex_env: Optional[Dict[str, str]] = None
         self._codex_dir: Optional[Path] = None
+
+        resume_session_id = task_data.get("resume_session_id")
+        if isinstance(resume_session_id, str) and resume_session_id.strip():
+            self.resume_session_id = resume_session_id.strip()
+
+        retry_mode = task_data.get("retry_mode")
+        if isinstance(retry_mode, str) and retry_mode.strip():
+            self.retry_mode = retry_mode.strip()
 
         # Configure OpenAI auth for Codex CLI from bot agent_config
         self._configure_openai_env(task_data)
@@ -234,6 +268,30 @@ class CodexAgent(Agent):
 
     def pre_execute(self) -> TaskStatus:
         try:
+            repo_dir = self.task_data.get("repo_dir")
+            if isinstance(repo_dir, str) and repo_dir.strip():
+                repo_dir = repo_dir.strip()
+                os.makedirs(repo_dir, exist_ok=True)
+                try:
+                    from shared.utils.persistent_repo import detect_repo_vcs
+
+                    repo_vcs, is_p4 = detect_repo_vcs(Path(repo_dir))
+                    self.task_data["repo_vcs"] = repo_vcs or ""
+                    self.task_data["is_p4"] = is_p4
+                    logger.info(
+                        "Detected repo_vcs=%s is_p4=%s repo_dir=%s",
+                        repo_vcs,
+                        is_p4,
+                        repo_dir,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to detect repo VCS for %s: %s", repo_dir, e)
+
+                if not self.options.get("cwd"):
+                    self.options["cwd"] = repo_dir
+                    self.project_path = repo_dir
+                    logger.info("Set cwd to %s", repo_dir)
+
             git_url = self.task_data.get("git_url")
             if git_url:
                 self.download_code()
@@ -260,7 +318,15 @@ class CodexAgent(Agent):
                 60,
                 TaskStatus.RUNNING.value,
                 "${{thinking.initialize_agent}}",
-                extra_result={"value": "", "shell_type": "Codex"},
+                extra_result={
+                    "value": "",
+                    "shell_type": "Codex",
+                    **(
+                        {"resume_session_id": self.resume_session_id}
+                        if self._should_use_resume()
+                        else {}
+                    ),
+                },
             )
 
             try:
@@ -304,10 +370,19 @@ class CodexAgent(Agent):
 
         cwd = self.options.get("cwd") or ""
         git_url = self.task_data.get("git_url") or ""
+        repo_dir = self.task_data.get("repo_dir") or ""
+        repo_vcs = self.task_data.get("repo_vcs") or ""
+        is_p4 = self.task_data.get("is_p4")
         if cwd:
             parts.append(f"Current working directory: {cwd}")
         if git_url:
             parts.append(f"Project url: {git_url}")
+        if isinstance(repo_dir, str) and repo_dir.strip():
+            parts.append(f"Persistent repo directory: {repo_dir.strip()}")
+        if isinstance(repo_vcs, str) and repo_vcs.strip():
+            parts.append(f"repo_vcs: {repo_vcs.strip()}")
+        if isinstance(is_p4, bool):
+            parts.append(f"is_p4: {is_p4}")
 
         return "\n\n".join(p for p in parts if p)
 
@@ -324,9 +399,19 @@ class CodexAgent(Agent):
         if self._model:
             cmd.extend(["--model", self._model])
 
+        if self._should_use_resume():
+            cmd.extend(["resume", self.resume_session_id])
+
         # Read prompt from stdin to avoid OS arg length limits.
         cmd.append("-")
         return cmd
+
+    def _should_use_resume(self) -> bool:
+        return (
+            isinstance(self.resume_session_id, str)
+            and self.resume_session_id != ""
+            and self.retry_mode != "new_session"
+        )
 
     def _open_event_stream_files(
         self,
@@ -449,6 +534,11 @@ class CodexAgent(Agent):
                     extra_result={
                         "codex_event": batch,
                         "shell_type": "Codex",
+                        **(
+                            {"resume_session_id": self.resume_session_id}
+                            if self.resume_session_id
+                            else {}
+                        ),
                     },
                 )
             except Exception:
@@ -502,6 +592,20 @@ class CodexAgent(Agent):
                     ):
                         await _flush_codex_events()
 
+                    thread_id = _extract_thread_id_from_event(event)
+                    if thread_id and thread_id != self.resume_session_id:
+                        self.resume_session_id = thread_id
+                        self.state_manager.report_progress(
+                            70,
+                            TaskStatus.RUNNING.value,
+                            "${{thinking.running}}",
+                            extra_result={
+                                "value": accumulated,
+                                "shell_type": "Codex",
+                                "resume_session_id": thread_id,
+                            },
+                        )
+
                 event_type = event.get("type")
                 if event_type == "item.completed":
                     item = event.get("item") or {}
@@ -518,6 +622,13 @@ class CodexAgent(Agent):
                                     extra_result={
                                         "value": accumulated,
                                         "shell_type": "Codex",
+                                        **(
+                                            {
+                                                "resume_session_id": self.resume_session_id
+                                            }
+                                            if self.resume_session_id
+                                            else {}
+                                        ),
                                     },
                                 )
                                 await asyncio.sleep(0)
@@ -560,7 +671,15 @@ class CodexAgent(Agent):
                 100,
                 TaskStatus.COMPLETED.value,
                 "${{thinking.execution_completed}}",
-                extra_result={"value": accumulated, "shell_type": "Codex"},
+                extra_result={
+                    "value": accumulated,
+                    "shell_type": "Codex",
+                    **(
+                        {"resume_session_id": self.resume_session_id}
+                        if self.resume_session_id
+                        else {}
+                    ),
+                },
             )
             self.task_state_manager.set_state(self.task_id, TaskState.COMPLETED)
             return TaskStatus.COMPLETED
@@ -583,6 +702,11 @@ class CodexAgent(Agent):
                     "error": str(e),
                     "value": accumulated,
                     "shell_type": "Codex",
+                    **(
+                        {"resume_session_id": self.resume_session_id}
+                        if self.resume_session_id
+                        else {}
+                    ),
                 },
             )
             return TaskStatus.FAILED

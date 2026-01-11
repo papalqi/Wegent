@@ -26,6 +26,7 @@ import { useTheme } from '@/features/theme/ThemeProvider';
 import { useTranslation } from '@/hooks/useTranslation';
 import { taskApis, BranchDiffResponse } from '@/apis/tasks';
 import DiffViewer from '../message/DiffViewer';
+import { TaskContainerStatusBadge } from '../container-status/TaskContainerStatusBadge';
 
 // Tool icon mapping
 const TOOL_ICONS: Record<string, string> = {
@@ -175,6 +176,13 @@ export default function Workbench({
     (!selectedTaskId || normalizeTaskId(cachedWorkbenchData.taskNumber) === selectedTaskId)
       ? cachedWorkbenchData
       : null;
+
+  const containerStatusTaskId = (() => {
+    const rawTaskId = selectedTaskId || normalizeTaskId(displayData?.taskNumber);
+    if (!rawTaskId) return null;
+    const parsed = Number.parseInt(rawTaskId, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  })();
 
   // Loading state rotation (4 seconds)
   useEffect(() => {
@@ -560,6 +568,12 @@ export default function Workbench({
                       </div>
                     )}
 
+                    {containerStatusTaskId && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <TaskContainerStatusBadge taskId={containerStatusTaskId} />
+                      </div>
+                    )}
+
                     {/* Progress Text with Icon */}
                     <div className="flex items-center justify-center gap-3 pt-4 transition-opacity duration-300">
                       <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent"></div>
@@ -590,7 +604,7 @@ export default function Workbench({
                       </span>
                     </div>
                     {/* Status Badge */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       <span
                         className={classNames(
                           getStatusColor(),
@@ -606,6 +620,9 @@ export default function Workbench({
                         )}
                         {getStatusText()}
                       </span>
+                      {containerStatusTaskId && (
+                        <TaskContainerStatusBadge taskId={containerStatusTaskId} />
+                      )}
                       <span className="text-sm text-text-muted">
                         {formatDateTime(displayData?.completedTime) || ''}
                       </span>

@@ -10,13 +10,13 @@
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://docker.com)
 [![Claude](https://img.shields.io/badge/Claude-Code-orange.svg)](https://claude.ai)
 [![Gemini](https://img.shields.io/badge/Gemini-支持-4285F4.svg)](https://ai.google.dev)
-[![Version](https://img.shields.io/badge/版本-1.0.20-brightgreen.svg)](https://github.com/wecode-ai/wegent/releases)
+[![Version](https://img.shields.io/badge/版本-1.35.2-brightgreen.svg)](https://github.com/wecode-ai/wegent/releases)
 
 <div align="center">
 
 <img src="./docs/assets/images/example.gif" width="75%" alt="演示"/>
 
-[快速开始](#-快速开始) · [文档](docs/zh/README.md) · [开发指南](docs/zh/guides/developer/setup.md)
+[快速开始](#-快速开始) · [文档](docs/README.md) · [开发指南](docs/guides/developer/setup.md)
 
 </div>
 
@@ -46,11 +46,39 @@
 
 ```bash
 git clone https://github.com/wecode-ai/wegent.git && cd wegent
+cp .env.example .env
+# 修改 .env 中的 REDIS_PASSWORD（docker-compose 默认启用 Redis AUTH）
 docker-compose up -d
 # 访问 http://localhost:3000
 ```
 
 > 可选：启用 RAG 功能 `docker compose --profile rag up -d`
+
+### 🌐 公网 / 局域网访问（start.sh）
+
+`start.sh` 会在本机启动前后端（Docker 启动 MySQL/Redis/Executor Manager）。如果需要让其他机器访问，请用 `WEGENT_PUBLIC_HOST` 指定对外可访问的地址：
+
+```bash
+# 自动探测本机非回环 IPv4（推荐）
+WEGENT_PUBLIC_HOST=auto ./start.sh
+
+# 或显式指定公网 IP/域名
+WEGENT_PUBLIC_HOST=your-public-ip-or-domain ./start.sh
+```
+
+可选：`WEGENT_PUBLIC_SCHEME=https`（配合反向代理/HTTPS）、`WEGENT_FRONTEND_HOST=127.0.0.1`（限制前端仅本机访问）。
+
+### 💾 持久化代码目录（/wegent_repos）
+
+`start.sh` 会把宿主机上的持久化目录挂载进执行器容器的 `/wegent_repos`，用于 UI「目录」模式的代码工作区（不会自动 clone/sync，也不会被任务删除）。
+
+默认路径是仓库同级的 `../wegent_repos`。如果系统盘容量不够，建议把它放到更大的磁盘/分区：
+
+```bash
+WEGENT_PERSIST_REPO_ROOT=/data/wegent_repos ./start.sh
+```
+
+也可以把 `WEGENT_PERSIST_REPO_ROOT=/data/wegent_repos` 写进仓库根目录的 `.env.local`（`start.sh` 会自动读取）。该目录必须在 Wegent 仓库外部。
 
 ---
 
@@ -75,21 +103,61 @@ Frontend (Next.js) → Backend (FastAPI) → Executor Manager → Executors (Cla
 - **Ghost** (提示词) + **Shell** (执行环境) + **Model** = **Bot**
 - 多个 **Bot** + **协作模式** = **Team**
 
-> 详见 [核心概念](docs/zh/concepts/core-concepts.md) | [YAML 规范](docs/zh/reference/yaml-specification.md)
+> 详见 [核心概念](docs/concepts/core-concepts.md) | [YAML 规范](docs/reference/yaml-specification.md)
 
 ---
 
 ## 🤝 贡献
 
-我们欢迎贡献！详情请参阅 [贡献指南](CONTRIBUTING.md)。
+我们欢迎贡献！详情请参阅 [贡献指南 (CONTRIBUTING.md)](CONTRIBUTING.md) 和 [中文速查指南 (AGENTS.md)](AGENTS.md)。
+
+### Git 分支策略
+
+**⚠️ 重要分支保护规则：**
+
+- **main 分支**：仅限生产就绪代码。**禁止直接提交**。只接受来自 `develop` 分支的 Pull Request。
+- **develop 分支**：开发集成分支。接受来自 `feature/*`、`fix/*`、`hotfix/*` 分支的 PR。
+- **功能分支**：从 `develop` 创建，PR 回 `develop`。
+
+**工作流程：**
+```bash
+git checkout develop && git pull origin develop
+git checkout -b feature/your-feature develop
+# ... 开发 ...
+git push origin feature/your-feature
+# 创建 PR: feature/your-feature → develop
+```
 
 ### CI / 镜像发布
 
-- `Publish Image` 工作流（`.github/workflows/publish-image.yml`）触发条件：
+- **Publish Image 工作流**（`.github/workflows/publish-image.yml`）触发条件：
   - 合并到 `main` 的 PR，且 **标题包含** `Changeset version bump`
-  - 推送标签 `v*.*.*`
+  - 推送标签 `v*.*.*`（如 `v1.35.2`）
   - 手动 `workflow_dispatch`
 - 若 PR 合并但标题不含 `Changeset version bump`，Actions 里可能会显示为 **Skipped**（job 被 `if:` 条件跳过）。
+- **Tests 工作流**（`.github/workflows/test.yml`）在所有推送到 `main`/`develop` 和所有 PR 时运行。
+
+### 🧪 Chrome DevTools MCP（可选：交互式回归 / 调试）
+
+适用场景：需要用 MCP 客户端驱动真实 Chrome（查看 Console / Network / DOM 等），用于补充 Playwright 自动化回归或排查 flaky。
+
+**依赖：**
+- 已安装 Google Chrome
+- Node.js `>= 20.19.0`（`chrome-devtools-mcp` 要求；低版本会直接报错）
+- （可选）Codex CLI（本仓库的 Codex 技能会用到）
+
+**配置（Codex CLI）：**
+```bash
+# 添加 MCP server（全局）
+codex mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest
+
+# 查看已配置的 MCP servers
+codex mcp list
+```
+
+常见问题：如果提示 `chrome-devtools-mcp does not support Node ...`，请升级 Node 到 `>= 20.19.0`（或在 Codex 配置中指定更新的 Node/`npx`）。
+
+> Wegent 内部的 MCP（Chat Shell）开关与服务列表请参考：`docs/guides/developer/config-web-search-and-mcp.md`。
 
 ## 📞 支持
 

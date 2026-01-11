@@ -9,13 +9,15 @@ including context fetching and subtask reset.
 """
 
 import logging
+import uuid
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Any, Literal, Optional, Tuple
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session, aliased, joinedload
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.core.config import settings
 from app.models.kind import Kind
 from app.models.subtask import Subtask, SubtaskRole, SubtaskStatus
 from app.models.task import TaskResource
@@ -116,22 +118,59 @@ def fetch_retry_context(
     return failed_ai_subtask, task, team, user_subtask
 
 
-def reset_subtask_for_retry(db: Session, subtask: Subtask) -> None:
+def reset_subtask_for_retry(
+    db: Session,
+    subtask: Subtask,
+    *,
+    retry_mode: Literal["resume", "new_session"] = "resume",
+    shell_type: Optional[str] = None,
+) -> None:
     """
     Reset a failed subtask to PENDING status for retry.
 
     Args:
         db: Database session
         subtask: The subtask to reset
+        retry_mode: Retry mode indicating whether to reuse session or start a new one
+        shell_type: Optional shell type hint (e.g. "Codex", "ClaudeCode")
 
     Note:
         This function only mutates ORM objects in the current session. The caller
         should commit/rollback as part of its transaction boundary.
     """
+    existing_result: dict[str, Any] = (
+        subtask.result if isinstance(subtask.result, dict) else {}
+    )
+    resolved_shell_type = shell_type
+    if not resolved_shell_type:
+        existing_shell_type = existing_result.get("shell_type")
+        if isinstance(existing_shell_type, str) and existing_shell_type:
+            resolved_shell_type = existing_shell_type
+
+    if (
+        resolved_shell_type in ("Codex", "ClaudeCode")
+        and not settings.CODE_SHELL_RESUME_ENABLED
+    ):
+        retry_mode = "new_session"
+
+    preserved_result: dict[str, Any] = {}
+    if resolved_shell_type:
+        preserved_result["shell_type"] = resolved_shell_type
+    preserved_result["retry_mode"] = retry_mode
+
+    if retry_mode == "resume":
+        for key in ("resume_session_id", "session_id"):
+            value = existing_result.get(key)
+            if isinstance(value, str) and value:
+                preserved_result[key] = value
+    elif retry_mode == "new_session":
+        if resolved_shell_type == "ClaudeCode":
+            preserved_result["session_id"] = str(uuid.uuid4())
+
     subtask.status = SubtaskStatus.PENDING
     subtask.progress = 0
     subtask.error_message = ""
-    subtask.result = None
+    subtask.result = preserved_result
     subtask.executor_name = None
     subtask.executor_namespace = None
     subtask.updated_at = datetime.now()

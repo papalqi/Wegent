@@ -55,10 +55,24 @@ async def lifespan(app: FastAPI):
 
     # Try to get Redis client for distributed locking
     redis_client = None
-    try:
-        redis_client = redis.from_url(settings.REDIS_URL)
-    except Exception as e:
-        logger.warning(f"Failed to connect to Redis for startup lock: {e}")
+    redis_url = settings.get_redis_url()
+    if redis_url:
+        last_error: Exception | None = None
+        start_ts = time.time()
+        while time.time() - start_ts < 30:
+            try:
+                candidate = redis.from_url(redis_url)
+                candidate.ping()
+                redis_client = candidate
+                break
+            except Exception as e:
+                last_error = e
+                await asyncio.sleep(1)
+        if redis_client is None and last_error is not None:
+            logger.warning(
+                "Failed to connect to Redis for startup lock "
+                f"({settings.get_redis_url_safe()}): {last_error}"
+            )
 
     # Check if startup initialization already done by another worker
     # If INIT_DATA_FORCE is True, skip this check and force re-initialization

@@ -241,6 +241,7 @@ export interface TaskDetail {
   git_repo_id: number;
   git_domain: string;
   branch_name: string;
+  repo_dir?: string;
   prompt: string;
   status: TaskStatus;
   task_type?: TaskType;
@@ -339,6 +340,7 @@ export interface Task {
   git_repo_id: number;
   git_domain: string;
   branch_name: string;
+  repo_dir?: string;
   prompt: string;
   status: TaskStatus;
   task_type?: TaskType;
@@ -354,6 +356,20 @@ export interface Task {
   updated_at: string;
   completed_at: string;
   is_group_chat?: boolean; // Whether this task is a group chat
+}
+
+export type TaskContainerStatus = 'running' | 'exited' | 'not_found' | 'unknown';
+
+export interface TaskExecutorContainerStatus {
+  task_id: number;
+  executor_name: string | null;
+  status: TaskContainerStatus;
+  state: string | null;
+  reason: string | null;
+}
+
+export interface TaskExecutorContainerStatusBatchResponse {
+  items: TaskExecutorContainerStatus[];
 }
 
 /** GitHub repository new structure */

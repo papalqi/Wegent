@@ -10,13 +10,13 @@ English | [简体中文](README_zh.md)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://docker.com)
 [![Claude](https://img.shields.io/badge/Claude-Code-orange.svg)](https://claude.ai)
 [![Gemini](https://img.shields.io/badge/Gemini-supported-4285F4.svg)](https://ai.google.dev)
-[![Version](https://img.shields.io/badge/version-1.0.20-brightgreen.svg)](https://github.com/wecode-ai/wegent/releases)
+[![Version](https://img.shields.io/badge/version-1.35.2-brightgreen.svg)](https://github.com/wecode-ai/wegent/releases)
 
 <div align="center">
 
 <img src="./docs/assets/images/example.gif" width="75%" alt="Demo"/>
 
-[Quick Start](#-quick-start) · [Documentation](docs/en/README.md) · [Development Guide](docs/en/guides/developer/setup.md)
+[Quick Start](#-quick-start) · [Documentation](docs/README.md) · [Development Guide](docs/guides/developer/setup.md)
 
 </div>
 
@@ -46,11 +46,40 @@ English | [简体中文](README_zh.md)
 
 ```bash
 git clone https://github.com/wecode-ai/wegent.git && cd wegent
+cp .env.example .env
+# Update REDIS_PASSWORD in .env (docker-compose enables Redis AUTH by default)
 docker-compose up -d
 # Open http://localhost:3000
 ```
 
 > Optional: Enable RAG features with `docker compose --profile rag up -d`
+
+### 🌐 Public / LAN Access (start.sh)
+
+`start.sh` runs backend + frontend on host (and starts MySQL/Redis/Executor Manager via Docker). To make it accessible from other machines, set `WEGENT_PUBLIC_HOST` to a reachable address:
+
+```bash
+# Auto-detect a non-loopback IPv4 (recommended)
+WEGENT_PUBLIC_HOST=auto ./start.sh
+
+# Or specify your public IP / domain
+WEGENT_PUBLIC_HOST=your-public-ip-or-domain ./start.sh
+```
+
+Optional: `WEGENT_PUBLIC_SCHEME=https` (behind reverse proxy/HTTPS), `WEGENT_FRONTEND_HOST=127.0.0.1` (restrict frontend to local only).
+
+### 💾 Persistent Code Workspace (/wegent_repos)
+
+`start.sh` mounts a host directory into executor containers at `/wegent_repos` for the UI “Directory” mode (Wegent won’t auto clone/sync, and tasks won’t delete it).
+
+By default it uses `../wegent_repos` (sibling of the Wegent repo). If your system disk is too small, point it to a larger disk/partition:
+
+```bash
+WEGENT_PERSIST_REPO_ROOT=/data/wegent_repos ./start.sh
+```
+
+You can also put `WEGENT_PERSIST_REPO_ROOT=/data/wegent_repos` into the repo root `.env.local` (auto-loaded by `start.sh`).
+The path must be outside the Wegent repo root.
 
 ---
 
@@ -75,21 +104,61 @@ Frontend (Next.js) → Backend (FastAPI) → Executor Manager → Executors (Cla
 - **Ghost** (prompt) + **Shell** (environment) + **Model** = **Bot**
 - Multiple **Bots** + **Collaboration Mode** = **Team**
 
-> See [Core Concepts](docs/en/concepts/core-concepts.md) | [YAML Spec](docs/en/reference/yaml-specification.md)
+> See [Core Concepts](docs/concepts/core-concepts.md) | [YAML Spec](docs/reference/yaml-specification.md)
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) and [中文贡献指南 (AGENTS.md)](AGENTS.md) for details.
 
-### CI / Image publishing
+### Git Branch Strategy
 
-- The `Publish Image` workflow (`.github/workflows/publish-image.yml`) runs on:
+**⚠️ Important Branch Protection Rules:**
+
+- **main branch**: Production-ready code only. **NO direct commits allowed**. Only accepts Pull Requests from `develop` branch.
+- **develop branch**: Development integration branch. Accepts PRs from `feature/*`, `fix/*`, `hotfix/*` branches.
+- **Feature branches**: Create from `develop`, PR back to `develop`.
+
+**Workflow:**
+```bash
+git checkout develop && git pull origin develop
+git checkout -b feature/your-feature develop
+# ... do your work ...
+git push origin feature/your-feature
+# Create PR: feature/your-feature → develop
+```
+
+### CI / Image Publishing
+
+- **Publish Image workflow** (`.github/workflows/publish-image.yml`) triggers on:
   - PR merged into `main` **with title containing** `Changeset version bump`
-  - tag push `v*.*.*`
+  - tag push `v*.*.*` (e.g., `v1.35.2`)
   - manual `workflow_dispatch`
 - If a PR is merged without `Changeset version bump` in the title, the workflow may show as **Skipped** (jobs gated by `if:` conditions).
+- **Tests workflow** (`.github/workflows/test.yml`) runs on all pushes to `main`/`develop` and all PRs.
+
+### 🧪 Chrome DevTools MCP (Optional: Interactive Regression / Debugging)
+
+Use case: drive a real Chrome instance via an MCP client (inspect Console / Network / DOM) to complement Playwright E2E or debug flaky UI tests.
+
+**Dependencies:**
+- Google Chrome installed
+- Node.js `>= 20.19.0` (required by `chrome-devtools-mcp`; older versions will fail)
+- (Optional) Codex CLI
+
+**Setup (Codex CLI):**
+```bash
+# Add an MCP server (global)
+codex mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest
+
+# List configured MCP servers
+codex mcp list
+```
+
+Troubleshooting: if you see `chrome-devtools-mcp does not support Node ...`, upgrade Node to `>= 20.19.0` (or configure Codex to use a newer Node/`npx`).
+
+> For Wegent's built-in MCP (Chat Shell) configuration, see `docs/guides/developer/config-web-search-and-mcp.md`.
 
 ## 📞 Support
 

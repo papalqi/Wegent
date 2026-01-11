@@ -11,6 +11,7 @@ for multi-worker deployments.
 
 import logging
 
+import redis
 import socketio
 
 from app.core.config import settings
@@ -35,11 +36,17 @@ def create_socketio_server() -> socketio.AsyncServer:
         socketio.AsyncServer: Configured Socket.IO server
     """
     # Create Redis manager for cross-worker communication
-    redis_url = settings.REDIS_URL
+    redis_url = settings.get_redis_url()
 
     try:
-        mgr = socketio.AsyncRedisManager(redis_url)
-        logger.info(f"Socket.IO Redis manager initialized with {redis_url}")
+        if redis_url:
+            redis.from_url(redis_url).ping()
+            mgr = socketio.AsyncRedisManager(redis_url)
+            logger.info(
+                f"Socket.IO Redis manager initialized with {settings.get_redis_url_safe()}"
+            )
+        else:
+            mgr = None
     except Exception as e:
         logger.warning(
             f"Failed to create Redis manager: {e}, falling back to in-memory"

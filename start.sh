@@ -75,8 +75,77 @@ ELASTICSEARCH_PORT="${WEGENT_ELASTICSEARCH_PORT:-9200}"
 ENABLE_RAG="${WEGENT_ENABLE_RAG:-false}"
 FRONTEND_DEV_MODE="${WEGENT_FRONTEND_DEV_MODE:-false}"
 
+# Public access configuration (for browsers on other machines).
+# By default, the script keeps using localhost.
+# Set WEGENT_PUBLIC_HOST=auto to auto-detect a non-loopback IPv4 address.
+detect_default_ipv4() {
+  local ip=""
+
+  if command -v ip >/dev/null 2>&1; then
+    ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="src") {print $(i+1); exit}}')"
+  fi
+
+  if [ -z "$ip" ] && command -v python3 >/dev/null 2>&1; then
+    ip="$(python3 - <<'PY'
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    s.connect(("8.8.8.8", 80))
+    print(s.getsockname()[0])
+finally:
+    s.close()
+PY
+)"
+  fi
+  if [ -z "$ip" ] && command -v python >/dev/null 2>&1; then
+    ip="$(python - <<'PY'
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    s.connect(("8.8.8.8", 80))
+    print(s.getsockname()[0])
+finally:
+    s.close()
+PY
+)"
+  fi
+
+  echo "${ip}"
+}
+
+PUBLIC_SCHEME="${WEGENT_PUBLIC_SCHEME:-http}"
+PUBLIC_HOST="${WEGENT_PUBLIC_HOST:-localhost}"
+if [ "${PUBLIC_HOST}" = "auto" ]; then
+  PUBLIC_HOST="$(detect_default_ipv4)"
+  if [ -z "${PUBLIC_HOST}" ]; then
+    PUBLIC_HOST="localhost"
+  fi
+fi
+
+PUBLIC_FRONTEND_URL="${PUBLIC_SCHEME}://${PUBLIC_HOST}:${FRONTEND_PORT}"
+PUBLIC_BACKEND_URL="${PUBLIC_SCHEME}://${PUBLIC_HOST}:${BACKEND_PORT}"
+
+# Allow overrides via existing env vars (useful for reverse proxies).
+BACKEND_FRONTEND_URL="${FRONTEND_URL:-${PUBLIC_FRONTEND_URL}}"
+SOCKET_DIRECT_URL="${RUNTIME_SOCKET_DIRECT_URL:-${PUBLIC_BACKEND_URL}}"
+
+# Next.js bind host (affects whether other machines can access the frontend).
+# Default to 0.0.0.0 to allow LAN/WAN access; override with WEGENT_FRONTEND_HOST=127.0.0.1 to restrict to local only.
+FRONTEND_HOST="${WEGENT_FRONTEND_HOST:-0.0.0.0}"
+
 # Runtime workspace for executor containers (host path)
 EXECUTOR_WORKSPACE="${WEGENT_EXECUTOR_WORKSPACE:-${HOME}/wecode-bot}"
+
+# Host persistent repo root (external directory; configurable)
+WEGENT_ROOT_REAL="$(realpath "${ROOT_DIR}")"
+DEFAULT_PERSIST_REPO_ROOT="$(realpath -m "${ROOT_DIR}/../wegent_repos")"
+PERSIST_REPO_ROOT="${WEGENT_PERSIST_REPO_ROOT:-${DEFAULT_PERSIST_REPO_ROOT}}"
+PERSIST_REPO_ROOT="$(realpath -m "${PERSIST_REPO_ROOT}")"
+if [[ "${PERSIST_REPO_ROOT}" == "${WEGENT_ROOT_REAL}/"* ]]; then
+  echo "Error: Persistent repo root must not be inside Wegent root: ${PERSIST_REPO_ROOT}" >&2
+  exit 1
+fi
+mkdir -p "${PERSIST_REPO_ROOT}"
 
 # Docker image overrides (useful for forks publishing to GHCR)
 detect_image_prefix() {
@@ -110,6 +179,7 @@ EXECUTOR_IMAGE="${WEGENT_EXECUTOR_IMAGE:-${IMAGE_PREFIX}/wegent-executor:${WEGEN
 
 BACKEND_PGID=""
 FRONTEND_PGID=""
+CLEANUP_ARMED="false"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -137,10 +207,15 @@ Options:
 
 Environment variables (optional):
   WEGENT_FRONTEND_PORT, WEGENT_BACKEND_PORT, WEGENT_EXECUTOR_MANAGER_PORT
+  WEGENT_PUBLIC_HOST (default: localhost; use 'auto' to detect), WEGENT_PUBLIC_SCHEME (default: http)
+  WEGENT_FRONTEND_HOST (default: 0.0.0.0; set to 127.0.0.1 to restrict to local only)
   WEGENT_MYSQL_PORT, WEGENT_REDIS_PORT, WEGENT_ELASTICSEARCH_PORT (must match docker-compose.yml port mapping)
+  WEGENT_REDIS_IMAGE (default: redis:7; e.g. ghcr.io/valkey-io/valkey:latest)
   WEGENT_ENABLE_RAG, WEGENT_EXECUTOR_WORKSPACE, WEGENT_FRONTEND_DEV_MODE
+  WEGENT_PERSIST_REPO_ROOT (host path for persistent repos; default: ../wegent_repos; must be outside Wegent root)
   WEGENT_IMAGE_PREFIX, WEGENT_EXECUTOR_MANAGER_IMAGE, WEGENT_EXECUTOR_IMAGE
   WEGENT_EXECUTOR_MANAGER_VERSION, WEGENT_EXECUTOR_VERSION
+  REDIS_PASSWORD (required for docker-compose.yml redis auth; auto-generated if missing)
 EOF
 }
 
@@ -150,6 +225,39 @@ die() {
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+ensure_redis_password() {
+  if [ -n "${REDIS_PASSWORD:-}" ]; then
+    return 0
+  fi
+
+  local generated=""
+  if have python3; then
+    generated="$(python3 - <<'PY'
+import secrets
+print(secrets.token_hex(32))
+PY
+)"
+  elif have openssl; then
+    generated="$(openssl rand -hex 32)"
+  else
+    generated="wegent-redis-$(date +%s)"
+  fi
+
+  export REDIS_PASSWORD="${generated}"
+
+  local env_local_file="${WEGENT_ENV_LOCAL_FILE:-${ROOT_DIR}/.env.local}"
+  if [ -f "${env_local_file}" ]; then
+    if ! grep -qE '^REDIS_PASSWORD=' "${env_local_file}" 2>/dev/null; then
+      echo "" >>"${env_local_file}"
+      echo "REDIS_PASSWORD=${generated}" >>"${env_local_file}"
+    fi
+  else
+    echo "REDIS_PASSWORD=${generated}" >>"${env_local_file}"
+  fi
+
+  echo -e "${YELLOW}REDIS_PASSWORD 未设置，已自动生成并写入 ${env_local_file}${NC}"
+}
 
 # macOS compatibility: setsid is not available by default
 # Use setsid if available, otherwise fall back to nohup or direct background execution
@@ -211,12 +319,51 @@ ensure_uv() {
   have uv || die "uv installation failed. Please install uv manually: https://github.com/astral-sh/uv"
 }
 
+# Prefer python3; fall back to python; last resort: uv-managed python.
+PYTHON_RUNNER=()
+ensure_python_runner() {
+  if [ "${#PYTHON_RUNNER[@]}" -ne 0 ]; then
+    return 0
+  fi
+
+  if have python3; then
+    PYTHON_RUNNER=(python3)
+    return 0
+  fi
+  if have python; then
+    PYTHON_RUNNER=(python)
+    return 0
+  fi
+
+  ensure_uv
+  PYTHON_RUNNER=(uv run python)
+}
 maybe_build_frontend_needed() {
   local flag_var="$1"
   local source_ts
-  source_ts="$(max_mtime "${ROOT_DIR}/frontend")"
+  # Only track real source/config inputs for Next.js build.
+  # Avoid runtime-generated files such as `frontend/next.log`, Playwright reports, etc.
+  source_ts="$(max_mtime \
+    "${ROOT_DIR}/frontend/src" \
+    "${ROOT_DIR}/frontend/package.json" \
+    "${ROOT_DIR}/frontend/package-lock.json" \
+    "${ROOT_DIR}/frontend/next.config.js" \
+    "${ROOT_DIR}/frontend/tsconfig.json" \
+    "${ROOT_DIR}/frontend/postcss.config.js" \
+    "${ROOT_DIR}/frontend/tailwind.config.js" \
+    "${ROOT_DIR}/frontend/eslint.config.mjs" \
+    "${ROOT_DIR}/frontend/components.json" \
+    "${ROOT_DIR}/frontend/jest.config.ts" \
+    "${ROOT_DIR}/frontend/jest.setup.js" \
+    "${ROOT_DIR}/frontend/playwright.config.ts" \
+    "${ROOT_DIR}/frontend/.env" \
+    "${ROOT_DIR}/frontend/.env.local" \
+    "${ROOT_DIR}/frontend/.env.production" \
+  )"
   local build_ts
-  build_ts="$(max_mtime "${ROOT_DIR}/frontend/.next")"
+  # Use BUILD_ID as the build marker. `.next` can be modified at runtime (e.g. image cache)
+  # which makes a directory mtime-based check unreliable and can cause stale builds to be reused.
+  build_ts="$(max_mtime "${ROOT_DIR}/frontend/.next/BUILD_ID")"
 
   local need="false"
   if [ "$build_ts" -eq 0 ] || [ "$source_ts" -gt "$build_ts" ]; then
@@ -226,9 +373,35 @@ maybe_build_frontend_needed() {
   printf -v "$flag_var" '%s' "$need"
 }
 
+# Ensure Next.js standalone runtime has all required static assets.
+# When `output: 'standalone'` is enabled, the server may run from `.next/standalone/` and
+# expects `public/` and `.next/static/` to be present alongside `server.js`.
+sync_frontend_standalone_assets() {
+  local frontend_dir="${ROOT_DIR}/frontend"
+  local standalone_dir="${frontend_dir}/.next/standalone"
+
+  if [ ! -f "${standalone_dir}/server.js" ]; then
+    return 0
+  fi
+
+  echo -e "${BLUE}  Syncing standalone assets (public/, .next/static)...${NC}"
+
+  rm -rf "${standalone_dir}/public" "${standalone_dir}/.next/static"
+  mkdir -p "${standalone_dir}/.next"
+
+  if [ -d "${frontend_dir}/public" ]; then
+    cp -a "${frontend_dir}/public" "${standalone_dir}/"
+  fi
+
+  if [ -d "${frontend_dir}/.next/static" ]; then
+    cp -a "${frontend_dir}/.next/static" "${standalone_dir}/.next/"
+  fi
+}
+
 # Return max mtime (seconds) for given paths, pruning common cache dirs to keep checks fast.
 max_mtime() {
-  python - "$@" <<'PY'
+  ensure_python_runner
+  "${PYTHON_RUNNER[@]}" - "$@" <<'PY'
 import os, sys
 
 prune = {'.git', 'node_modules', '.next', '.turbo', '.pytest_cache', '__pycache__', '.mypy_cache', 'dist', 'build', 'coverage', '.venv'}
@@ -269,7 +442,8 @@ image_created_ts() {
     echo 0
     return
   fi
-  python - "$created" <<'PY'
+  ensure_python_runner
+  "${PYTHON_RUNNER[@]}" - "$created" <<'PY'
 import sys, datetime
 val = sys.argv[1]
 try:
@@ -278,6 +452,43 @@ try:
 except Exception:
     print(0)
 PY
+}
+
+# Ensure base images used by a Dockerfile are usable for RUN (i.e. /bin/sh exists).
+ensure_dockerfile_base_images() {
+  local dockerfile="$1"
+  if [ ! -f "$dockerfile" ]; then
+    return 0
+  fi
+
+  local from_images=()
+  mapfile -t from_images < <(awk 'toupper($1)=="FROM" {print $2}' "$dockerfile" | sort -u)
+
+  local image=""
+  for image in "${from_images[@]}"; do
+    # Only validate images that are expected to have a shell.
+    if [[ "$image" == ghcr.io/wecode-ai/wegent-base-python3.12:* ]]; then
+      ensure_image_shell_ok "$image"
+    fi
+  done
+}
+
+ensure_image_shell_ok() {
+  local image="$1"
+
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    echo -e "${YELLOW}  Pulling base image ${image}...${NC}"
+    docker pull "$image" >/dev/null 2>&1 || die "Failed to pull base image: ${image}"
+  fi
+
+  if docker run --rm "$image" /bin/sh -c 'true' >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo -e "${YELLOW}  Base image looks broken, re-pulling: ${image}${NC}"
+  docker image rm -f "$image" >/dev/null 2>&1 || true
+  docker pull "$image" >/dev/null 2>&1 || die "Failed to re-pull base image: ${image}"
+  docker run --rm "$image" /bin/sh -c 'true' >/dev/null 2>&1 || die "Base image still unusable (/bin/sh): ${image}"
 }
 
 # Build image if source is newer (or image missing). Sets flag variable by name to "true"/"false".
@@ -292,11 +503,26 @@ maybe_build_image() {
   local image_ts
   image_ts="$(image_created_ts "$image")"
 
+  local old_id=""
+  old_id="$(docker image inspect "$image" -f '{{.Id}}' 2>/dev/null || true)"
+
   local built="false"
   if [ "$image_ts" -lt "$source_ts" ] || [ "$image_ts" -eq 0 ]; then
     echo -e "${YELLOW}  Building ${label} image from local source (tag: ${image})...${NC}"
+    ensure_dockerfile_base_images "$dockerfile"
     docker build -f "$dockerfile" -t "$image" "$ROOT_DIR"
     built="true"
+
+    local new_id=""
+    new_id="$(docker image inspect "$image" -f '{{.Id}}' 2>/dev/null || true)"
+    if [ -n "$old_id" ] && [ -n "$new_id" ] && [ "$old_id" != "$new_id" ]; then
+      local old_tags=""
+      old_tags="$(docker image inspect "$old_id" -f '{{json .RepoTags}}' 2>/dev/null || true)"
+      if [ "$old_tags" = "null" ] || [ "$old_tags" = "[]" ]; then
+        echo -e "${BLUE}  Removing previous ${label} image (${old_id})...${NC}"
+        docker image rm "$old_id" >/dev/null 2>&1 || true
+      fi
+    fi
   else
     echo -e "${GREEN}  ${label} image up-to-date (source mtime ≤ image).${NC}"
   fi
@@ -344,15 +570,16 @@ kill_listen_port() {
 
   if have lsof; then
     pids="$(lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
-  elif have ss; then
+  fi
+  # lsof may exist but return empty on some environments (e.g., IPv6-only listeners).
+  # Fall back to ss if available.
+  if [ -z "$pids" ] && have ss; then
     pids="$(
       ss -lptn "sport = :${port}" 2>/dev/null \
         | awk 'match($0, /pid=([0-9]+)/, a) {print a[1]}' \
         | sort -u \
         | tr '\n' ' '
     )"
-  else
-    return 0
   fi
 
   if [ -n "$pids" ]; then
@@ -407,6 +634,10 @@ cleanup() {
   local exit_code=$?
 
   trap - EXIT
+
+  if [ "${CLEANUP_ARMED}" != "true" ]; then
+    exit "$exit_code"
+  fi
 
   echo ""
   echo -e "${BLUE}Shutting down...${NC}"
@@ -489,6 +720,8 @@ main() {
   have npm || die "npm is required."
   have curl || die "curl is required."
 
+  ensure_redis_password
+
   mkdir -p "$EXECUTOR_WORKSPACE"
 
   echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
@@ -496,15 +729,22 @@ main() {
   echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
   echo ""
   echo -e "${GREEN}Ports:${NC}"
-  echo -e "  Frontend:        http://localhost:${FRONTEND_PORT}"
-  echo -e "  Backend:         http://localhost:${BACKEND_PORT}"
-  echo -e "  ExecutorManager: http://localhost:${EXECUTOR_MANAGER_PORT}"
+  echo -e "  Frontend:        ${PUBLIC_FRONTEND_URL}"
+  echo -e "  Backend:         ${PUBLIC_BACKEND_URL}"
+  echo -e "  ExecutorManager: http://${PUBLIC_HOST}:${EXECUTOR_MANAGER_PORT}"
   echo -e "  MySQL:           localhost:${MYSQL_PORT}"
   echo -e "  Redis:           localhost:${REDIS_PORT}"
   if [ "$ENABLE_RAG" = "true" ]; then
-    echo -e "  Elasticsearch:   http://localhost:${ELASTICSEARCH_PORT}"
+    echo -e "  Elasticsearch:   http://${PUBLIC_HOST}:${ELASTICSEARCH_PORT}"
+  fi
+  if [ "${PUBLIC_HOST}" = "localhost" ] || [ "${PUBLIC_HOST}" = "127.0.0.1" ] || [ "${PUBLIC_HOST}" = "::1" ]; then
+    echo ""
+    echo -e "${YELLOW}Tip: To allow access from other machines, run with:${NC}"
+    echo -e "  ${BLUE}WEGENT_PUBLIC_HOST=auto ./start.sh${NC}"
   fi
   echo ""
+
+  CLEANUP_ARMED="true"
 
   echo -e "${BLUE}[1/6] Stopping existing services on target ports...${NC}"
 
@@ -611,7 +851,7 @@ main() {
         --name wegent-executor-manager
         --network wegent-network
         --network-alias executor_manager
-        --add-host host.docker.internal:host-gateway
+        --add-host host.docker.internal:${network_gateway}
         -p "${EXECUTOR_MANAGER_PORT}:8001"
         -e TZ=Asia/Shanghai
         -e TASK_API_DOMAIN="http://${network_gateway}:${BACKEND_PORT}"
@@ -625,6 +865,7 @@ main() {
         -e EXECUTOR_IMAGE="${EXECUTOR_IMAGE}"
         -e EXECUTOR_PORT_RANGE_MIN=10001
         -e EXECUTOR_PORT_RANGE_MAX=10100
+        -e WEGENT_PERSIST_REPO_ROOT_HOST="${PERSIST_REPO_ROOT}"
         -e EXECUTOR_WORKSPACE="${EXECUTOR_WORKSPACE}"
         -e EXECUTOR_WORKSPCE="${EXECUTOR_WORKSPACE}"
         -v /var/run/docker.sock:/var/run/docker.sock
@@ -661,7 +902,8 @@ main() {
     EXECUTOR_MANAGER_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}" \
     EXECUTOR_CANCEL_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/tasks/cancel" \
     EXECUTOR_DELETE_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/executor/delete" \
-    FRONTEND_URL="http://127.0.0.1:${FRONTEND_PORT}" \
+    FRONTEND_URL="${BACKEND_FRONTEND_URL}" \
+    WEGENT_PERSIST_REPO_ROOT_HOST="${PERSIST_REPO_ROOT}" \
     sh -c "cd '${ROOT_DIR}/backend' && exec uv run uvicorn app.main:app --host 0.0.0.0 --port '${BACKEND_PORT}'" >>"$backend_log" 2>&1 &
 
   BACKEND_PGID="$!"
@@ -699,8 +941,8 @@ main() {
       NODE_ENV="development" \
       PORT="${FRONTEND_PORT}" \
       RUNTIME_INTERNAL_API_URL="http://127.0.0.1:${BACKEND_PORT}" \
-      RUNTIME_SOCKET_DIRECT_URL="http://localhost:${BACKEND_PORT}" \
-      sh -c "cd '${ROOT_DIR}/frontend' && exec npm run dev" >>"$frontend_log" 2>&1 &
+      RUNTIME_SOCKET_DIRECT_URL="${SOCKET_DIRECT_URL}" \
+      sh -c "cd '${ROOT_DIR}/frontend' && exec npm run dev -- -p '${FRONTEND_PORT}' -H '${FRONTEND_HOST}'" >>"$frontend_log" 2>&1 &
 
     FRONTEND_PGID="$!"
     echo -e "${GREEN}✓ Frontend started in dev mode (PGID=${FRONTEND_PGID})${NC}"
@@ -732,6 +974,8 @@ main() {
       echo ""
     fi
 
+    sync_frontend_standalone_assets
+
     echo -e "${BLUE}[6/6] Starting Frontend (host, npm start)...${NC}"
     local frontend_log=""
     frontend_log="${ROOT_DIR}/frontend/next.log"
@@ -740,8 +984,8 @@ main() {
     env \
       NODE_ENV="production" \
       RUNTIME_INTERNAL_API_URL="http://127.0.0.1:${BACKEND_PORT}" \
-      RUNTIME_SOCKET_DIRECT_URL="http://localhost:${BACKEND_PORT}" \
-      sh -c "cd '${ROOT_DIR}/frontend' && exec npm start -- -p '${FRONTEND_PORT}'" >>"$frontend_log" 2>&1 &
+      RUNTIME_SOCKET_DIRECT_URL="${SOCKET_DIRECT_URL}" \
+      sh -c "cd '${ROOT_DIR}/frontend' && exec npm start -- -p '${FRONTEND_PORT}' -H '${FRONTEND_HOST}'" >>"$frontend_log" 2>&1 &
 
     FRONTEND_PGID="$!"
     echo -e "${GREEN}✓ Frontend started (PGID=${FRONTEND_PGID})${NC}"
@@ -754,9 +998,9 @@ main() {
 
   echo ""
   echo -e "${GREEN}All services are up.${NC}"
-  echo -e "${GREEN}- Frontend: http://localhost:${FRONTEND_PORT}${NC}"
-  echo -e "${GREEN}- Backend:  http://localhost:${BACKEND_PORT}/api/docs${NC}"
-  echo -e "${GREEN}- Executor: http://localhost:${EXECUTOR_MANAGER_PORT}/health${NC}"
+  echo -e "${GREEN}- Frontend: ${PUBLIC_FRONTEND_URL}${NC}"
+  echo -e "${GREEN}- Backend:  ${PUBLIC_BACKEND_URL}/api/docs${NC}"
+  echo -e "${GREEN}- Executor: http://${PUBLIC_HOST}:${EXECUTOR_MANAGER_PORT}/health${NC}"
   echo ""
   echo -e "${YELLOW}Press Ctrl+C to stop everything.${NC}"
 

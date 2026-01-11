@@ -5,6 +5,7 @@
 import asyncio
 import logging
 import threading
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -27,6 +28,82 @@ from app.services.context import context_service
 from app.services.webhook_notification import Notification, webhook_notification_service
 
 logger = logging.getLogger(__name__)
+
+
+def _merge_executor_subtask_result(existing: Any, incoming: Any) -> Any:
+    """Merge executor subtask result updates without losing persisted fields.
+
+    Executors may send partial `result` payloads (e.g. only `value` on terminal
+    updates). We preserve previously persisted fields like `shell_type` and
+    `codex_events` so the frontend can keep rendering the event stream.
+    """
+
+    if incoming is None:
+        return existing
+    if not isinstance(incoming, dict):
+        return incoming
+
+    base: Dict[str, Any] = existing if isinstance(existing, dict) else {}
+    merged: Dict[str, Any] = dict(base)
+    incoming_dict: Dict[str, Any] = dict(incoming)
+
+    existing_events = merged.get("codex_events")
+    resolved_events: list[Any] = (
+        list(existing_events) if isinstance(existing_events, list) else []
+    )
+
+    incoming_events = incoming_dict.get("codex_events")
+    if isinstance(incoming_events, list):
+        # Avoid clearing persisted events when an executor sends an empty list.
+        if len(incoming_events) == 0:
+            incoming_dict.pop("codex_events", None)
+        # If executor sends a full persisted list, adopt it when it looks newer.
+        elif len(incoming_events) >= len(resolved_events):
+            resolved_events = list(incoming_events)
+            incoming_dict.pop("codex_events", None)
+
+    # Executors may stream a single `codex_event` per callback; append it into the
+    # persisted `codex_events` list and avoid storing the transient key.
+    codex_event = incoming_dict.pop("codex_event", None)
+    if codex_event is not None:
+        if isinstance(codex_event, list):
+            resolved_events.extend(codex_event)
+        else:
+            resolved_events.append(codex_event)
+
+    if resolved_events:
+        merged["codex_events"] = resolved_events
+
+    merged.update(incoming_dict)
+    return merged
+
+
+def _extract_result_value_for_prompt(value: Any) -> str:
+    """Extract prompt-safe result text from a Subtask.result payload.
+
+    Subtask.result is a JSON dict and may contain internal control fields (e.g.
+    session ids). Only `result.value` is allowed to be injected into prompts.
+    """
+
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        raw = value.get("value")
+        if raw is None:
+            return ""
+        return raw if isinstance(raw, str) else str(raw)
+    return str(value)
+
+
+def _extract_result_str_field(value: Any, key: str) -> Optional[str]:
+    if not isinstance(value, dict):
+        return None
+    raw = value.get(key)
+    if isinstance(raw, str) and raw:
+        return raw
+    return None
 
 
 class ExecutorKindsService(
@@ -771,18 +848,28 @@ class ExecutorKindsService(
             )
 
             next_subtask = None
-            previous_subtask_results = ""
+            previous_assistant_result_for_prompt: Any = None
+            previous_assistant_result_for_session: Any = None
 
             user_prompt = ""
             user_subtask = None
             for i, related in enumerate(related_subtasks):
                 if related.role == SubtaskRole.USER:
                     user_prompt = related.prompt
-                    previous_subtask_results = ""
+                    previous_assistant_result_for_prompt = None
                     user_subtask = related
                     continue
-                if related.message_id < subtask.message_id:
-                    previous_subtask_results = related.result
+                if (
+                    related.role == SubtaskRole.ASSISTANT
+                    and related.message_id < subtask.message_id
+                ):
+                    previous_assistant_result_for_prompt = related.result
+                    if (
+                        isinstance(related.bot_ids, list)
+                        and isinstance(subtask.bot_ids, list)
+                        and related.bot_ids == subtask.bot_ids
+                    ):
+                        previous_assistant_result_for_session = related.result
                 if related.message_id == subtask.message_id:
                     if i < len(related_subtasks) - 1:
                         next_subtask = related_subtasks[i + 1]
@@ -794,10 +881,11 @@ class ExecutorKindsService(
             if user_prompt:
                 aggregated_prompt = user_prompt
             # Previous subtask result
-            if previous_subtask_results != "":
-                aggregated_prompt += (
-                    f"\nPrevious execution result: {previous_subtask_results}"
-                )
+            previous_value = _extract_result_value_for_prompt(
+                previous_assistant_result_for_prompt
+            )
+            if previous_value:
+                aggregated_prompt += f"\nPrevious execution result: {previous_value}"
             # Get task information from tasks table
             task = (
                 db.query(TaskResource)
@@ -826,6 +914,7 @@ class ExecutorKindsService(
                 )
                 .first()
             )
+            workspace_db_id = workspace.id if workspace else None
 
             git_url = ""
             git_repo = ""
@@ -844,6 +933,36 @@ class ExecutorKindsService(
                 except Exception:
                     # Handle workspaces with incomplete repository data
                     pass
+
+            repo_dir = ""
+            repo_vcs = ""
+            is_p4 = False
+
+            if workspace and isinstance(workspace.json, dict):
+                from shared.utils.persistent_repo import (
+                    PERSIST_REPO_MOUNT_PATH,
+                    normalize_persist_repo_dir,
+                )
+
+                raw_repo_dir = (
+                    (workspace.json.get("spec") or {}).get("repoDir")
+                    or (workspace.json.get("spec") or {}).get("repo_dir")
+                    or ""
+                )
+                if isinstance(raw_repo_dir, str):
+                    repo_dir = raw_repo_dir.strip()
+
+                if repo_dir:
+                    try:
+                        repo_dir = normalize_persist_repo_dir(repo_dir)
+                    except ValueError:
+                        logger.warning(
+                            "Ignoring invalid repo_dir=%s for task %s (must be under %s)",
+                            repo_dir,
+                            subtask.task_id,
+                            PERSIST_REPO_MOUNT_PATH,
+                        )
+                        repo_dir = ""
 
             # Build user git information - query user by user_id
             user = db.query(User).filter(User.id == subtask.user_id).first()
@@ -1064,43 +1183,83 @@ class ExecutorKindsService(
                     f"Found {len(attachments_data)} attachments for subtask {subtask.id}"
                 )
 
-            formatted_subtasks.append(
-                {
-                    "subtask_id": subtask.id,
-                    "subtask_next_id": next_subtask.id if next_subtask else None,
-                    "task_id": subtask.task_id,
-                    "type": type,
-                    "executor_name": subtask.executor_name,
-                    "executor_namespace": subtask.executor_namespace,
-                    "subtask_title": subtask.title,
-                    "task_title": task_crd.spec.title,
-                    "user": {
-                        "id": user.id if user else None,
-                        "name": user.user_name if user else None,
-                        "git_domain": git_info.get("git_domain") if git_info else None,
-                        "git_token": git_info.get("git_token") if git_info else None,
-                        "git_id": git_info.get("git_id") if git_info else None,
-                        "git_login": git_info.get("git_login") if git_info else None,
-                        "git_email": git_info.get("git_email") if git_info else None,
-                        "user_name": git_info.get("user_name") if git_info else None,
-                    },
-                    "bot": bots,
-                    "team_id": team.id,
-                    "mode": collaboration_model,
-                    "git_domain": git_domain,
-                    "git_repo": git_repo,
-                    "git_repo_id": git_repo_id,
-                    "branch_name": branch_name,
-                    "git_url": git_url,
-                    "prompt": aggregated_prompt,
-                    "auth_token": auth_token,
-                    "attachments": attachments_data,
-                    "status": subtask.status,
-                    "progress": subtask.progress,
-                    "created_at": subtask.created_at,
-                    "updated_at": subtask.updated_at,
-                }
+            session_payload: Dict[str, Any] = {}
+            primary_shell_type = (
+                bots[0].get("shell_type") if bots and isinstance(bots[0], dict) else ""
             )
+            retry_mode = _extract_result_str_field(subtask.result, "retry_mode")
+            if retry_mode in ("resume", "new_session"):
+                session_payload["retry_mode"] = retry_mode
+
+            code_shell_resume_enabled = settings.CODE_SHELL_RESUME_ENABLED
+            if (
+                primary_shell_type in ("Codex", "ClaudeCode")
+                and not code_shell_resume_enabled
+            ):
+                retry_mode = "new_session"
+                session_payload["retry_mode"] = "new_session"
+
+            if primary_shell_type == "Codex":
+                if code_shell_resume_enabled and retry_mode != "new_session":
+                    resume_session_id = _extract_result_str_field(
+                        subtask.result, "resume_session_id"
+                    ) or _extract_result_str_field(
+                        previous_assistant_result_for_session, "resume_session_id"
+                    )
+                    if resume_session_id:
+                        session_payload["resume_session_id"] = resume_session_id
+            elif primary_shell_type == "ClaudeCode":
+                if not code_shell_resume_enabled:
+                    session_payload["session_id"] = str(uuid.uuid4())
+                else:
+                    session_id = _extract_result_str_field(
+                        subtask.result, "session_id"
+                    ) or _extract_result_str_field(
+                        previous_assistant_result_for_session, "session_id"
+                    )
+                    session_payload["session_id"] = session_id or str(subtask.task_id)
+
+            task_payload = {
+                "subtask_id": subtask.id,
+                "subtask_next_id": next_subtask.id if next_subtask else None,
+                "task_id": subtask.task_id,
+                "type": type,
+                "executor_name": subtask.executor_name,
+                "executor_namespace": subtask.executor_namespace,
+                "subtask_title": subtask.title,
+                "task_title": task_crd.spec.title,
+                "user": {
+                    "id": user.id if user else None,
+                    "name": user.user_name if user else None,
+                    "git_domain": git_info.get("git_domain") if git_info else None,
+                    "git_token": git_info.get("git_token") if git_info else None,
+                    "git_id": git_info.get("git_id") if git_info else None,
+                    "git_login": git_info.get("git_login") if git_info else None,
+                    "git_email": git_info.get("git_email") if git_info else None,
+                    "user_name": git_info.get("user_name") if git_info else None,
+                },
+                "bot": bots,
+                "team_id": team.id,
+                "mode": collaboration_model,
+                "git_domain": git_domain,
+                "git_repo": git_repo,
+                "git_repo_id": git_repo_id,
+                "branch_name": branch_name,
+                "git_url": git_url,
+                "workspace_id": workspace_db_id,
+                "repo_dir": repo_dir,
+                "repo_vcs": repo_vcs,
+                "is_p4": is_p4,
+                "prompt": aggregated_prompt,
+                "auth_token": auth_token,
+                "attachments": attachments_data,
+                "status": subtask.status,
+                "progress": subtask.progress,
+                "created_at": subtask.created_at,
+                "updated_at": subtask.updated_at,
+            }
+            task_payload.update(session_payload)
+            formatted_subtasks.append(task_payload)
 
         # Log before returning the formatted response
         subtask_ids = [item.get("subtask_id") for item in formatted_subtasks]
@@ -1163,32 +1322,10 @@ class ExecutorKindsService(
             exclude={"subtask_title", "task_title"}, exclude_unset=True
         )
 
-        # Merge Codex event stream into stored result for persistence and refresh replay.
-        # Executor may stream a single `codex_event` per callback; we append it into `codex_events` list.
-        if isinstance(update_data.get("result"), dict):
-            incoming_result = update_data["result"]
-            codex_event = incoming_result.get("codex_event")
-            if codex_event is not None:
-                merged_result: Dict[str, Any] = {}
-                if isinstance(subtask.result, dict):
-                    merged_result.update(subtask.result)
-
-                existing_events = merged_result.get("codex_events")
-                if not isinstance(existing_events, list):
-                    existing_events = []
-
-                if isinstance(codex_event, list):
-                    existing_events.extend(codex_event)
-                else:
-                    existing_events.append(codex_event)
-                merged_result["codex_events"] = existing_events
-
-                # Keep the latest event for live streaming payloads while avoiding unbounded growth
-                # in per-callback result; the persisted list above is the source of truth.
-                incoming_result = dict(incoming_result)
-                incoming_result.pop("codex_event", None)
-                merged_result.update(incoming_result)
-                update_data["result"] = merged_result
+        if "result" in update_data:
+            update_data["result"] = _merge_executor_subtask_result(
+                subtask.result, update_data.get("result")
+            )
 
         for field, value in update_data.items():
             setattr(subtask, field, value)

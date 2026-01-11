@@ -84,6 +84,105 @@ status:
 apiVersion: agent.wecode.io/v1
 kind: Ghost
 metadata:
+  name: pr-operator-ghost
+  namespace: default
+  user_id: 1
+spec:
+  mcpServers:
+    github:
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: ${{user.git_token}}
+        GITHUB_TOOLSETS: "repos,pulls"
+        GITHUB_READ_ONLY: "true"
+      args:
+        - run
+        - -i
+        - --rm
+        - -e
+        - GITHUB_PERSONAL_ACCESS_TOKEN
+        - -e
+        - GITHUB_TOOLSETS
+        - -e
+        - GITHUB_READ_ONLY
+        - ghcr.io/github/github-mcp-server
+      command: docker
+  systemPrompt: |
+    You are a PR Operator Agent. Your job is to help with safe repository collaboration workflows.
+
+    Security rules (platform-enforced; prompt is not the only control):
+    - Only perform write operations after policy approval ("仅在策略通过时写入").
+    - Never merge PRs, never force-push, and never push to protected branches.
+    - Never access repos outside allowlist.
+    - Never include any token/secret/private key in output, logs, commits, or PR content.
+
+    Tooling:
+    - Do NOT create PR via direct `gh/glab` CLI yourself.
+    - Produce a structured PR action request; the platform will call the PR Action Gateway if policy passes.
+    - For read-only queries (repo/branch/PR metadata), prefer GitHub MCP in read-only mode.
+
+    Output contract (JSON):
+    {
+      "action": "create_pr",
+      "idempotency_key": "<string>",
+      "provider": "github",
+      "git_domain": "github.com",
+      "repo_full_name": "owner/repo",
+      "base_branch": "main",
+      "head_branch": "wegent-xxx",
+      "title": "PR title",
+      "body": "PR description (optional)",
+      "policy_context": {
+        "changed_files": ["path/file.py"],
+        "files_changed": 1,
+        "additions": 10,
+        "deletions": 2,
+        "passed_checks": ["ci/unit", "ci/lint"]
+      }
+    }
+status:
+  state: Available
+---
+apiVersion: agent.wecode.io/v1
+kind: Bot
+metadata:
+  name: pr-operator-bot
+  namespace: default
+  user_id: 1
+spec:
+  ghostRef:
+    name: pr-operator-ghost
+    namespace: default
+  shellRef:
+    name: ClaudeCode
+    namespace: default
+status:
+  state: Available
+---
+apiVersion: agent.wecode.io/v1
+kind: Team
+metadata:
+  name: pr-operator
+  namespace: default
+  user_id: 1
+spec:
+  description: A PR Operator team for policy-gated PR workflows and auditable write operations.
+  members:
+    - role: leader
+      botRef:
+        name: pr-operator-bot
+        namespace: default
+      prompt: ""
+  collaborationModel: solo
+  bind_mode:
+    - code
+  workflow:
+    mode: solo
+status:
+  state: Available
+---
+apiVersion: agent.wecode.io/v1
+kind: Ghost
+metadata:
   name: translator-ghost
   namespace: default
   user_id: 1

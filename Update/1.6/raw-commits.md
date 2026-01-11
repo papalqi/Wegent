@@ -1,0 +1,135 @@
+# 原始提交列表（develop 近 3 天）
+
+> 范围：`44b8561..85c1351`（2026-01-02 03:00:51 +0800 ～ 2026-01-05 10:25:45 +0800）
+
+- 85c1351 2026-01-05 10:25:45 +0800 papehuang fix(backend): avoid duplicate index in pr_action_audits
+- faa55a7 2026-01-05 10:17:28 +0800 papehuang fix(backend): remove invalid MySQL TEXT default
+- 0cccfd6 2026-01-05 00:34:32 +0800 papehuang style(backend): format db_transfer
+- 4297235 2026-01-05 00:29:36 +0800 papehuang fix(hooks): run backend checks via uv
+- 1c16acd 2026-01-05 00:09:00 +0800 papehuang fix: make tests and mocks work on windows
+- 5ef03e6 2026-01-04 22:13:09 +0800 papehuang Merge remote-tracking branch 'origin/weagent/update-deploy-env-1.35.2' into develop
+- 8367a3f 2026-01-04 22:10:53 +0800 papehuang Merge remote-tracking branch 'origin/weagent/update-deploy-env-1.35.1' into develop
+- 5a564b2 2026-01-04 22:04:44 +0800 papehuang Merge remote-tracking branch 'origin/wegent-db-transfer-20260103-143124-64e9e4' into develop
+- fe48eb3 2026-01-04 22:04:20 +0800 papehuang Merge remote-tracking branch 'origin/wegent-container-status-20260104143022' into develop
+- 9bdf3b9 2026-01-04 22:01:04 +0800 papehuang Merge remote-tracking branch 'origin/wegent-runtime-status-20260103-063707-4be765' into develop
+- 10146f0 2026-01-04 22:00:31 +0800 papehuang Merge remote-tracking branch 'origin/wegent-codex-eventflow-20260103-143140' into develop
+- 6445bfd 2026-01-04 22:00:15 +0800 papehuang Merge remote-tracking branch 'origin/remove-system-prompt-panel' into develop
+- 034a1eb 2026-01-04 21:59:48 +0800 papehuang Merge remote-tracking branch 'origin/feature/public-host-auto' into develop
+- 85947f5 2026-01-04 21:59:09 +0800 papehuang Merge remote-tracking branch 'origin/feature/model-settings-models-probe' into develop
+- bee76ed 2026-01-04 21:58:24 +0800 papehuang Merge remote-tracking branch 'origin/docs/prsafe-pr-operator-security' into develop
+- 1f294c6 2026-01-04 21:58:03 +0800 papehuang Merge remote-tracking branch 'origin/chore/plan-codex-context-continuity' into develop
+- d28bfd3 2026-01-04 21:57:15 +0800 papehuang Merge remote-tracking branch 'origin/fix/preserve-codex-event-stream' into develop
+- cbf0fc1 2026-01-04 20:39:22 +0800 papehuang chore(scripts): add codex prompts sync script
+- b8cb865 2026-01-04 20:33:35 +0800 papehuang docs(plan): add codex executor context continuity plan
+- bcbbd8b 2026-01-04 14:42:59 +0800 papalqi fix(frontend): resolve container badge typing
+- 59c4cb8 2026-01-04 14:38:35 +0800 papalqi feat: show coding container status
+- a1e9252 2026-01-04 12:40:20 +0800 Wegent Bot docs: clarify PR target repo policy
+- 225ff9a 2026-01-04 12:15:11 +0800 Wegent Bot feat: support WEGENT_PUBLIC_HOST=auto and Redis auth
+- 680af2f 2026-01-04 12:40:20 +0800 Wegent Bot docs: clarify PR target repo policy
+- 64c6228 2026-01-04 12:15:11 +0800 Wegent Bot feat: support WEGENT_PUBLIC_HOST=auto and Redis auth
+- f0b1e1d 2026-01-03 23:02:40 +0800 Wegent Bot docs: add systemd service ops notes
+- 82b8382 2026-01-03 22:47:56 +0800 Wegent Bot Merge branch 'fix/task-error-message-template' into develop
+- 118584b 2026-01-03 22:42:54 +0800 Wegent Bot fix(start): fix port kill fallback logic
+- 3844ae3 2026-01-03 22:36:08 +0800 Wegent Bot fix(start): avoid shutdown on --help and free ports reliably
+- 7027b6d 2026-01-03 22:26:12 +0800 Wegent Bot fix: preserve Codex event stream after completion
+- 1c1808d 2026-01-03 22:25:48 +0800 Wegent Bot docs(issues): add note about task phase/status display
+- dc78634 2026-01-03 22:17:45 +0800 Wegent Bot fix: prevent progress text leaking into error_message
+- ef29d29 2026-01-03 20:12:51 +0800 papalqi feat(backend): add db import/export tooling
+- 0c959ae 2026-01-03 20:12:37 +0800 papalqi docs(readme): update version to 1.35.2 and add Git branch strategy
+- faf740e 2026-01-03 20:07:05 +0800 Wegent Bot fix(backend): avoid startup crash when redis isn't ready
+- b718fcf 2026-01-03 19:23:58 +0800 Wegent Bot docs(plan): add intranet auto-deploy plan after image publish
+- d8ea36a 2026-01-03 19:17:12 +0800 Wegent Bot fix(start): fallback to python3/uv when python is missing
+- e3421b3 2026-01-03 11:25:44 +0000 papalqi chore: update deploy env to version 1.35.2
+- cf5065c 2026-01-03 14:45:05 +0800 papalqi fix(frontend): align Badge variants in Codex events
+- 376b209 2026-01-03 14:43:27 +0800 papalqi feat(frontend): polish Codex event stream panel
+- a846e11 2026-01-03 11:25:44 +0000 papalqi chore: update deploy env to version 1.35.2
+- 94b5c3d 2026-01-03 11:25:44 +0000 papalqi chore: update deploy env to version 1.35.2
+- 2b80e6f 2026-01-03 19:09:38 +0800 papalqi docs: 寮鸿皟 Git 鍒嗘敮绛栫暐 - main 浠呮帴鍙?develop 鐨?PR
+- a14f804 2026-01-03 19:04:27 +0800 papalqi docs(CONTRIBUTING): update development workflow and branch strategy
+- 8228337 2026-01-03 16:23:58 +0800 Wegent Bot fix(frontend-e2e): stabilize settings and mock capture
+- a32af61 2026-01-03 14:56:38 +0800 papalqi feat(frontend): show real task phase timing
+- bd72170 2026-01-03 15:08:38 +0800 Wegent Bot chore(start): reuse local builds when fresh
+- db825bf 2026-01-03 14:57:14 +0800 Wegent Bot fix(executor): tolerate long subprocess lines in codex agent
+- a69dfa3 2026-01-03 14:19:42 +0800 Wegent Bot chore(codex): move codex prompts into repo
+- e422efb 2026-01-03 11:06:34 +0800 papalqi feat(ui): remove System Prompt Panel component
+- 21a176c 2026-01-03 16:23:58 +0800 Wegent Bot fix(frontend-e2e): stabilize settings and mock capture
+- 7d8ba68 2026-01-03 14:56:38 +0800 papalqi feat(frontend): show real task phase timing
+- 92d09cc 2026-01-03 14:45:05 +0800 papalqi fix(frontend): align Badge variants in Codex events
+- 90f102d 2026-01-03 14:43:27 +0800 papalqi feat(frontend): polish Codex event stream panel
+- f844e29 2026-01-03 16:23:58 +0800 Wegent Bot fix(frontend-e2e): stabilize settings and mock capture
+- 88b0ce2 2026-01-03 15:08:38 +0800 Wegent Bot chore(start): reuse local builds when fresh
+- e45d23b 2026-01-03 14:57:14 +0800 Wegent Bot fix(executor): tolerate long subprocess lines in codex agent
+- 961f211 2026-01-03 14:56:38 +0800 papalqi feat(frontend): show real task phase timing
+- e34098a 2026-01-03 14:45:05 +0800 papalqi fix(frontend): align Badge variants in Codex events
+- ba57c5b 2026-01-03 14:43:27 +0800 papalqi feat(frontend): polish Codex event stream panel
+- 309f00d 2026-01-03 14:19:42 +0800 Wegent Bot chore(codex): move codex prompts into repo
+- 3ebb634 2026-01-03 11:08:09 +0800 papalqi feat(admin): add database management functionality
+- 135f868 2026-01-03 11:06:34 +0800 papalqi feat(ui): remove System Prompt Panel component
+- 9f1a0a1 2026-01-03 10:50:21 +0800 papalqi feat(start): add --dev option for frontend development mode
+- 3540fae 2026-01-03 02:40:32 +0000 papalqi chore: update deploy env to version 1.35.1
+- 899f909 2026-01-03 02:40:32 +0000 papalqi chore: update deploy env to version 1.35.1
+- 5110dbc 2026-01-03 10:09:21 +0800 Wegent Bot fix(ci): escape braces in compose sed
+- aa1579d 2026-01-03 01:51:05 +0800 Wegent Bot fix(ci): remove duplicate cache directives
+- 2a65177 2026-01-03 01:39:10 +0800 榛勭惁 Merge pull request #4 from papalqi/weagent/update-deploy-env-1.35.0
+- 67452ef 2026-01-03 00:58:28 +0800 Wegent Bot feat(codex): surface event stream in task UI
+- e8cb8d1 2026-01-02 17:36:02 +0000 papalqi chore: update deploy env to version 1.35.0
+- 6816bc1 2026-01-03 00:58:28 +0800 Wegent Bot feat(codex): surface event stream in task UI
+- df72fc3 2026-01-03 00:58:28 +0800 Wegent Bot feat(codex): surface event stream in task UI
+- e5c4888 2026-01-03 00:21:56 +0800 Wegent Bot fix(frontend): type guard debug panel payload
+- 467687f 2026-01-03 00:18:27 +0800 Wegent Bot feat(frontend): show detailed thinking in message bubbles
+- faf8c5d 2026-01-03 00:06:24 +0800 Wegent Bot feat(frontend): compact debug popover for message panel
+- 945cb59 2026-01-02 22:39:41 +0800 Wegent Bot fix(frontend): harden debug payload sanitizer
+- 94659ea 2026-01-02 22:31:40 +0800 Wegent Bot fix(frontend): fix debug sanitize type narrowing
+- 9ccba84 2026-01-02 22:25:57 +0800 Wegent Bot feat(frontend): add per-message debug panel
+- 7f1f5fe 2026-01-02 22:16:28 +0800 Wegent Bot feat(executor): persist codex json event stream
+- b0f2bbe 2026-01-02 21:20:05 +0800 Wegent Bot fix(backend): convert shared teams using team owner context
+- db7d1de 2026-01-02 21:18:31 +0800 Wegent Bot fix(frontend): hide task-level error banner on failed tasks
+- 804884e 2026-01-02 20:29:08 +0800 Wegent Bot fix(frontend): improve executor image display and allow cloning public executors
+- 7c4df1f 2026-01-02 19:55:17 +0800 Wegent Bot chore(backend): point public shells to papalqi executor image
+- 8d70ad5 2026-01-02 19:10:00 +0800 Codex Agent docs(ui): [MSP-090] clarify base_url and probe cost
+- cbf0db2 2026-01-02 19:07:10 +0800 Codex Agent test(all): [MSP-080] record test evidence
+- 53191f6 2026-01-02 19:05:38 +0800 Codex Agent docs(plan): [MSP-020] record model settings ref
+- 3b3a0f2 2026-01-02 19:02:00 +0800 Codex Agent feat(frontend): [MSP-060] show provider probe results
+- 7e419d5 2026-01-02 18:55:12 +0800 Codex Agent feat(frontend): [MSP-050] fetch provider model IDs
+- e939c02 2026-01-02 18:49:30 +0800 Codex Agent feat(frontend): [MSP-040] show resolved base_url
+- 50088ee 2026-01-02 18:42:17 +0800 Codex Agent feat(backend): [MSP-070] add provider probe endpoint
+- a243a9c 2026-01-02 18:37:59 +0800 Codex Agent feat(backend): [MSP-030] add provider models proxy
+- f40beab 2026-01-02 18:33:35 +0800 Codex Agent chore(issues): [MSP-010] sync main and create branch
+- 280893c 2026-01-02 18:44:25 +0800 Wegent Bot docs(pr): [PRSAFE-090] 涓婄嚎寮€鍏充笌闄嶇骇鍥炴粴 Runbook
+- 3da033f 2026-01-02 18:36:37 +0800 Wegent Bot feat(pr): [PRSAFE-080] 琛ラ綈娴嬭瘯鐭╅樀涓庤礋鍚戠敤渚?
+- 7f83407 2026-01-02 18:14:32 +0800 Wegent Bot feat(pr): [PRSAFE-040] MCP 浼樺厛宸ュ叿閾句笌鍙闄嶇骇
+- dc72ffe 2026-01-02 18:08:18 +0800 Wegent Bot feat(backend): [PRSAFE-030] pr-operator 妯℃澘涓庣粨鏋勫寲濂戠害
+- 727d836 2026-01-02 18:02:31 +0800 Wegent Bot feat(executor): [PRSAFE-070] PR 鐩稿叧鍛戒护鐧藉悕鍗曚笌鑴辨晱
+- 63ef599 2026-01-02 18:02:00 +0800 Wegent Bot docs(ci): document publish-image PR title gating
+- d1b8bb5 2026-01-02 17:55:37 +0800 Wegent Bot feat(backend): [PRSAFE-060] 鍙厤缃瓥鐣ュ紩鎿庯紙6绫昏鍒欙級
+- 9924575 2026-01-02 17:50:20 +0800 Wegent Bot feat(backend): [PRSAFE-050] PR Action Gateway锛堥壌鏉?绛栫暐/瀹¤/骞傜瓑锛?
+- 17f277a 2026-01-02 17:08:35 +0800 Wegent Bot docs(pr): add threat model & baseline [PRSAFE-020]
+- 8f21728 2026-01-02 17:07:00 +0800 Wegent Bot docs(pr): define PR operator scope [PRSAFE-010]
+- f921556 2026-01-02 16:47:50 +0800 Codex Agent docs(zh): [CSD-080] document status/progress
+- b8c0058 2026-01-02 16:44:23 +0800 Codex Agent chore(issues): [CSD-070] record test evidence
+- 7e354b0 2026-01-02 16:41:30 +0800 Codex Agent feat(backend): [CSD-030] improve progress calculation
+- cb45fb9 2026-01-02 16:32:47 +0800 Codex Agent feat(frontend): [CSD-100] restyle files changed diff
+- de2bff2 2026-01-02 16:21:26 +0800 Codex Agent feat(frontend): [CSD-090] add system prompt panel
+- cf0b58e 2026-01-02 16:10:46 +0800 Codex Agent feat(frontend): [CSD-060] improve task error banner
+- f5997e9 2026-01-02 15:53:53 +0800 Codex Agent feat(frontend): [CSD-050] 鐘舵€佹彁绀虹粍浠朵笌鏂囨瀹炵幇
+- 540d813 2026-01-02 15:47:09 +0800 Codex Agent feat(frontend): [CSD-040] 鍓嶇鐘舵€佹ā鍨嬫帴鍏?
+- bf32418 2026-01-02 15:22:10 +0800 Codex Agent [CSD-010] 楠岃瘉骞惰ˉ鍏呭悗绔姸鎬佷俊鍙?
+- 590c3bb 2026-01-02 15:07:44 +0800 Codex Agent [CSD-020] 鍗忚瀛楁瀹氫箟涓庡吋瀹圭瓥鐣?
+- 5574137 2026-01-02 14:58:00 +0800 Codex Agent [CSD-000] 姊崇悊鎵ц鐘舵€佹灇涓句笌瑙﹀彂鐐?
+- 1f426b0 2026-01-02 14:41:38 +0800 Wegent Bot docs: refresh agents guide and init script
+- a3f57ba 2026-01-02 14:40:49 +0800 Wegent Bot docs: add plan for conversation status display
+- a647965 2026-01-02 14:04:02 +0800 Wegent Bot docs: refresh agents guide and add dev refs
+- dd2a28f 2026-01-02 13:46:44 +0800 Wegent Bot feat(ci): retag unchanged images on tag releases
+- 36adb4d 2026-01-02 13:32:54 +0800 Wegent Bot chore(deploy): pin .env.defaults to 1.0.33
+- 0160134 2026-01-02 13:23:53 +0800 Wegent Bot chore(deploy): set default image prefix to ghcr.io/papalqi
+- 70b8a97 2026-01-02 13:20:54 +0800 Wegent Bot chore(deploy): do not hardcode image prefix in .env.defaults
+- 0955b3e 2026-01-02 13:19:58 +0800 Wegent Bot chore(deploy): add .env.defaults
+- a1244e4 2026-01-02 13:19:58 +0800 Wegent Bot feat(deploy): load .env files and pin images via .env.defaults
+- a275eec 2026-01-02 13:09:51 +0800 Wegent Bot feat(deploy): default to latest images and auto-detect GHCR prefix
+- 0cfe522 2026-01-02 12:58:36 +0800 Wegent Bot fix(ci): set base branch for compose bump PR
+- cdabbc9 2026-01-02 12:54:28 +0800 Wegent Bot fix(ci): skip compose PR on tag releases
+- e1f0479 2026-01-02 12:43:43 +0800 Wegent Bot feat(start): allow overriding GHCR images
+- a89d390 2026-01-02 12:17:53 +0800 Wegent Bot fix(ci): always publish images on tag
+- 576d1eb 2026-01-02 12:09:12 +0800 Wegent Bot feat(ci): allow forcing image builds
+- dd40d08 2026-01-02 11:38:25 +0800 Wegent Bot fix(ci): support tag builds without inputs
+- 2c92372 2026-01-02 11:36:15 +0800 Wegent Bot chore(ci): publish images for forks

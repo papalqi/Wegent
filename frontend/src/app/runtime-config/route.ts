@@ -46,5 +46,12 @@ export async function GET() {
     // Enable chat context feature (knowledge base background)
     // Priority: RUNTIME_ENABLE_CHAT_CONTEXT > NEXT_PUBLIC_ENABLE_CHAT_CONTEXT > false
     enableChatContext: parseBoolean(process.env.RUNTIME_ENABLE_CHAT_CONTEXT, false),
+
+    // Enable Code Shell resume semantics (Codex resume_session_id, ClaudeCode session_id reuse)
+    // Priority: CODE_SHELL_RESUME_ENABLED > NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED > true
+    codeShellResumeEnabled: parseBoolean(
+      process.env.CODE_SHELL_RESUME_ENABLED,
+      parseBoolean(process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED, true)
+    ),
   });
 }

@@ -190,18 +190,37 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 if len(obj_in.prompt) > 50:
                     title += "..."
 
+            repo_dir = (obj_in.repo_dir or "").strip()
+            if repo_dir:
+                from shared.utils.persistent_repo import (
+                    PERSIST_REPO_MOUNT_PATH,
+                    normalize_persist_repo_dir,
+                )
+
+                try:
+                    repo_dir = normalize_persist_repo_dir(repo_dir)
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Invalid repo_dir: {repo_dir}. "
+                            f"It must be under {PERSIST_REPO_MOUNT_PATH}/"
+                        ),
+                    )
+
             # Create Workspace first
             workspace_name = f"workspace-{task_id}"
             workspace_json = {
                 "kind": "Workspace",
                 "spec": {
+                    "repoDir": repo_dir,
                     "repository": {
                         "gitUrl": obj_in.git_url,
                         "gitRepo": obj_in.git_repo,
                         "gitRepoId": obj_in.git_repo_id,
                         "gitDomain": obj_in.git_domain,
                         "branchName": obj_in.branch_name,
-                    }
+                    },
                 },
                 "status": {"state": "Available"},
                 "metadata": {"name": workspace_name, "namespace": "default"},
@@ -2080,10 +2099,12 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         git_repo_id = 0
         git_domain = ""
         branch_name = ""
+        repo_dir = ""
 
         if workspace and workspace.json:
             try:
                 workspace_crd = Workspace.model_validate(workspace.json)
+                repo_dir = workspace_crd.spec.repoDir or ""
                 git_url = workspace_crd.spec.repository.gitUrl
                 git_repo = workspace_crd.spec.repository.gitRepo
                 git_repo_id = workspace_crd.spec.repository.gitRepoId or 0
@@ -2172,6 +2193,11 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             else False
         )
 
+        status = task_crd.status.status if task_crd.status else "PENDING"
+        error_message = None
+        if task_crd.status and status in ["FAILED", "CANCELLED"]:
+            error_message = task_crd.status.errorMessage
+
         return {
             "id": task.id,
             "type": type,
@@ -2185,11 +2211,14 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             "git_repo_id": git_repo_id,
             "git_domain": git_domain,
             "branch_name": branch_name,
+            "repo_dir": repo_dir,
             "prompt": task_crd.spec.prompt,
-            "status": task_crd.status.status if task_crd.status else "PENDING",
+            "status": status,
             "progress": task_crd.status.progress if task_crd.status else 0,
+            "status_phase": task_crd.status.statusPhase if task_crd.status else None,
+            "progress_text": task_crd.status.progressText if task_crd.status else None,
             "result": task_crd.status.result if task_crd.status else None,
-            "error_message": task_crd.status.errorMessage if task_crd.status else None,
+            "error_message": error_message,
             "created_at": created_at or task.created_at,
             "updated_at": updated_at or task.updated_at,
             "completed_at": completed_at,
@@ -2666,6 +2695,11 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             or "chat"
         )
 
+        status = task_crd.status.status if task_crd.status else "PENDING"
+        error_message = None
+        if task_crd.status and status in ["FAILED", "CANCELLED"]:
+            error_message = task_crd.status.errorMessage
+
         return {
             "id": task.id,
             "type": type,
@@ -2680,10 +2714,12 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             "git_domain": workspace_data.get("git_domain", ""),
             "branch_name": workspace_data.get("branch_name", ""),
             "prompt": task_crd.spec.prompt,
-            "status": task_crd.status.status if task_crd.status else "PENDING",
+            "status": status,
             "progress": task_crd.status.progress if task_crd.status else 0,
+            "status_phase": task_crd.status.statusPhase if task_crd.status else None,
+            "progress_text": task_crd.status.progressText if task_crd.status else None,
             "result": task_crd.status.result if task_crd.status else None,
-            "error_message": task_crd.status.errorMessage if task_crd.status else None,
+            "error_message": error_message,
             "created_at": related_data.get("created_at", task.created_at),
             "updated_at": related_data.get("updated_at", task.updated_at),
             "completed_at": related_data.get("completed_at"),

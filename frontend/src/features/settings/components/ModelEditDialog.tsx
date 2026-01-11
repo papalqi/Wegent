@@ -8,6 +8,8 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Tag } from '@/components/ui/tag';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -27,9 +29,14 @@ import { Loader2 } from 'lucide-react';
 import { EyeIcon, EyeSlashIcon, BeakerIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from '@/hooks/useTranslation';
 import {
+  getProviderBaseUrlResolvedForDisplay,
+  normalizeProviderBaseUrl,
+} from '@/features/settings/utils/provider-base-url';
+import {
   modelApis,
   ModelCRD,
   ModelCategoryType,
+  ProviderProbeResponse,
   TTSConfig,
   STTConfig,
   EmbeddingConfig,
@@ -131,6 +138,9 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
   const [providerType, setProviderType] = useState<string>('openai');
   const [modelId, setModelId] = useState('');
   const [customModelId, setCustomModelId] = useState('');
+  const [providerModelIds, setProviderModelIds] = useState<string[]>([]);
+  const [providerModelsLoading, setProviderModelsLoading] = useState(false);
+  const [providerModelsError, setProviderModelsError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [customHeaders, setCustomHeaders] = useState('');
@@ -138,6 +148,7 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
   const [showApiKey, setShowApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [probeResult, setProbeResult] = useState<ProviderProbeResponse | null>(null);
   // LLM-specific config state
   const [contextWindow, setContextWindow] = useState<number | undefined>(undefined);
   const [maxOutputTokens, setMaxOutputTokens] = useState<number | undefined>(undefined);
@@ -248,6 +259,9 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
       }
       setCustomHeadersError('');
       setShowApiKey(false);
+      setProviderModelIds([]);
+      setProviderModelsError(null);
+      setProbeResult(null);
     }
   }, [open, model]);
 
@@ -298,21 +312,95 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
       }
     }
   }, [model, modelOptions]);
+
+  const baseUrlResolvedForDisplay = React.useMemo(() => {
+    return getProviderBaseUrlResolvedForDisplay(providerType, baseUrl);
+  }, [providerType, baseUrl]);
+
+  const baseUrlResolvedForRequest = React.useMemo(() => {
+    if (!baseUrl.trim()) return undefined;
+    const resolved = normalizeProviderBaseUrl(providerType, baseUrl);
+    return resolved || undefined;
+  }, [providerType, baseUrl]);
   const handleProviderChange = (value: string) => {
     setProviderType(value);
     setModelId('');
     setCustomModelId('');
-    // Only set default base URL for LLM models
-    if (modelCategoryType === 'llm') {
-      if (value === 'openai' || value === 'openai-responses') {
-        setBaseUrl('https://api.openai.com/v1');
-      } else if (value === 'gemini') {
-        setBaseUrl('https://generativelanguage.googleapis.com');
-      } else {
-        setBaseUrl('https://api.anthropic.com');
-      }
+    setBaseUrl('');
+  };
+
+  const providerSupportsModelDiscovery =
+    providerType === 'openai' || providerType === 'openai-responses';
+
+  const handleModelIdChange = (value: string) => {
+    setModelId(value);
+    if (value !== 'custom') {
+      setCustomModelId('');
     }
   };
+
+  const providerModelItems = React.useMemo(() => {
+    const modelItems = providerModelIds.map(id => ({
+      value: id,
+      label: id,
+      searchText: id,
+    }));
+
+    return [
+      ...modelItems,
+      {
+        value: 'custom',
+        label: t('common:models.custom_model_option'),
+      },
+    ];
+  }, [providerModelIds, t]);
+
+  const handleFetchProviderModels = async () => {
+    if (!apiKey.trim()) {
+      toast({
+        variant: 'destructive',
+        title: t('common:models.errors.api_key_required'),
+      });
+      return;
+    }
+
+    const parsedHeaders = validateCustomHeaders(customHeaders);
+    if (parsedHeaders === null) {
+      toast({
+        variant: 'destructive',
+        title: t('common:models.errors.custom_headers_invalid'),
+      });
+      return;
+    }
+
+    setProviderModelsLoading(true);
+    setProviderModelsError(null);
+    try {
+      const result = await modelApis.getProviderModels({
+        provider_type: providerType,
+        api_key: apiKey,
+        base_url: baseUrlResolvedForRequest,
+        custom_headers: Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
+      });
+
+      if (result.success) {
+        setProviderModelIds(result.model_ids || []);
+        if (result.model_ids?.length === 0) {
+          toast({ title: t('common:models.provider_models_empty') });
+        }
+      } else {
+        setProviderModelsError(result.message || t('common:models.provider_models_fetch_failed'));
+      }
+    } catch (error) {
+      setProviderModelsError((error as Error).message);
+    } finally {
+      setProviderModelsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setProbeResult(null);
+  }, [providerType, baseUrl, apiKey, modelId, customModelId]);
 
   const handleTestConnection = async () => {
     const finalModelId = modelId === 'custom' ? customModelId : modelId;
@@ -336,24 +424,54 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
 
     setTesting(true);
     try {
-      const result = await modelApis.testConnection({
-        provider_type: providerType as 'openai' | 'anthropic' | 'gemini',
-        model_id: finalModelId,
-        api_key: apiKey,
-        base_url: baseUrl || undefined,
-        custom_headers: Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
-        model_category_type: modelCategoryType,
-      });
+      if (providerType === 'openai' || providerType === 'openai-responses') {
+        const probeTargets =
+          modelCategoryType === 'embedding'
+            ? ['list_models', 'embedding']
+            : modelCategoryType === 'llm'
+              ? ['list_models', 'prompt_llm']
+              : ['list_models'];
 
-      if (result.success) {
+        const result = await modelApis.probeProvider({
+          provider_type: providerType,
+          model_id: finalModelId,
+          api_key: apiKey,
+          base_url: baseUrlResolvedForRequest,
+          custom_headers: Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
+          probe_targets: probeTargets,
+        });
+
+        setProbeResult(result);
         toast({
-          title: t('common:models.test_success'),
+          variant: result.success ? 'default' : 'destructive',
+          title: result.success ? t('common:models.probe_ok') : t('common:models.probe_failed'),
           description: result.message,
         });
       } else {
+        const result = await modelApis.testConnection({
+          provider_type: providerType as 'openai' | 'anthropic' | 'gemini',
+          model_id: finalModelId,
+          api_key: apiKey,
+          base_url: baseUrlResolvedForRequest,
+          custom_headers: Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
+          model_category_type: modelCategoryType,
+        });
+
+        setProbeResult({
+          success: result.success,
+          message: result.message,
+          base_url_resolved: baseUrlResolvedForDisplay || undefined,
+          checks: {
+            test_connection: {
+              ok: result.success,
+              error: result.success ? null : result.message,
+            },
+          },
+        });
+
         toast({
-          variant: 'destructive',
-          title: t('common:models.test_failed'),
+          variant: result.success ? 'default' : 'destructive',
+          title: result.success ? t('common:models.test_success') : t('common:models.test_failed'),
           description: result.message,
         });
       }
@@ -514,7 +632,7 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
               model: modelFieldValue,
               model_id: finalModelId,
               api_key: apiKey,
-              ...(baseUrl && { base_url: baseUrl }),
+              ...(baseUrlResolvedForRequest && { base_url: baseUrlResolvedForRequest }),
               ...(parsedHeaders &&
                 Object.keys(parsedHeaders).length > 0 && { custom_headers: parsedHeaders }),
             },
@@ -569,7 +687,7 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
         : 'sk-ant-...';
   const baseUrlPlaceholder =
     providerType === 'openai' || providerType === 'openai-responses'
-      ? 'https://api.openai.com/v1'
+      ? 'https://api.openai.com'
       : providerType === 'gemini'
         ? 'https://generativelanguage.googleapis.com'
         : 'https://api.anthropic.com';
@@ -667,21 +785,53 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="model_id" className="text-sm font-medium">
-                {t('common:models.model_id')} <span className="text-red-400">*</span>
-              </Label>
-              <Select value={modelId} onValueChange={setModelId}>
-                <SelectTrigger className="bg-base">
-                  <SelectValue placeholder={t('common:models.select_model_id')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {modelOptions.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="model_id" className="text-sm font-medium">
+                  {t('common:models.model_id')} <span className="text-red-400">*</span>
+                </Label>
+                {providerSupportsModelDiscovery && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={handleFetchProviderModels}
+                    disabled={providerModelsLoading || !apiKey.trim()}
+                    title={t('common:models.fetch_models')}
+                  >
+                    {providerModelsLoading && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                    {t('common:models.fetch_models')}
+                  </Button>
+                )}
+              </div>
+
+              {providerSupportsModelDiscovery ? (
+                <SearchableSelect
+                  value={modelId}
+                  onValueChange={handleModelIdChange}
+                  items={providerModelItems}
+                  placeholder={t('common:models.select_model_id')}
+                  searchPlaceholder={t('common:models.search_model_id')}
+                  loading={providerModelsLoading}
+                  error={providerModelsError}
+                  emptyText={t('common:models.provider_models_empty_hint')}
+                  noMatchText={t('common:models.provider_models_no_match')}
+                  showChevron={true}
+                />
+              ) : (
+                <Select value={modelId} onValueChange={handleModelIdChange}>
+                  <SelectTrigger className="bg-base">
+                    <SelectValue placeholder={t('common:models.select_model_id')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelOptions.map(option => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               {modelId === 'custom' && (
                 <Input
                   value={customModelId}
@@ -736,6 +886,12 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
               className="bg-base"
             />
             <p className="text-xs text-text-muted">{t('common:models.base_url_hint')}</p>
+            {baseUrlResolvedForDisplay && (
+              <p className="text-xs text-text-muted">
+                {t('common:models.base_url_resolved')}:&nbsp;
+                <span className="font-mono">{baseUrlResolvedForDisplay}</span>
+              </p>
+            )}
           </div>
 
           {/* Custom Headers */}
@@ -968,11 +1124,74 @@ const ModelEditDialog: React.FC<ModelEditDialogProps> = ({
           )}
         </div>
 
+        {probeResult && (
+          <div className="mb-3 rounded-lg border border-border bg-surface p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium text-text-primary">
+                {t('common:models.probe_results')}
+              </div>
+              <Tag variant={probeResult.success ? 'success' : 'error'}>
+                {probeResult.success
+                  ? t('common:models.probe_ok')
+                  : t('common:models.probe_failed')}
+              </Tag>
+            </div>
+
+            {probeResult.base_url_resolved && (
+              <div className="mt-2 text-xs text-text-muted">
+                {t('common:models.base_url_resolved')}:&nbsp;
+                <span className="font-mono">{probeResult.base_url_resolved}</span>
+              </div>
+            )}
+
+            <div className="mt-3 space-y-2">
+              {Object.entries(probeResult.checks || {}).map(([key, check]) => {
+                const labelMap: Record<string, string> = {
+                  list_models: t('common:models.probe_check_list_models'),
+                  prompt_llm: t('common:models.probe_check_prompt_llm'),
+                  embedding: t('common:models.probe_check_embedding'),
+                  test_connection: t('common:models.probe_check_test_connection'),
+                };
+                const label = labelMap[key] || key;
+
+                return (
+                  <div
+                    key={key}
+                    className="flex items-start justify-between gap-3 rounded-md border border-border bg-base px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm text-text-primary truncate">{label}</div>
+                      {check?.error && (
+                        <div className="text-xs text-error mt-0.5 break-words">{check.error}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {typeof check?.latency_ms === 'number' && (
+                        <span className="text-xs text-text-muted">{check.latency_ms}ms</span>
+                      )}
+                      <Tag variant={check?.ok ? 'success' : 'error'}>
+                        {check?.ok ? 'OK' : 'Fail'}
+                      </Tag>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="mb-2 text-xs text-text-muted">{t('common:models.probe_cost_warning')}</div>
+
         <DialogFooter className="flex items-center justify-between sm:justify-between">
           <Button
             variant="outline"
             onClick={handleTestConnection}
-            disabled={testing || !modelId || !apiKey}
+            disabled={
+              testing ||
+              !apiKey.trim() ||
+              !modelId ||
+              (modelId === 'custom' && !customModelId.trim())
+            }
           >
             {testing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             <BeakerIcon className="w-4 h-4 mr-1" />

@@ -91,6 +91,8 @@ export interface ChatSendPayload {
     type: string;
     data: Record<string, unknown>;
   }>;
+  // Persistent working directory for code tasks (e.g. /wegent_repos/<dir>)
+  repo_dir?: string;
   // Repository info for code tasks
   git_url?: string;
   git_repo?: string;
@@ -114,6 +116,10 @@ export interface ChatResumePayload {
 export interface ChatRetryPayload {
   task_id: number;
   subtask_id: number;
+  retry_mode?: 'resume' | 'new_session';
+  force_override_bot_model?: string;
+  force_override_bot_model_type?: string;
+  use_model_override?: boolean;
 }
 
 export interface TaskJoinPayload {

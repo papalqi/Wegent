@@ -155,7 +155,12 @@ export function isTerminalStatus(status?: string): boolean {
  * Check if task status is running
  */
 export function isRunningStatus(status?: string): boolean {
-  return status === 'RUNNING' || status === 'PENDING' || status === 'PROCESSING';
+  return (
+    status === 'RUNNING' ||
+    status === 'PENDING' ||
+    status === 'PROCESSING' ||
+    status === 'CANCELLING'
+  );
 }
 
 /**

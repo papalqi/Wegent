@@ -133,12 +133,91 @@ The project adopts Kubernetes-style CRD design with core resources including:
 
 ## 🔄 Development Workflow
 
+### Git Branch Strategy
+
+**⚠️ IMPORTANT: Strict Branch Protection Rules**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     MAIN BRANCH (main)                      │
+│  ✓ Production-ready code only                              │
+│  ✓ NO direct commits allowed                               │
+│  ✓ ONLY accepts Pull Requests from develop branch          │
+│  ✓ Managed by maintainers                                  │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       │ PR from develop only
+                       │
+┌──────────────────────┴──────────────────────────────────────┐
+│                   DEVELOP BRANCH (develop)                  │
+│  ✓ Integration branch for features                          │
+│  ✓ NO direct commits to main features                       │
+│  ✓ Accepts Pull Requests from feature branches              │
+│  ✓ Continuous integration happens here                     │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       │ PR from feature branches
+                       │
+       ┌───────────────┼───────────────┐
+       │               │               │
+┌──────┴──────┐ ┌─────┴─────┐ ┌──────┴──────┐
+│ feature/*   │ │ fix/*     │ │ hotfix/*   │
+│             │ │           │ │            │
+│ New         │ │ Bug       │ │ Urgent     │
+│ Features    │ │ Fixes     │ │ Fixes      │
+└─────────────┘ └───────────┘ └────────────┘
+```
+
+**Key Rules:**
+
+1. **main branch**
+   - ❌ **NEVER** push directly to main
+   - ✅ ONLY merge PRs from `develop` branch
+   - ✅ Represents production-ready code
+   - ✅ Protected by branch rules
+   - ✅ Tags/releases created from here
+
+2. **develop branch**
+   - ❌ **DO NOT** push unfinished work directly
+   - ✅ Accepts PRs from `feature/*`, `fix/*`, `hotfix/*` branches
+   - ✅ Integration testing happens here
+   - ✅ Always should be in a working state
+
+3. **Feature branches**
+   - ✅ Create from `develop` branch: `git checkout -b feature/your-feature develop`
+   - ✅命名规范: `feature/`, `fix/`, `hotfix/`, `refactor/`
+   - ✅ Push and create PR to `develop` branch
+   - ✅ Delete after merge
+
+**Workflow Example:**
+
+```bash
+# 1. Update local develop branch
+git checkout develop
+git pull origin develop
+
+# 2. Create feature branch FROM develop
+git checkout -b feature/new-feature develop
+
+# 3. Do your work and commit
+git add .
+git commit -m "feat: add new feature"
+
+# 4. Push to remote
+git push origin feature/new-feature
+
+# 5. Create PR: feature/new-feature → develop
+
+# 6. After review and merge, delete feature branch
+git branch -d feature/new-feature
+```
+
 ### 1. Create Branch
 
 ```bash
-# Create feature branch from main
-git checkout main
-git pull origin main
+# Create feature branch from develop
+git checkout develop
+git pull origin develop
 git checkout -b feature/your-feature-name
 ```
 
@@ -363,9 +442,8 @@ The test suite includes:
 Coverage reports are uploaded to Codecov.
 
 For detailed testing documentation, see:
-- 📖 [Complete Testing Guide (English)](./docs/en/guides/developer/testing.md) - Comprehensive test framework documentation
-- 📖 [完整测试指南（中文）](./docs/zh/guides/developer/testing.md) - 综合测试框架文档
-- 📖 [Developer Setup Guide](./docs/en/guides/developer/setup.md) - Testing section
+- 📖 [完整测试指南](./docs/guides/developer/testing.md) - 综合测试框架文档
+- 📖 [Developer Setup Guide](./docs/guides/developer/setup.md) - Testing section
 
 ## 📚 Documentation Requirements
 
@@ -449,13 +527,39 @@ Use Semantic Versioning (SemVer):
 
 ### Release Steps
 
-1. Update version number
-2. Update CHANGELOG.md
-3. Create release branch
-4. Code review and testing
-5. Merge to main branch
-6. Create Git tag
-7. Build and publish Docker images
+**Following Git Branch Strategy:**
+
+1. **Prepare release in develop branch**
+   - Update version number in `.env.defaults` and `docker-compose.yml`
+   - Update CHANGELOG.md
+   - Create release PR: `develop` → `main`
+   - Include "Changeset version bump" in PR title to trigger image build
+
+2. **Code review and testing**
+   - All tests must pass in develop branch
+   - Code review approval required
+   - Ensure no breaking changes without proper version bump
+
+3. **Merge to main branch**
+   - Merge PR from `develop` to `main`
+   - This triggers automated CI/CD workflows
+   - Docker images are automatically built and published
+
+4. **Create Git tag**
+   - Tag is automatically created by CI/CD
+   - Format: `vMAJOR.MINOR.PATCH` (e.g., `v1.35.2`)
+   - GitHub Release is automatically generated
+
+5. **Verification**
+   - Check GitHub Actions completion
+   - Verify Docker images are pushed to registry
+   - Verify GitHub Release is created
+
+**⚠️ IMPORTANT:**
+- NEVER push directly to main
+- ALWAYS go through develop branch
+- ONLY create PRs from develop to main
+- Automated workflows handle tagging and releases
 
 ## 🤝 Community Code of Conduct
 

@@ -193,4 +193,4 @@ class RedisCache:
 
 
 # Global cache instance
-cache_manager = RedisCache(settings.REDIS_URL)
+cache_manager = RedisCache(settings.get_redis_url())

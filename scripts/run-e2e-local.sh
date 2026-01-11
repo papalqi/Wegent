@@ -35,6 +35,9 @@ echo -e "${GREEN}  Wegent E2E Test Local Runner${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo -e "${YELLOW}Logs will be saved to: $LOG_DIR${NC}"
 
+# docker-compose.yml enables Redis AUTH by default
+export REDIS_PASSWORD="${REDIS_PASSWORD:-test123}"
+
 # Function to cleanup on exit
 cleanup() {
     echo -e "\n${YELLOW}Cleaning up...${NC}"
@@ -108,7 +111,7 @@ cd "$PROJECT_ROOT/backend"
 
 # Set environment variables for backend
 export DATABASE_URL="mysql+pymysql://root:123456@127.0.0.1:3306/task_manager"
-export REDIS_URL="redis://127.0.0.1:6379"
+export REDIS_URL="redis://127.0.0.1:6379/0"
 export ENVIRONMENT="development"
 export DB_AUTO_MIGRATE="True"
 export INIT_DATA_ENABLED="True"
