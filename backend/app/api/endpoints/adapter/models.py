@@ -16,14 +16,21 @@ from app.api.dependencies import get_db
 from app.core import security
 from app.models.kind import Kind
 from app.models.user import User
-from app.schemas.model import (ModelBulkCreateItem, ModelCreate, ModelDetail,
-                               ModelInDB, ModelListResponse, ModelUpdate,
-                               ProviderModelsRequest, ProviderModelsResponse,
-                               ProviderProbeCheck, ProviderProbeRequest,
-                               ProviderProbeResponse)
+from app.schemas.model import (
+    ModelBulkCreateItem,
+    ModelCreate,
+    ModelDetail,
+    ModelInDB,
+    ModelListResponse,
+    ModelUpdate,
+    ProviderModelsRequest,
+    ProviderModelsResponse,
+    ProviderProbeCheck,
+    ProviderProbeRequest,
+    ProviderProbeResponse,
+)
 from app.services.adapters import public_model_service
-from app.services.model_aggregation_service import (ModelType,
-                                                    model_aggregation_service)
+from app.services.model_aggregation_service import ModelType, model_aggregation_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
