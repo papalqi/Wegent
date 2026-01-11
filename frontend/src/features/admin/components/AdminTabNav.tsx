@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useIsMobile } from '@/features/layout/hooks/useMediaQuery';
-import { Users, Cpu, Settings, Sparkles, KeyRound, Database, HardDrive, Broom } from 'lucide-react';
+import { Users, Cpu, Settings, Sparkles, KeyRound, Database, HardDrive, Brush } from 'lucide-react';
 
 export type AdminTabId =
   | 'users'
@@ -51,7 +51,7 @@ export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
     { id: 'public-models', label: t('admin:tabs.public_models'), icon: Cpu },
     { id: 'public-retrievers', label: t('admin:tabs.public_retrievers'), icon: Database },
     { id: 'public-skills', label: t('admin:tabs.public_skills'), icon: Sparkles },
-    { id: 'custom-config-models', label: t('admin:tabs.custom_config_models'), icon: Broom },
+    { id: 'custom-config-models', label: t('admin:tabs.custom_config_models'), icon: Brush },
     { id: 'api-keys', label: t('admin:tabs.api_keys'), icon: KeyRound },
     { id: 'system-config', label: t('admin:tabs.system_config'), icon: Settings },
     { id: 'database', label: t('admin:tabs.database'), icon: HardDrive },

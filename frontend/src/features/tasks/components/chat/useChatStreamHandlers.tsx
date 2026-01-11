@@ -19,6 +19,7 @@ import { DEFAULT_MODEL_NAME } from '../selector/ModelSelector';
 import type { Model } from '../selector/ModelSelector';
 import type { Team, GitRepoInfo, GitBranch, Attachment } from '@/types/api';
 import type { ContextItem } from '@/types/context';
+import type { CodeWorkspaceMode } from '@/utils/userPreferences';
 
 export interface UseChatStreamHandlersOptions {
   // Team and model
@@ -30,6 +31,8 @@ export interface UseChatStreamHandlersOptions {
   selectedRepo: GitRepoInfo | null;
   selectedBranch: GitBranch | null;
   showRepositorySelector: boolean;
+  codeWorkspaceMode?: CodeWorkspaceMode;
+  repoDir?: string;
 
   // Input
   taskInputMessage: string;
@@ -123,6 +126,8 @@ export function useChatStreamHandlers({
   selectedRepo,
   selectedBranch,
   showRepositorySelector,
+  codeWorkspaceMode = 'dir',
+  repoDir = '',
   taskInputMessage,
   setTaskInputMessage,
   setIsLoading,
@@ -385,12 +390,28 @@ export function useChatStreamHandlers({
             }
           : null);
 
-      if (taskType === 'code' && showRepositorySelector && !effectiveRepo?.git_repo) {
-        toast({
-          variant: 'destructive',
-          title: 'Please select a repository for code tasks',
-        });
-        return;
+      const effectiveRepoDir = (
+        codeWorkspaceMode === 'dir' ? repoDir || selectedTaskDetail?.repo_dir || '' : ''
+      ).trim();
+
+      if (taskType === 'code' && showRepositorySelector) {
+        if (codeWorkspaceMode === 'dir') {
+          if (!effectiveRepoDir) {
+            toast({
+              variant: 'destructive',
+              title: 'Please select a working directory for code tasks',
+            });
+            return;
+          }
+        } else {
+          if (!effectiveRepo?.git_repo) {
+            toast({
+              variant: 'destructive',
+              title: 'Please select a repository for code tasks',
+            });
+            return;
+          }
+        }
       }
 
       setIsLoading(true);
@@ -489,13 +510,30 @@ export function useChatStreamHandlers({
             enable_deep_thinking: enableDeepThinking,
             enable_clarification: enableClarification,
             is_group_chat: selectedTaskDetail?.is_group_chat || false,
-            git_url: showRepositorySelector ? effectiveRepo?.git_url : undefined,
-            git_repo: showRepositorySelector ? effectiveRepo?.git_repo : undefined,
-            git_repo_id: showRepositorySelector ? effectiveRepo?.git_repo_id : undefined,
-            git_domain: showRepositorySelector ? effectiveRepo?.git_domain : undefined,
-            branch_name: showRepositorySelector
-              ? selectedBranch?.name || selectedTaskDetail?.branch_name
-              : undefined,
+            repo_dir:
+              showRepositorySelector && taskType === 'code' && codeWorkspaceMode === 'dir'
+                ? effectiveRepoDir
+                : undefined,
+            git_url:
+              showRepositorySelector && taskType === 'code' && codeWorkspaceMode === 'repo'
+                ? effectiveRepo?.git_url
+                : undefined,
+            git_repo:
+              showRepositorySelector && taskType === 'code' && codeWorkspaceMode === 'repo'
+                ? effectiveRepo?.git_repo
+                : undefined,
+            git_repo_id:
+              showRepositorySelector && taskType === 'code' && codeWorkspaceMode === 'repo'
+                ? effectiveRepo?.git_repo_id
+                : undefined,
+            git_domain:
+              showRepositorySelector && taskType === 'code' && codeWorkspaceMode === 'repo'
+                ? effectiveRepo?.git_domain
+                : undefined,
+            branch_name:
+              showRepositorySelector && taskType === 'code' && codeWorkspaceMode === 'repo'
+                ? selectedBranch?.name || selectedTaskDetail?.branch_name
+                : undefined,
             task_type: taskType,
             contexts: contextItems.length > 0 ? contextItems : undefined,
           },
@@ -569,6 +607,8 @@ export function useChatStreamHandlers({
       showRepositorySelector,
       selectedRepo,
       selectedBranch,
+      codeWorkspaceMode,
+      repoDir,
       taskType,
       markTaskAsViewed,
       user?.id,

@@ -91,6 +91,8 @@ export interface ChatSendPayload {
     type: string;
     data: Record<string, unknown>;
   }>;
+  // Persistent working directory for code tasks (e.g. /wegent_repos/<dir>)
+  repo_dir?: string;
   // Repository info for code tasks
   git_url?: string;
   git_repo?: string;

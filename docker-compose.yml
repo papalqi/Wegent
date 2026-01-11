@@ -139,7 +139,7 @@ services:
       #dockerfile: docker/frontend/Dockerfile
     image: ${WEGENT_IMAGE_PREFIX:-ghcr.io/wecode-ai}/wegent-executor-manager:${WEGENT_EXECUTOR_MANAGER_VERSION:-1.35.2}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WEGENT_HOST_GATEWAY_IP:-host-gateway}"
     container_name: wegent-executor-manager
     restart: always
     ports:

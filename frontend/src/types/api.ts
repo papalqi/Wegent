@@ -241,6 +241,7 @@ export interface TaskDetail {
   git_repo_id: number;
   git_domain: string;
   branch_name: string;
+  repo_dir?: string;
   prompt: string;
   status: TaskStatus;
   task_type?: TaskType;
@@ -339,6 +340,7 @@ export interface Task {
   git_repo_id: number;
   git_domain: string;
   branch_name: string;
+  repo_dir?: string;
   prompt: string;
   status: TaskStatus;
   task_type?: TaskType;

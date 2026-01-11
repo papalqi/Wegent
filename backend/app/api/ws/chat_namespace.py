@@ -460,10 +460,12 @@ class ChatNamespace(socketio.AsyncNamespace):
                 params = TaskCreationParams(
                     message=payload.message,
                     title=payload.title,
+                    task_type=payload.task_type,
                     model_id=payload.force_override_bot_model,
                     force_override_bot_model=payload.force_override_bot_model
                     is not None,
                     is_group_chat=payload.is_group_chat,
+                    repo_dir=payload.repo_dir,
                     git_url=payload.git_url,
                     git_repo=payload.git_repo,
                     git_repo_id=payload.git_repo_id,
@@ -497,8 +499,10 @@ class ChatNamespace(socketio.AsyncNamespace):
                     f"[WS] chat:send calling task_kinds_service.create_task_or_append (supports_direct_chat=False)..."
                 )
 
-                # Auto-detect task type based on git_url presence
-                task_type = "code" if payload.git_url else "chat"
+                # Auto-detect task type when client doesn't specify task_type.
+                task_type = payload.task_type or (
+                    "code" if (payload.repo_dir or payload.git_url) else "chat"
+                )
 
                 # Build TaskCreate object
                 task_create = TaskCreate(
@@ -509,6 +513,7 @@ class ChatNamespace(socketio.AsyncNamespace):
                     git_repo_id=payload.git_repo_id or 0,
                     git_domain=payload.git_domain or "",
                     branch_name=payload.branch_name or "",
+                    repo_dir=payload.repo_dir or "",
                     prompt=payload.message,
                     type="online",
                     task_type=task_type,

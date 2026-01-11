@@ -35,6 +35,7 @@ class TaskBase(BaseModel):
     git_repo_id: Optional[int] = None
     git_domain: Optional[str] = None
     branch_name: Optional[str] = None
+    repo_dir: Optional[str] = ""
     prompt: str
     status: TaskStatus = TaskStatus.PENDING
     progress: int = 0
@@ -56,6 +57,9 @@ class TaskCreate(BaseModel):
     git_repo_id: Optional[int] = 0
     git_domain: Optional[str] = ""
     branch_name: Optional[str] = ""
+    repo_dir: Optional[str] = (
+        ""  # Executor working directory (e.g. /wegent_repos/<dir>)
+    )
     prompt: str
     type: Optional[str] = "online"  # online、offline
     task_type: Optional[str] = "chat"  # chat、code
@@ -125,6 +129,7 @@ class TaskDetail(BaseModel):
     git_repo_id: Optional[int] = None
     git_domain: Optional[str] = None
     branch_name: str
+    repo_dir: Optional[str] = ""
     prompt: str
     status: TaskStatus = TaskStatus.PENDING
     progress: int = 0

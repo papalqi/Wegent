@@ -633,27 +633,25 @@ class DockerExecutor(Executor):
         """
         Mount host persistent repo root into executor container.
 
-        The root is fixed to: dirname(WEGENT_ROOT_HOST)/wegent_repos
+        The root is provided by the host via WEGENT_PERSIST_REPO_ROOT_HOST.
         """
         from shared.utils.persistent_repo import (
             PERSIST_REPO_MOUNT_PATH,
-            compute_persistent_repo_root,
         )
 
-        wegent_root_host = (os.getenv("WEGENT_ROOT_HOST") or "").strip()
+        persist_root_host = (os.getenv("WEGENT_PERSIST_REPO_ROOT_HOST") or "").strip()
         needs_persist_mount = isinstance(task.get("repo_dir"), str) and task.get(
             "repo_dir", ""
         ).startswith(PERSIST_REPO_MOUNT_PATH + "/")
 
-        if not wegent_root_host:
+        if not persist_root_host:
             if needs_persist_mount:
                 raise ValueError(
-                    "WEGENT_ROOT_HOST is required to mount persistent repo directory"
+                    "WEGENT_PERSIST_REPO_ROOT_HOST is required to mount persistent repo directory"
                 )
             return
 
-        persist_root = compute_persistent_repo_root(Path(wegent_root_host))
-        cmd.extend(["-v", f"{persist_root}:{PERSIST_REPO_MOUNT_PATH}"])
+        cmd.extend(["-v", f"{persist_root_host}:{PERSIST_REPO_MOUNT_PATH}"])
 
     def _add_network_config(self, cmd: List[str]) -> None:
         """Add network configuration"""

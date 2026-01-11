@@ -9,6 +9,7 @@ import { CircleStop } from 'lucide-react';
 import ModelSelector, { Model } from '../selector/ModelSelector';
 import RepositorySelector from '../selector/RepositorySelector';
 import BranchSelector from '../selector/BranchSelector';
+import PersistentRepoDirSelector from '../selector/PersistentRepoDirSelector';
 import ClarificationToggle from '../clarification/ClarificationToggle';
 import CorrectionModeToggle from '../CorrectionModeToggle';
 import ChatContextInput from '../chat/ChatContextInput';
@@ -27,6 +28,8 @@ import type {
 import type { ContextItem } from '@/types/context';
 import { isChatShell } from '../../service/messageService';
 import { supportsAttachments } from '../../service/attachmentService';
+import { useTranslation } from '@/hooks/useTranslation';
+import type { CodeWorkspaceMode } from '@/utils/userPreferences';
 
 export interface ChatInputControlsProps {
   // Team and Model
@@ -42,6 +45,9 @@ export interface ChatInputControlsProps {
   /** Task's model_id from backend - used as fallback when no session preference exists */
   taskModelId?: string | null;
 
+  // Task type
+  taskType: 'chat' | 'code';
+
   // Repository and Branch
   showRepositorySelector: boolean;
   selectedRepo: GitRepoInfo | null;
@@ -49,6 +55,10 @@ export interface ChatInputControlsProps {
   selectedBranch: GitBranch | null;
   setSelectedBranch: (branch: GitBranch | null) => void;
   selectedTaskDetail: TaskDetail | null;
+  codeWorkspaceMode?: CodeWorkspaceMode;
+  setCodeWorkspaceMode?: (mode: CodeWorkspaceMode) => void;
+  repoDir?: string;
+  setRepoDir?: (repoDir: string) => void;
 
   // Deep Thinking and Clarification
   enableDeepThinking: boolean;
@@ -113,12 +123,17 @@ export function ChatInputControls({
   teamId,
   taskId,
   taskModelId,
+  taskType,
   showRepositorySelector,
   selectedRepo,
   setSelectedRepo,
   selectedBranch,
   setSelectedBranch,
   selectedTaskDetail,
+  codeWorkspaceMode = 'dir',
+  setCodeWorkspaceMode,
+  repoDir = '',
+  setRepoDir,
   enableClarification,
   setEnableClarification,
   enableCorrectionMode = false,
@@ -143,6 +158,8 @@ export function ChatInputControls({
   onStopStream,
   onSendMessage,
 }: ChatInputControlsProps) {
+  const { t } = useTranslation();
+
   // Always use compact mode (icon only) to save space
   const shouldUseCompactQuota = true;
 
@@ -271,22 +288,62 @@ export function ChatInputControls({
         )}
 
         {/* Repository and Branch Selectors - inside input box */}
-        {showRepositorySelector && (
+        {showRepositorySelector && taskType === 'code' && (
           <>
-            <RepositorySelector
-              selectedRepo={selectedRepo}
-              handleRepoChange={setSelectedRepo}
-              disabled={hasMessages}
-              selectedTaskDetail={selectedTaskDetail}
-              compact={shouldCollapseSelectors}
-            />
+            <div className="flex items-center rounded-lg border border-border bg-surface p-0.5">
+              <button
+                type="button"
+                className={`h-7 px-2 rounded-md text-sm whitespace-nowrap transition-colors ${
+                  codeWorkspaceMode === 'dir'
+                    ? 'bg-base text-text-primary'
+                    : 'text-text-muted hover:text-text-primary'
+                } ${hasMessages ? 'cursor-not-allowed opacity-60' : ''}`}
+                onClick={() => setCodeWorkspaceMode?.('dir')}
+                disabled={hasMessages || isLoading || isStreaming}
+                title={t('common:tasks.code_workspace_mode_dir')}
+              >
+                {t('common:tasks.code_workspace_mode_dir')}
+              </button>
+              <button
+                type="button"
+                className={`h-7 px-2 rounded-md text-sm whitespace-nowrap transition-colors ${
+                  codeWorkspaceMode === 'repo'
+                    ? 'bg-base text-text-primary'
+                    : 'text-text-muted hover:text-text-primary'
+                } ${hasMessages ? 'cursor-not-allowed opacity-60' : ''}`}
+                onClick={() => setCodeWorkspaceMode?.('repo')}
+                disabled={hasMessages || isLoading || isStreaming}
+                title={t('common:tasks.code_workspace_mode_repo')}
+              >
+                {t('common:tasks.code_workspace_mode_repo')}
+              </button>
+            </div>
 
-            {selectedRepo && (
-              <BranchSelector
-                selectedRepo={selectedRepo}
-                selectedBranch={selectedBranch}
-                handleBranchChange={setSelectedBranch}
-                disabled={hasMessages}
+            {codeWorkspaceMode === 'repo' ? (
+              <>
+                <RepositorySelector
+                  selectedRepo={selectedRepo}
+                  handleRepoChange={setSelectedRepo}
+                  disabled={hasMessages}
+                  selectedTaskDetail={selectedTaskDetail}
+                  compact={shouldCollapseSelectors}
+                />
+
+                {selectedRepo && (
+                  <BranchSelector
+                    selectedRepo={selectedRepo}
+                    selectedBranch={selectedBranch}
+                    handleBranchChange={setSelectedBranch}
+                    disabled={hasMessages}
+                    compact={shouldCollapseSelectors}
+                  />
+                )}
+              </>
+            ) : (
+              <PersistentRepoDirSelector
+                value={repoDir}
+                onChange={setRepoDir}
+                disabled={hasMessages || isLoading || isStreaming}
                 compact={shouldCollapseSelectors}
               />
             )}

@@ -4,53 +4,12 @@
 
 from pathlib import Path
 
-import pytest
-
 from shared.utils.persistent_repo import (
     PERSIST_REPO_MOUNT_PATH,
-    WEGENT_PERSIST_REPO_DIRNAME,
-    compute_persistent_repo_root,
     detect_is_p4_repo,
     detect_repo_vcs,
-    find_wegent_root,
-    workspace_persistent_repo_dir,
+    normalize_persist_repo_dir,
 )
-
-
-def _make_fake_wegent_root(root: Path) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    (root / "AGENTS.md").write_text("test", encoding="utf-8")
-    (root / "backend").mkdir(parents=True, exist_ok=True)
-    (root / "executor").mkdir(parents=True, exist_ok=True)
-    (root / "executor_manager").mkdir(parents=True, exist_ok=True)
-    (root / "shared").mkdir(parents=True, exist_ok=True)
-
-
-def test_find_wegent_root(tmp_path: Path) -> None:
-    wegent_root = tmp_path / "Wegent"
-    _make_fake_wegent_root(wegent_root)
-
-    start = wegent_root / "backend" / "app" / "services"
-    start.mkdir(parents=True, exist_ok=True)
-
-    assert find_wegent_root(start) == wegent_root.resolve()
-
-
-def test_compute_persistent_repo_root_is_fixed_sibling(tmp_path: Path) -> None:
-    wegent_root = tmp_path / "Wegent"
-    _make_fake_wegent_root(wegent_root)
-
-    persist_root = compute_persistent_repo_root(wegent_root)
-    assert persist_root == wegent_root.resolve().parent / WEGENT_PERSIST_REPO_DIRNAME
-    assert not str(persist_root).startswith(str(wegent_root.resolve()))
-
-
-def test_workspace_persistent_repo_dir(tmp_path: Path) -> None:
-    root = tmp_path / "wegent_repos"
-    assert workspace_persistent_repo_dir(root, 123).name == "ws-123"
-
-    with pytest.raises(ValueError):
-        workspace_persistent_repo_dir(root, 0)
 
 
 def test_detect_repo_vcs_p4(tmp_path: Path) -> None:
@@ -74,3 +33,25 @@ def test_detect_repo_vcs_git(tmp_path: Path) -> None:
 
 def test_persist_repo_mount_path_constant() -> None:
     assert PERSIST_REPO_MOUNT_PATH.startswith("/")
+
+
+def test_normalize_persist_repo_dir_relative_under_mount() -> None:
+    assert normalize_persist_repo_dir("my-repo") == f"{PERSIST_REPO_MOUNT_PATH}/my-repo"
+
+
+def test_normalize_persist_repo_dir_rejects_path_traversal() -> None:
+    for repo_dir in ("../etc", "../../root", "/wegent_repos/../etc"):
+        try:
+            normalize_persist_repo_dir(repo_dir)
+        except ValueError:
+            continue
+        raise AssertionError(f"Expected ValueError for repo_dir={repo_dir!r}")
+
+
+def test_normalize_persist_repo_dir_rejects_mount_root() -> None:
+    for repo_dir in (PERSIST_REPO_MOUNT_PATH, f"{PERSIST_REPO_MOUNT_PATH}/."):
+        try:
+            normalize_persist_repo_dir(repo_dir)
+        except ValueError:
+            continue
+        raise AssertionError(f"Expected ValueError for repo_dir={repo_dir!r}")

@@ -68,6 +68,19 @@ WEGENT_PUBLIC_HOST=your-public-ip-or-domain ./start.sh
 
 Optional: `WEGENT_PUBLIC_SCHEME=https` (behind reverse proxy/HTTPS), `WEGENT_FRONTEND_HOST=127.0.0.1` (restrict frontend to local only).
 
+### 💾 Persistent Code Workspace (/wegent_repos)
+
+`start.sh` mounts a host directory into executor containers at `/wegent_repos` for the UI “Directory” mode (Wegent won’t auto clone/sync, and tasks won’t delete it).
+
+By default it uses `../wegent_repos` (sibling of the Wegent repo). If your system disk is too small, point it to a larger disk/partition:
+
+```bash
+WEGENT_PERSIST_REPO_ROOT=/data/wegent_repos ./start.sh
+```
+
+You can also put `WEGENT_PERSIST_REPO_ROOT=/data/wegent_repos` into the repo root `.env.local` (auto-loaded by `start.sh`).
+The path must be outside the Wegent repo root.
+
 ---
 
 ## 📦 Built-in Agents

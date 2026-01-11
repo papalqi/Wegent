@@ -13,6 +13,8 @@ const STORAGE_KEYS = {
   LAST_TEAM_ID_CODE: 'wegent_last_team_id_code',
   LAST_REPO_ID: 'wegent_last_repo_id',
   LAST_REPO_NAME: 'wegent_last_repo_name',
+  LAST_CODE_WORKSPACE_MODE: 'wegent_last_code_workspace_mode',
+  LAST_CODE_REPO_DIR: 'wegent_last_code_repo_dir',
 } as const;
 
 export type TabType = 'chat' | 'code' | 'wiki';
@@ -156,6 +158,46 @@ export function getLastRepo(): { repoId: number; repoName: string } | null {
     return null;
   } catch (error) {
     console.warn('Failed to get last repo from localStorage:', error);
+    return null;
+  }
+}
+
+export type CodeWorkspaceMode = 'repo' | 'dir';
+
+export function saveLastCodeWorkspaceMode(mode: CodeWorkspaceMode): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.LAST_CODE_WORKSPACE_MODE, mode);
+  } catch (error) {
+    console.warn('Failed to save last code workspace mode to localStorage:', error);
+  }
+}
+
+export function getLastCodeWorkspaceMode(): CodeWorkspaceMode | null {
+  try {
+    const mode = localStorage.getItem(STORAGE_KEYS.LAST_CODE_WORKSPACE_MODE);
+    return mode === 'repo' || mode === 'dir' ? mode : null;
+  } catch (error) {
+    console.warn('Failed to get last code workspace mode from localStorage:', error);
+    return null;
+  }
+}
+
+export function saveLastCodeRepoDir(repoDir: string): void {
+  try {
+    const value = repoDir.trim();
+    if (!value) return;
+    localStorage.setItem(STORAGE_KEYS.LAST_CODE_REPO_DIR, value);
+  } catch (error) {
+    console.warn('Failed to save last code repo dir to localStorage:', error);
+  }
+}
+
+export function getLastCodeRepoDir(): string | null {
+  try {
+    const repoDir = localStorage.getItem(STORAGE_KEYS.LAST_CODE_REPO_DIR);
+    return repoDir && repoDir !== 'undefined' && repoDir !== 'null' ? repoDir : null;
+  } catch (error) {
+    console.warn('Failed to get last code repo dir from localStorage:', error);
     return null;
   }
 }

@@ -42,9 +42,11 @@ class TaskCreationParams:
 
     message: str
     title: Optional[str] = None
+    task_type: Optional[str] = None
     model_id: Optional[str] = None
     force_override_bot_model: bool = False
     is_group_chat: bool = False
+    repo_dir: Optional[str] = None
     git_url: Optional[str] = None
     git_repo: Optional[str] = None
     git_repo_id: Optional[int] = None
@@ -198,16 +200,35 @@ def create_new_task(
 
     # Create workspace
     workspace_name = f"workspace-{new_task_id}"
+    repo_dir = (params.repo_dir or "").strip()
+    if repo_dir:
+        from shared.utils.persistent_repo import (
+            PERSIST_REPO_MOUNT_PATH,
+            normalize_persist_repo_dir,
+        )
+
+        try:
+            repo_dir = normalize_persist_repo_dir(repo_dir)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid repo_dir: {repo_dir}. "
+                    f"It must be under {PERSIST_REPO_MOUNT_PATH}/"
+                ),
+            )
+
     workspace_json = {
         "kind": "Workspace",
         "spec": {
+            "repoDir": repo_dir,
             "repository": {
                 "gitUrl": params.git_url or "",
                 "gitRepo": params.git_repo or "",
                 "gitRepoId": params.git_repo_id or 0,
                 "gitDomain": params.git_domain or "",
                 "branchName": params.branch_name or "",
-            }
+            },
         },
         "status": {"state": "Available"},
         "metadata": {"name": workspace_name, "namespace": "default"},
@@ -233,8 +254,9 @@ def create_new_task(
             params.message[:50] + "..." if len(params.message) > 50 else params.message
         )
 
-    # Auto-detect task type based on git_url presence
-    task_type = "code" if params.git_url else "chat"
+    task_type = params.task_type or (
+        "code" if (params.repo_dir or params.git_url) else "chat"
+    )
 
     logger.info(
         f"[create_new_task] Creating task_json with is_group_chat={params.is_group_chat}"

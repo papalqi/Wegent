@@ -68,6 +68,18 @@ WEGENT_PUBLIC_HOST=your-public-ip-or-domain ./start.sh
 
 可选：`WEGENT_PUBLIC_SCHEME=https`（配合反向代理/HTTPS）、`WEGENT_FRONTEND_HOST=127.0.0.1`（限制前端仅本机访问）。
 
+### 💾 持久化代码目录（/wegent_repos）
+
+`start.sh` 会把宿主机上的持久化目录挂载进执行器容器的 `/wegent_repos`，用于 UI「目录」模式的代码工作区（不会自动 clone/sync，也不会被任务删除）。
+
+默认路径是仓库同级的 `../wegent_repos`。如果系统盘容量不够，建议把它放到更大的磁盘/分区：
+
+```bash
+WEGENT_PERSIST_REPO_ROOT=/data/wegent_repos ./start.sh
+```
+
+也可以把 `WEGENT_PERSIST_REPO_ROOT=/data/wegent_repos` 写进仓库根目录的 `.env.local`（`start.sh` 会自动读取）。该目录必须在 Wegent 仓库外部。
+
 ---
 
 ## 📦 预置智能体

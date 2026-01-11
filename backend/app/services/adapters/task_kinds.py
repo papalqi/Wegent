@@ -190,18 +190,37 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 if len(obj_in.prompt) > 50:
                     title += "..."
 
+            repo_dir = (obj_in.repo_dir or "").strip()
+            if repo_dir:
+                from shared.utils.persistent_repo import (
+                    PERSIST_REPO_MOUNT_PATH,
+                    normalize_persist_repo_dir,
+                )
+
+                try:
+                    repo_dir = normalize_persist_repo_dir(repo_dir)
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Invalid repo_dir: {repo_dir}. "
+                            f"It must be under {PERSIST_REPO_MOUNT_PATH}/"
+                        ),
+                    )
+
             # Create Workspace first
             workspace_name = f"workspace-{task_id}"
             workspace_json = {
                 "kind": "Workspace",
                 "spec": {
+                    "repoDir": repo_dir,
                     "repository": {
                         "gitUrl": obj_in.git_url,
                         "gitRepo": obj_in.git_repo,
                         "gitRepoId": obj_in.git_repo_id,
                         "gitDomain": obj_in.git_domain,
                         "branchName": obj_in.branch_name,
-                    }
+                    },
                 },
                 "status": {"state": "Available"},
                 "metadata": {"name": workspace_name, "namespace": "default"},
@@ -2080,10 +2099,12 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         git_repo_id = 0
         git_domain = ""
         branch_name = ""
+        repo_dir = ""
 
         if workspace and workspace.json:
             try:
                 workspace_crd = Workspace.model_validate(workspace.json)
+                repo_dir = workspace_crd.spec.repoDir or ""
                 git_url = workspace_crd.spec.repository.gitUrl
                 git_repo = workspace_crd.spec.repository.gitRepo
                 git_repo_id = workspace_crd.spec.repository.gitRepoId or 0
@@ -2190,6 +2211,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             "git_repo_id": git_repo_id,
             "git_domain": git_domain,
             "branch_name": branch_name,
+            "repo_dir": repo_dir,
             "prompt": task_crd.spec.prompt,
             "status": status,
             "progress": task_crd.status.progress if task_crd.status else 0,

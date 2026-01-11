@@ -136,15 +136,11 @@ FRONTEND_HOST="${WEGENT_FRONTEND_HOST:-0.0.0.0}"
 # Runtime workspace for executor containers (host path)
 EXECUTOR_WORKSPACE="${WEGENT_EXECUTOR_WORKSPACE:-${HOME}/wecode-bot}"
 
-# Host persistent repo root (fixed sibling directory; not configurable)
-PERSIST_REPO_ROOT="$(realpath "${ROOT_DIR}/../wegent_repos")"
+# Host persistent repo root (external directory; configurable)
 WEGENT_ROOT_REAL="$(realpath "${ROOT_DIR}")"
-PERSIST_PARENT_REAL="$(realpath "${ROOT_DIR}/..")"
-WEGENT_ROOT_HOST="${WEGENT_ROOT_REAL}"
-if [ "${PERSIST_REPO_ROOT}" != "${PERSIST_PARENT_REAL}/wegent_repos" ]; then
-  echo "Error: Invalid persistent repo root: ${PERSIST_REPO_ROOT}" >&2
-  exit 1
-fi
+DEFAULT_PERSIST_REPO_ROOT="$(realpath -m "${ROOT_DIR}/../wegent_repos")"
+PERSIST_REPO_ROOT="${WEGENT_PERSIST_REPO_ROOT:-${DEFAULT_PERSIST_REPO_ROOT}}"
+PERSIST_REPO_ROOT="$(realpath -m "${PERSIST_REPO_ROOT}")"
 if [[ "${PERSIST_REPO_ROOT}" == "${WEGENT_ROOT_REAL}/"* ]]; then
   echo "Error: Persistent repo root must not be inside Wegent root: ${PERSIST_REPO_ROOT}" >&2
   exit 1
@@ -216,6 +212,7 @@ Environment variables (optional):
   WEGENT_MYSQL_PORT, WEGENT_REDIS_PORT, WEGENT_ELASTICSEARCH_PORT (must match docker-compose.yml port mapping)
   WEGENT_REDIS_IMAGE (default: redis:7; e.g. ghcr.io/valkey-io/valkey:latest)
   WEGENT_ENABLE_RAG, WEGENT_EXECUTOR_WORKSPACE, WEGENT_FRONTEND_DEV_MODE
+  WEGENT_PERSIST_REPO_ROOT (host path for persistent repos; default: ../wegent_repos; must be outside Wegent root)
   WEGENT_IMAGE_PREFIX, WEGENT_EXECUTOR_MANAGER_IMAGE, WEGENT_EXECUTOR_IMAGE
   WEGENT_EXECUTOR_MANAGER_VERSION, WEGENT_EXECUTOR_VERSION
   REDIS_PASSWORD (required for docker-compose.yml redis auth; auto-generated if missing)
@@ -344,9 +341,29 @@ ensure_python_runner() {
 maybe_build_frontend_needed() {
   local flag_var="$1"
   local source_ts
-  source_ts="$(max_mtime "${ROOT_DIR}/frontend")"
+  # Only track real source/config inputs for Next.js build.
+  # Avoid runtime-generated files such as `frontend/next.log`, Playwright reports, etc.
+  source_ts="$(max_mtime \
+    "${ROOT_DIR}/frontend/src" \
+    "${ROOT_DIR}/frontend/package.json" \
+    "${ROOT_DIR}/frontend/package-lock.json" \
+    "${ROOT_DIR}/frontend/next.config.js" \
+    "${ROOT_DIR}/frontend/tsconfig.json" \
+    "${ROOT_DIR}/frontend/postcss.config.js" \
+    "${ROOT_DIR}/frontend/tailwind.config.js" \
+    "${ROOT_DIR}/frontend/eslint.config.mjs" \
+    "${ROOT_DIR}/frontend/components.json" \
+    "${ROOT_DIR}/frontend/jest.config.ts" \
+    "${ROOT_DIR}/frontend/jest.setup.js" \
+    "${ROOT_DIR}/frontend/playwright.config.ts" \
+    "${ROOT_DIR}/frontend/.env" \
+    "${ROOT_DIR}/frontend/.env.local" \
+    "${ROOT_DIR}/frontend/.env.production" \
+  )"
   local build_ts
-  build_ts="$(max_mtime "${ROOT_DIR}/frontend/.next")"
+  # Use BUILD_ID as the build marker. `.next` can be modified at runtime (e.g. image cache)
+  # which makes a directory mtime-based check unreliable and can cause stale builds to be reused.
+  build_ts="$(max_mtime "${ROOT_DIR}/frontend/.next/BUILD_ID")"
 
   local need="false"
   if [ "$build_ts" -eq 0 ] || [ "$source_ts" -gt "$build_ts" ]; then
@@ -437,6 +454,43 @@ except Exception:
 PY
 }
 
+# Ensure base images used by a Dockerfile are usable for RUN (i.e. /bin/sh exists).
+ensure_dockerfile_base_images() {
+  local dockerfile="$1"
+  if [ ! -f "$dockerfile" ]; then
+    return 0
+  fi
+
+  local from_images=()
+  mapfile -t from_images < <(awk 'toupper($1)=="FROM" {print $2}' "$dockerfile" | sort -u)
+
+  local image=""
+  for image in "${from_images[@]}"; do
+    # Only validate images that are expected to have a shell.
+    if [[ "$image" == ghcr.io/wecode-ai/wegent-base-python3.12:* ]]; then
+      ensure_image_shell_ok "$image"
+    fi
+  done
+}
+
+ensure_image_shell_ok() {
+  local image="$1"
+
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    echo -e "${YELLOW}  Pulling base image ${image}...${NC}"
+    docker pull "$image" >/dev/null 2>&1 || die "Failed to pull base image: ${image}"
+  fi
+
+  if docker run --rm "$image" /bin/sh -c 'true' >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo -e "${YELLOW}  Base image looks broken, re-pulling: ${image}${NC}"
+  docker image rm -f "$image" >/dev/null 2>&1 || true
+  docker pull "$image" >/dev/null 2>&1 || die "Failed to re-pull base image: ${image}"
+  docker run --rm "$image" /bin/sh -c 'true' >/dev/null 2>&1 || die "Base image still unusable (/bin/sh): ${image}"
+}
+
 # Build image if source is newer (or image missing). Sets flag variable by name to "true"/"false".
 maybe_build_image() {
   local image="$1"
@@ -449,11 +503,26 @@ maybe_build_image() {
   local image_ts
   image_ts="$(image_created_ts "$image")"
 
+  local old_id=""
+  old_id="$(docker image inspect "$image" -f '{{.Id}}' 2>/dev/null || true)"
+
   local built="false"
   if [ "$image_ts" -lt "$source_ts" ] || [ "$image_ts" -eq 0 ]; then
     echo -e "${YELLOW}  Building ${label} image from local source (tag: ${image})...${NC}"
+    ensure_dockerfile_base_images "$dockerfile"
     docker build -f "$dockerfile" -t "$image" "$ROOT_DIR"
     built="true"
+
+    local new_id=""
+    new_id="$(docker image inspect "$image" -f '{{.Id}}' 2>/dev/null || true)"
+    if [ -n "$old_id" ] && [ -n "$new_id" ] && [ "$old_id" != "$new_id" ]; then
+      local old_tags=""
+      old_tags="$(docker image inspect "$old_id" -f '{{json .RepoTags}}' 2>/dev/null || true)"
+      if [ "$old_tags" = "null" ] || [ "$old_tags" = "[]" ]; then
+        echo -e "${BLUE}  Removing previous ${label} image (${old_id})...${NC}"
+        docker image rm "$old_id" >/dev/null 2>&1 || true
+      fi
+    fi
   else
     echo -e "${GREEN}  ${label} image up-to-date (source mtime ≤ image).${NC}"
   fi
@@ -782,7 +851,7 @@ main() {
         --name wegent-executor-manager
         --network wegent-network
         --network-alias executor_manager
-        --add-host host.docker.internal:host-gateway
+        --add-host host.docker.internal:${network_gateway}
         -p "${EXECUTOR_MANAGER_PORT}:8001"
         -e TZ=Asia/Shanghai
         -e TASK_API_DOMAIN="http://${network_gateway}:${BACKEND_PORT}"
@@ -796,7 +865,7 @@ main() {
         -e EXECUTOR_IMAGE="${EXECUTOR_IMAGE}"
         -e EXECUTOR_PORT_RANGE_MIN=10001
         -e EXECUTOR_PORT_RANGE_MAX=10100
-        -e WEGENT_ROOT_HOST="${WEGENT_ROOT_HOST}"
+        -e WEGENT_PERSIST_REPO_ROOT_HOST="${PERSIST_REPO_ROOT}"
         -e EXECUTOR_WORKSPACE="${EXECUTOR_WORKSPACE}"
         -e EXECUTOR_WORKSPCE="${EXECUTOR_WORKSPACE}"
         -v /var/run/docker.sock:/var/run/docker.sock
@@ -834,6 +903,7 @@ main() {
     EXECUTOR_CANCEL_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/tasks/cancel" \
     EXECUTOR_DELETE_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/executor/delete" \
     FRONTEND_URL="${BACKEND_FRONTEND_URL}" \
+    WEGENT_PERSIST_REPO_ROOT_HOST="${PERSIST_REPO_ROOT}" \
     sh -c "cd '${ROOT_DIR}/backend' && exec uv run uvicorn app.main:app --host 0.0.0.0 --port '${BACKEND_PORT}'" >>"$backend_log" 2>&1 &
 
   BACKEND_PGID="$!"
