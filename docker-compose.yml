@@ -16,6 +16,7 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./docker/mysql/conf.d/wegent.cnf:/etc/mysql/conf.d/wegent.cnf:ro
     networks:
       - wegent-network
     healthcheck:

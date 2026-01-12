@@ -317,21 +317,24 @@ def get_tasks_container_status(
 
     allowed = _get_allowed_task_ids(db=db, user_id=current_user.id, task_ids=task_ids)
 
-    subtasks = (
-        db.query(Subtask)
+    rows = (
+        db.query(Subtask.task_id, Subtask.executor_name, Subtask.executor_deleted_at)
         .filter(
             Subtask.task_id.in_(allowed),
             Subtask.executor_name.isnot(None),
             Subtask.executor_name != "",
         )
-        .order_by(Subtask.task_id.asc(), Subtask.updated_at.desc())
+        # NOTE: Keep ASC/ASC ordering to align with MySQL composite index
+        # (task_id, updated_at) and avoid filesort on large JSON columns.
+        .order_by(Subtask.task_id.asc(), Subtask.updated_at.asc())
         .all()
     )
 
-    latest_by_task: dict[int, Subtask] = {}
-    for subtask in subtasks:
-        if subtask.task_id not in latest_by_task:
-            latest_by_task[subtask.task_id] = subtask
+    latest_by_task: dict[int, tuple[str, bool]] = {}
+    for task_id, executor_name, executor_deleted_at in rows:
+        if not executor_name:
+            continue
+        latest_by_task[task_id] = (executor_name, bool(executor_deleted_at))
 
     items: list[TaskExecutorContainerStatus] = []
     for task_id in task_ids:
@@ -348,11 +351,13 @@ def get_tasks_container_status(
             continue
 
         latest = latest_by_task.get(task_id)
+        executor_name = latest[0] if latest else None
+        executor_deleted_at = latest[1] if latest else None
         items.append(
             _build_task_container_status(
                 task_id=task_id,
-                executor_name=getattr(latest, "executor_name", None),
-                executor_deleted_at=getattr(latest, "executor_deleted_at", None),
+                executor_name=executor_name,
+                executor_deleted_at=executor_deleted_at,
             )
         )
 
@@ -375,7 +380,7 @@ def get_task_container_status(
         raise HTTPException(status_code=404, detail="Task not found")
 
     latest = (
-        db.query(Subtask)
+        db.query(Subtask.executor_name, Subtask.executor_deleted_at)
         .filter(
             Subtask.task_id == task_id,
             Subtask.executor_name.isnot(None),
@@ -385,10 +390,12 @@ def get_task_container_status(
         .first()
     )
 
+    executor_name = latest[0] if latest else None
+    executor_deleted_at = latest[1] if latest else None
     return _build_task_container_status(
         task_id=task_id,
-        executor_name=getattr(latest, "executor_name", None),
-        executor_deleted_at=getattr(latest, "executor_deleted_at", None),
+        executor_name=executor_name,
+        executor_deleted_at=executor_deleted_at,
     )
 
 

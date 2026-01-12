@@ -2318,20 +2318,45 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 detail="No valid bots found in team configuration, please check that the bots referenced by the team exist and are active",
             )
 
-        # For followup tasks: query existing subtasks and add one more
-        existing_subtasks = (
-            db.query(Subtask)
+        collaboration_model = team_crd.spec.collaborationModel
+
+        # For followup tasks: get the latest message_id for this task/user.
+        # Use MAX(message_id) to avoid expensive ORDER BY on wide rows (JSON/text),
+        # which can trigger MySQL "Out of sort memory" on low sort_buffer_size.
+        max_message_id = (
+            db.query(func.max(Subtask.message_id))
             .filter(Subtask.task_id == task.id, Subtask.user_id == user_id)
-            .order_by(Subtask.message_id.desc())
-            .all()
+            .scalar()
         )
 
-        # Get the next message_id for the new subtask
         next_message_id = 1
         parent_id = 0
-        if existing_subtasks:
-            next_message_id = existing_subtasks[0].message_id + 1
-            parent_id = existing_subtasks[0].message_id
+        if max_message_id is not None:
+            next_message_id = int(max_message_id) + 1
+            parent_id = int(max_message_id)
+
+        # Reuse executor info (helps continue sessions) without sorting wide rows.
+        executor_infos: List[Dict[str, str]] = []
+        latest_executor_name = ""
+        latest_executor_namespace = ""
+
+        if collaboration_model == "pipeline":
+            executor_infos = self._get_pipeline_executor_info(
+                db=db, task_id=task.id, user_id=user_id
+            )
+        elif max_message_id is not None:
+            latest_executor = (
+                db.query(Subtask.executor_name, Subtask.executor_namespace)
+                .filter(
+                    Subtask.task_id == task.id,
+                    Subtask.user_id == user_id,
+                    Subtask.message_id == int(max_message_id),
+                )
+                .first()
+            )
+            if latest_executor:
+                latest_executor_name = latest_executor[0] or ""
+                latest_executor_namespace = latest_executor[1] or ""
 
         # Create USER role subtask based on task object
         user_subtask = Subtask(
@@ -2360,11 +2385,8 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         next_message_id = next_message_id + 1
 
         # Create ASSISTANT role subtask based on team workflow
-        collaboration_model = team_crd.spec.collaborationModel
-
         if collaboration_model == "pipeline":
             # Create individual subtasks for each bot in pipeline mode
-            executor_infos = self._get_pipeline_executor_info(existing_subtasks)
             for i, member in enumerate(team_crd.spec.members):
                 # Find bot in kinds table
                 bot = (
@@ -2419,13 +2441,6 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 db.add(subtask)
         else:
             # For other collaboration models, create a single assistant subtask
-            executor_name = ""
-            executor_namespace = ""
-            if existing_subtasks:
-                # Take executor_name and executor_namespace from the last existing subtask
-                executor_name = existing_subtasks[0].executor_name
-                executor_namespace = existing_subtasks[0].executor_namespace
-
             assistant_subtask = Subtask(
                 user_id=user_id,
                 task_id=task.id,
@@ -2438,8 +2453,8 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 progress=0,
                 message_id=next_message_id,
                 parent_id=parent_id,
-                executor_name=executor_name,
-                executor_namespace=executor_namespace,
+                executor_name=latest_executor_name,
+                executor_namespace=latest_executor_namespace,
                 error_message="",
                 completed_at=datetime.now(),
                 result=None,
@@ -2447,25 +2462,46 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             db.add(assistant_subtask)
 
     def _get_pipeline_executor_info(
-        self, existing_subtasks: List[Subtask]
+        self, db: Session, task_id: int, user_id: int
     ) -> List[Dict[str, str]]:
         """
         Get executor info from existing subtasks for pipeline mode
         """
-        first_group_assistants = []
-        for s in existing_subtasks:
-            if s.role == SubtaskRole.USER:
-                break
-            if s.role == SubtaskRole.ASSISTANT:
-                first_group_assistants.append(
-                    {
-                        "executor_namespace": s.executor_namespace,
-                        "executor_name": s.executor_name,
-                    }
-                )
+        last_user_message_id = (
+            db.query(func.max(Subtask.message_id))
+            .filter(
+                Subtask.task_id == task_id,
+                Subtask.user_id == user_id,
+                Subtask.role == SubtaskRole.USER,
+            )
+            .scalar()
+        )
+        if last_user_message_id is None:
+            return []
 
-        first_group_assistants.reverse()
-        return first_group_assistants
+        rows = (
+            db.query(
+                Subtask.message_id,
+                Subtask.executor_namespace,
+                Subtask.executor_name,
+            )
+            .filter(
+                Subtask.task_id == task_id,
+                Subtask.user_id == user_id,
+                Subtask.role == SubtaskRole.ASSISTANT,
+                Subtask.message_id > int(last_user_message_id),
+            )
+            .all()
+        )
+        rows.sort(key=lambda row: int(row[0] or 0))
+
+        return [
+            {
+                "executor_namespace": executor_namespace or "",
+                "executor_name": executor_name or "",
+            }
+            for _, executor_namespace, executor_name in rows
+        ]
 
     def _get_tasks_related_data_batch(
         self, db: Session, tasks: List[Kind], user_id: int

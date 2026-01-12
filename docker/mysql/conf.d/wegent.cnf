@@ -1,0 +1,4 @@
+[mysqld]
+# Per-connection sort buffer. Keep this moderate to avoid memory spikes under high concurrency.
+sort_buffer_size=4M
+

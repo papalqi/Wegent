@@ -7,7 +7,7 @@ from enum import Enum as PyEnum
 
 from sqlalchemy import JSON, Boolean, Column, DateTime
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -79,6 +79,7 @@ class Subtask(Base):
     )
 
     __table_args__ = (
+        Index("ix_subtasks_task_id_updated_at", "task_id", "updated_at"),
         {
             "sqlite_autoincrement": True,
             "mysql_engine": "InnoDB",
