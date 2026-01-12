@@ -164,11 +164,12 @@ jobs:
 
       - name: Wait for services
         run: |
-          npx wait-on http://localhost:8000/api/docs http://localhost:3000 --timeout 90000
+          # /api/docs can be ready before DB-dependent endpoints; wait for /api/ready to avoid E2E flakiness
+          npx wait-on http://localhost:8000/api/ready http://localhost:3000 --timeout 180000
 
       - name: Verify backend is running
         run: |
-          curl -f http://localhost:8000/api/docs > /dev/null 2>&1 || (cat backend/backend.log && exit 1)
+          curl -f http://localhost:8000/api/ready > /dev/null 2>&1 || (cat backend/backend.log && exit 1)
 
       - name: Run E2E tests (Sharded)
         working-directory: ./frontend

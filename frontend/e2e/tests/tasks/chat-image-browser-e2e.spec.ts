@@ -19,13 +19,14 @@ import { test, expect, Page, APIRequestContext } from '@playwright/test';
 import { createApiClient, ApiClient } from '../../utils/api-client';
 import { ADMIN_USER } from '../../config/test-users';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 
 // Configuration
 const MOCK_MODEL_SERVER_URL = process.env.MOCK_MODEL_SERVER_URL || 'http://localhost:9999';
 const API_BASE_URL = process.env.E2E_API_URL || 'http://localhost:8000';
 
 // Test resource names (unique per test run)
-const TEST_PREFIX = `e2e-browser-image-${Date.now()}`;
+const TEST_PREFIX = `e2e-browser-image-${randomUUID()}`;
 const TEST_MODEL_NAME = `${TEST_PREFIX}-model`;
 const TEST_BOT_NAME = `${TEST_PREFIX}-bot`;
 const TEST_TEAM_NAME = `${TEST_PREFIX}-team`;

@@ -12,6 +12,7 @@
 
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import {
   CapturedChatRequest,
   setupImageChatMocks,
@@ -22,7 +23,7 @@ import { createApiClient, ApiClient } from '../../utils/api-client';
 import { ADMIN_USER } from '../../config/test-users';
 
 // Test resource names (unique per test run)
-const TEST_PREFIX = `e2e-chat-img-${Date.now()}`;
+const TEST_PREFIX = `e2e-chat-img-${randomUUID()}`;
 const TEST_MODEL_NAME = `${TEST_PREFIX}-model`;
 const TEST_BOT_NAME = `${TEST_PREFIX}-bot`;
 const TEST_TEAM_NAME = `${TEST_PREFIX}-team`;
