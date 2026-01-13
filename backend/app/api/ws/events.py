@@ -138,6 +138,22 @@ class ChatSendPayload(BaseModel):
         None, description="Task type: chat or code"
     )
 
+    # Local runner execution (weak-interaction Codex mode)
+    local_runner_id: Optional[str] = Field(
+        None,
+        description=(
+            "Optional local runner ID to execute this Codex task on a desktop runner. "
+            "When provided (and shell type is Codex), the task will be routed to local-runner."
+        ),
+    )
+    local_workspace_id: Optional[str] = Field(
+        None,
+        description=(
+            "Workspace ID on the local runner (runner-local identifier). "
+            "Must be resolvable by the runner's local config; server does not store paths."
+        ),
+    )
+
 
 class ChatCancelPayload(BaseModel):
     """Payload for chat:cancel event."""

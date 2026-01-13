@@ -30,6 +30,7 @@ import { SourceReferences } from '../chat/SourceReferences';
 import CollapsibleMessage from './CollapsibleMessage';
 import MessageDebugPanel, { type MessageDebugPayload } from './MessageDebugPanel';
 import CodexEventStreamPanel from './CodexEventStreamPanel';
+import LocalRunnerArtifactsPanel from './LocalRunnerArtifactsPanel';
 import type { ClarificationData, FinalPromptData, ClarificationAnswer } from '@/types/api';
 import type { SourceReference } from '@/types/socket';
 import { useTraceAction } from '@/hooks/useTraceAction';
@@ -1412,6 +1413,15 @@ const MessageBubble = memo(
               msg.result.codex_events.length > 0 && (
                 <CodexEventStreamPanel events={msg.result.codex_events} t={t} />
               )}
+            {(() => {
+              if (msg.type !== 'ai') return null;
+              const result = msg.result;
+              if (!result || typeof result !== 'object' || Array.isArray(result)) return null;
+              const localRunner = (result as Record<string, unknown>).local_runner;
+              if (!localRunner || typeof localRunner !== 'object' || Array.isArray(localRunner))
+                return null;
+              return <LocalRunnerArtifactsPanel localRunner={localRunner} t={t} />;
+            })()}
 
             {/* Show copy button for user messages - visible on hover */}
             {isUserTypeMessage && (

@@ -1,0 +1,16 @@
+server_url = "http://127.0.0.1:8000"
+api_key = "wg-xxxxxxxxxxxxxxxx"
+runner_id = "desktop-dev-1"
+name = "开发机-桌面"
+poll_interval_sec = 2.0
+codex_cmd = "codex"
+
+[[workspaces]]
+id = "wegent"
+name = "Wegent"
+path = "/path/to/your/repo"
+
+[workspaces.policy]
+dirty_mode = "reject"
+max_artifact_mb = 50
+

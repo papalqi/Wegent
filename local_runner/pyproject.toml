@@ -1,0 +1,19 @@
+[project]
+name = "wegent-local-runner"
+version = "0.1.0"
+description = "Wegent local runner for weak-interaction Codex execution on a desktop repo workspace"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.6",
+  "requests>=2.31",
+]
+
+[project.scripts]
+wegent-local-runner = "local_runner.main:main"
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 88
+

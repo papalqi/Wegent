@@ -61,7 +61,7 @@ class TaskCreate(BaseModel):
         ""  # Executor working directory (e.g. /wegent_repos/<dir>)
     )
     prompt: str
-    type: Optional[str] = "online"  # online、offline
+    type: Optional[str] = "online"  # online、offline、local
     task_type: Optional[str] = "chat"  # chat、code
     auto_delete_executor: Optional[str] = "false"  # true、fasle
     source: Optional[str] = "web"
@@ -70,6 +70,10 @@ class TaskCreate(BaseModel):
     force_override_bot_model: Optional[bool] = False
     # API key name field
     api_key_name: Optional[str] = None  # API key name used for this request
+
+    # Local runner execution (weak-interaction). Only meaningful when type == 'local'.
+    local_runner_id: Optional[str] = None
+    local_workspace_id: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):

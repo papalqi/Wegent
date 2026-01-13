@@ -10,6 +10,7 @@ import ModelSelector, { Model } from '../selector/ModelSelector';
 import RepositorySelector from '../selector/RepositorySelector';
 import BranchSelector from '../selector/BranchSelector';
 import PersistentRepoDirSelector from '../selector/PersistentRepoDirSelector';
+import LocalRunnerSelector from '../selector/LocalRunnerSelector';
 import ClarificationToggle from '../clarification/ClarificationToggle';
 import CorrectionModeToggle from '../CorrectionModeToggle';
 import ChatContextInput from '../chat/ChatContextInput';
@@ -27,7 +28,7 @@ import type {
 } from '@/types/api';
 import type { ContextItem } from '@/types/context';
 import { isChatShell } from '../../service/messageService';
-import { supportsAttachments } from '../../service/attachmentService';
+import { isCodexShell, supportsAttachments } from '../../service/attachmentService';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { CodeWorkspaceMode } from '@/utils/userPreferences';
 
@@ -59,6 +60,13 @@ export interface ChatInputControlsProps {
   setCodeWorkspaceMode?: (mode: CodeWorkspaceMode) => void;
   repoDir?: string;
   setRepoDir?: (repoDir: string) => void;
+
+  // Local runner selection (Codex only)
+  localRunnerId?: string | null;
+  setLocalRunnerId?: (value: string | null) => void;
+  localWorkspaceId?: string | null;
+  setLocalWorkspaceId?: (value: string | null) => void;
+  localRunnerLocked?: boolean;
 
   // Deep Thinking and Clarification
   enableDeepThinking: boolean;
@@ -134,6 +142,11 @@ export function ChatInputControls({
   setCodeWorkspaceMode,
   repoDir = '',
   setRepoDir,
+  localRunnerId = null,
+  setLocalRunnerId,
+  localWorkspaceId = null,
+  setLocalWorkspaceId,
+  localRunnerLocked = false,
   enableClarification,
   setEnableClarification,
   enableCorrectionMode = false,
@@ -349,6 +362,20 @@ export function ChatInputControls({
             )}
           </>
         )}
+
+        {/* Local Runner Selectors - Codex code tasks only */}
+        {taskType === 'code' &&
+          isCodexShell(selectedTeam) &&
+          setLocalRunnerId &&
+          setLocalWorkspaceId && (
+            <LocalRunnerSelector
+              disabled={hasMessages || isLoading || isStreaming || localRunnerLocked}
+              runnerId={localRunnerId}
+              setRunnerId={setLocalRunnerId}
+              workspaceId={localWorkspaceId}
+              setWorkspaceId={setLocalWorkspaceId}
+            />
+          )}
       </div>
 
       <div className="ml-auto flex items-center gap-2 flex-shrink-0">

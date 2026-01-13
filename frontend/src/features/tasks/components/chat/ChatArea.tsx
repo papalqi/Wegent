@@ -135,6 +135,9 @@ export default function ChatArea({
     scrollToBottom,
     selectedContexts: chatState.selectedContexts,
     resetContexts: chatState.resetContexts,
+    localRunnerId: chatState.localRunnerId,
+    localWorkspaceId: chatState.localWorkspaceId,
+    localRunnerLocked: chatState.localRunnerLocked,
   });
 
   // Determine if there are messages to display (full computation)
@@ -340,6 +343,11 @@ export default function ChatArea({
     setCodeWorkspaceMode: chatState.setCodeWorkspaceMode,
     repoDir: chatState.repoDir,
     setRepoDir: chatState.setRepoDir,
+    localRunnerId: chatState.localRunnerId,
+    setLocalRunnerId: chatState.setLocalRunnerId,
+    localWorkspaceId: chatState.localWorkspaceId,
+    setLocalWorkspaceId: chatState.setLocalWorkspaceId,
+    localRunnerLocked: chatState.localRunnerLocked,
     enableDeepThinking: chatState.enableDeepThinking,
     setEnableDeepThinking: chatState.setEnableDeepThinking,
     enableClarification: chatState.enableClarification,

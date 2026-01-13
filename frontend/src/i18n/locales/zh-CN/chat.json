@@ -4,6 +4,13 @@
     "input": "在此输入您的消息...",
     "empty": "还没有消息。开始对话吧！"
   },
+  "local_runner_loading": "加载本地 Runner…",
+  "local_runner_placeholder": "选择本地 Runner",
+  "local_runner_empty": "暂无可用 Runner（请先启动本地 Runner 并心跳上报）",
+  "local_runner_online_suffix": "（在线）",
+  "local_runner_offline_suffix": "（离线）",
+  "local_workspace_placeholder": "选择本地工作区",
+  "local_workspace_empty": "该 Runner 未上报工作区",
   "actions": {
     "send": "发送",
     "clear": "清空聊天",

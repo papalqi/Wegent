@@ -100,6 +100,9 @@ export interface ChatSendPayload {
   git_domain?: string;
   branch_name?: string;
   task_type?: 'chat' | 'code';
+  // Local runner execution (weak-interaction Codex mode)
+  local_runner_id?: string;
+  local_workspace_id?: string;
 }
 
 export interface ChatCancelPayload {

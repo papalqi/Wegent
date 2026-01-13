@@ -10,6 +10,7 @@ context types that can be associated with subtasks.
 """
 
 import logging
+import mimetypes
 import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -200,6 +201,142 @@ class ContextService:
         )
 
         return context, truncation_info
+
+    # ==================== Artifact Operations ====================
+
+    def upload_artifact(
+        self,
+        db: Session,
+        user_id: int,
+        filename: str,
+        binary_data: bytes,
+        subtask_id: int,
+    ) -> SubtaskContext:
+        """
+        Upload an artifact file produced by an executor/runner (e.g., patch, logs, zip).
+
+        Artifacts are stored as SubtaskContext records with context_type='artifact'.
+        Unlike attachments, artifacts are not parsed and may use arbitrary extensions.
+        """
+
+        if not filename:
+            raise ValueError("filename is required")
+        if subtask_id <= 0:
+            raise ValueError("subtask_id is required")
+
+        file_size = len(binary_data)
+        if not DocumentParser.validate_file_size(file_size):
+            max_size_mb = DocumentParser.get_max_file_size() / (1024 * 1024)
+            raise ValueError(f"File size exceeds maximum limit ({max_size_mb} MB)")
+
+        _, extension = os.path.splitext(filename)
+        extension = extension.lower()
+        mime_type, _ = mimetypes.guess_type(filename)
+        mime_type = mime_type or "application/octet-stream"
+
+        storage_backend = get_storage_backend(db)
+
+        context = SubtaskContext(
+            subtask_id=subtask_id,
+            user_id=user_id,
+            context_type=ContextType.ARTIFACT.value,
+            name=filename,
+            status=ContextStatus.UPLOADING.value,
+            binary_data=binary_data,  # May be replaced with marker for external storage
+            image_base64="",
+            extracted_text="",
+            text_length=0,
+            error_message="",
+            type_data={
+                "original_filename": filename,
+                "file_extension": extension,
+                "file_size": file_size,
+                "mime_type": mime_type,
+                "storage_key": "",
+                "storage_backend": storage_backend.name,
+            },
+        )
+        db.add(context)
+        db.commit()
+        db.refresh(context)
+
+        storage_key = generate_storage_key(context.id, user_id)
+        metadata = {
+            "filename": filename,
+            "mime_type": mime_type,
+            "file_size": file_size,
+            "context_id": context.id,
+            "subtask_id": subtask_id,
+            "user_id": user_id,
+        }
+
+        try:
+            storage_backend.save(storage_key, binary_data, metadata)
+            if storage_backend.name != "mysql":
+                context.binary_data = b""
+            context.status = ContextStatus.READY.value
+            context.type_data = {
+                **(context.type_data or {}),
+                "storage_key": storage_key,
+                "storage_backend": storage_backend.name,
+            }
+            db.add(context)
+            db.commit()
+            db.refresh(context)
+            return context
+        except Exception as e:
+            context.status = ContextStatus.FAILED.value
+            context.error_message = str(e)
+            db.add(context)
+            db.commit()
+            db.refresh(context)
+            raise
+
+    # ==================== Generic File Retrieval ====================
+
+    def get_file_binary_data(
+        self,
+        db: Session,
+        context: SubtaskContext,
+    ) -> Optional[bytes]:
+        """
+        Get binary data for file contexts (attachments, artifacts) from the correct backend.
+        """
+
+        # MySQL backend stores data in binary_data directly.
+        if context.storage_backend == "mysql":
+            return context.binary_data if context.binary_data else None
+
+        storage_key = context.storage_key
+        if not storage_key:
+            logger.warning(
+                "Context %s has no storage_key for external storage", context.id
+            )
+            return None
+
+        storage_backend = get_storage_backend(db)
+        return storage_backend.get(storage_key)
+
+    def get_file_url(
+        self,
+        db: Session,
+        context: SubtaskContext,
+        expires: int = 3600,
+    ) -> Optional[str]:
+        """
+        Get a URL for accessing file contexts (attachments, artifacts).
+        Returns None for MySQL backend or when backend does not support URLs.
+        """
+
+        storage_key = context.storage_key
+        if not storage_key:
+            return None
+
+        storage_backend = get_storage_backend(db)
+        try:
+            return storage_backend.get_url(storage_key, expires=expires)
+        except Exception:
+            return None
 
     def get_attachment_binary_data(
         self,

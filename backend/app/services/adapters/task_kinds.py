@@ -268,6 +268,17 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                         "source": obj_in.source,
                         # Mark as API call if source is "api"
                         **({"is_api_call": "true"} if obj_in.source == "api" else {}),
+                        # Local runner routing (type == 'local')
+                        **(
+                            {"localRunnerId": obj_in.local_runner_id}
+                            if obj_in.local_runner_id
+                            else {}
+                        ),
+                        **(
+                            {"localWorkspaceId": obj_in.local_workspace_id}
+                            if obj_in.local_workspace_id
+                            else {}
+                        ),
                         # Model selection fields
                         **({"modelId": obj_in.model_id} if obj_in.model_id else {}),
                         **(
@@ -2288,6 +2299,15 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         )
         team_crd = Team.model_validate(team.json)
         task_crd = Task.model_validate(task.json)
+        task_labels = (
+            task_crd.metadata.labels
+            if task_crd.metadata and task_crd.metadata.labels
+            else {}
+        )
+        is_local_runner_task = task_labels.get("type") == "local"
+        local_runner_id = (
+            task_labels.get("localRunnerId") if is_local_runner_task else ""
+        )
 
         if not team_crd.spec.members:
             logger.warning(f"No members configured in team {team.id}")
@@ -2400,12 +2420,12 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                     executor_name=(
                         executor_infos[i].get("executor_name")
                         if len(executor_infos) > i
-                        else ""
+                        else (local_runner_id if is_local_runner_task else "")
                     ),
                     executor_namespace=(
                         executor_infos[i].get("executor_namespace")
                         if len(executor_infos) > i
-                        else ""
+                        else ("local-runner" if is_local_runner_task else "")
                     ),
                     error_message="",
                     completed_at=datetime.now(),
@@ -2425,6 +2445,9 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 # Take executor_name and executor_namespace from the last existing subtask
                 executor_name = existing_subtasks[0].executor_name
                 executor_namespace = existing_subtasks[0].executor_namespace
+            elif is_local_runner_task and local_runner_id:
+                executor_name = local_runner_id
+                executor_namespace = "local-runner"
 
             assistant_subtask = Subtask(
                 user_id=user_id,

@@ -504,6 +504,94 @@ class ChatNamespace(socketio.AsyncNamespace):
                     "code" if (payload.repo_dir or payload.git_url) else "chat"
                 )
 
+                existing_labels = (
+                    task_json.get("metadata", {}).get("labels", {})
+                    if isinstance(task_json, dict)
+                    else {}
+                ) or {}
+                existing_is_local = existing_labels.get("type") == "local"
+                existing_local_runner_id = existing_labels.get("localRunnerId")
+                existing_local_workspace_id = existing_labels.get("localWorkspaceId")
+
+                requested_local_runner_id = payload.local_runner_id
+                requested_local_workspace_id = payload.local_workspace_id
+
+                # For follow-up messages, keep the existing local runner routing unless the client
+                # explicitly requests the same runner/workspace again.
+                local_runner_id = (
+                    existing_local_runner_id
+                    if existing_is_local
+                    else requested_local_runner_id
+                )
+                local_workspace_id = (
+                    existing_local_workspace_id
+                    if existing_is_local
+                    else requested_local_workspace_id
+                )
+
+                if existing_is_local and (
+                    (
+                        requested_local_runner_id
+                        and requested_local_runner_id != existing_local_runner_id
+                    )
+                    or (
+                        requested_local_workspace_id
+                        and requested_local_workspace_id != existing_local_workspace_id
+                    )
+                ):
+                    return {
+                        "error": "Task is already bound to a local runner/workspace; switching is not supported"
+                    }
+
+                use_local_runner = bool(local_runner_id and local_workspace_id)
+
+                if use_local_runner:
+                    # Validate that this team resolves to Codex shell type.
+                    try:
+                        from app.schemas.kind import Bot as BotCRD
+                        from app.schemas.kind import Team as TeamCRD
+                        from app.services.adapters.shell_utils import (
+                            get_shell_info_by_name,
+                        )
+
+                        team_crd = TeamCRD.model_validate(team.json)
+                        if not team_crd.spec.members:
+                            return {"error": "Team has no members configured"}
+                        first_member = team_crd.spec.members[0]
+                        bot = (
+                            db.query(Kind)
+                            .filter(
+                                Kind.user_id == team.user_id,
+                                Kind.kind == "Bot",
+                                Kind.name == first_member.botRef.name,
+                                Kind.namespace == first_member.botRef.namespace,
+                                Kind.is_active == True,
+                            )
+                            .first()
+                        )
+                        if not bot or not isinstance(bot.json, dict):
+                            return {"error": "Bot not found for team"}
+                        bot_crd = BotCRD.model_validate(bot.json)
+                        shell_ref = bot_crd.spec.shellRef
+                        shell_info = get_shell_info_by_name(
+                            db,
+                            shell_ref.name,
+                            user_id=team.user_id,
+                            namespace=shell_ref.namespace,
+                        )
+                        if shell_info.get("shell_type") != "Codex":
+                            return {
+                                "error": "Local runner execution is only supported for Codex shell"
+                            }
+                    except Exception as e:
+                        logger.warning(
+                            "[WS] Failed to validate local runner shell type: %s", e
+                        )
+                        return {"error": "Failed to validate local runner execution"}
+
+                    # Local runner tasks are always code tasks.
+                    task_type = "code"
+
                 # Build TaskCreate object
                 task_create = TaskCreate(
                     title=payload.title,
@@ -513,15 +601,17 @@ class ChatNamespace(socketio.AsyncNamespace):
                     git_repo_id=payload.git_repo_id or 0,
                     git_domain=payload.git_domain or "",
                     branch_name=payload.branch_name or "",
-                    repo_dir=payload.repo_dir or "",
+                    repo_dir="" if use_local_runner else (payload.repo_dir or ""),
                     prompt=payload.message,
-                    type="online",
+                    type="local" if use_local_runner else "online",
                     task_type=task_type,
                     auto_delete_executor="false",
                     source="web",
                     model_id=payload.force_override_bot_model,
                     force_override_bot_model=payload.force_override_bot_model
                     is not None,
+                    local_runner_id=local_runner_id if use_local_runner else None,
+                    local_workspace_id=local_workspace_id if use_local_runner else None,
                 )
 
                 # Call create_task_or_append (synchronous method)

@@ -331,6 +331,25 @@ export interface TaskDetailSubtask {
   reply_to_subtask_id?: number;
 }
 
+export interface LocalRunnerWorkspace {
+  id: string;
+  name: string;
+  capabilities?: Record<string, unknown>;
+}
+
+export interface LocalRunner {
+  id: string;
+  name: string;
+  disabled: boolean;
+  capabilities: Record<string, unknown>;
+  workspaces: LocalRunnerWorkspace[];
+  last_seen_at: string;
+}
+
+export interface LocalRunnerListResponse {
+  items: LocalRunner[];
+}
+
 export interface Task {
   id: number;
   title: string;

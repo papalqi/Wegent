@@ -5,10 +5,12 @@
 from app.api.endpoints import (
     admin,
     api_keys,
+    artifacts,
     auth,
     groups,
     health,
     knowledge,
+    local_runners,
     oidc,
     openapi_responses,
     pr_actions,
@@ -58,9 +60,13 @@ api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(
     attachments.router, prefix="/attachments", tags=["attachments"]
 )
+api_router.include_router(artifacts.router, prefix="/artifacts", tags=["artifacts"])
 api_router.include_router(repository.router, prefix="/git", tags=["repository"])
 api_router.include_router(pr_actions.router, prefix="/pr", tags=["pr-actions"])
 api_router.include_router(executors.router, prefix="/executors", tags=["executors"])
+api_router.include_router(
+    local_runners.router, prefix="/local-runners", tags=["local-runners"]
+)
 api_router.include_router(quota.router, prefix="/quota", tags=["quota"])
 api_router.include_router(dify.router, prefix="/dify", tags=["dify"])
 api_router.include_router(retrievers.router, prefix="/retrievers", tags=["retrievers"])

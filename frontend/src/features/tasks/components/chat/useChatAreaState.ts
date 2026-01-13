@@ -58,6 +58,13 @@ export interface ChatAreaState {
   repoDir: string;
   setRepoDir: (repoDir: string) => void;
 
+  // Local runner selection (Codex weak-interaction execution)
+  localRunnerId: string | null;
+  setLocalRunnerId: (value: string | null) => void;
+  localWorkspaceId: string | null;
+  setLocalWorkspaceId: (value: string | null) => void;
+  localRunnerLocked: boolean;
+
   // Model state
   selectedModel: Model | null;
   setSelectedModel: (model: Model | null) => void;
@@ -174,6 +181,11 @@ export function useChatAreaState({
     return getLastCodeRepoDir() || '';
   });
 
+  // Local runner selection (only meaningful for Codex code tasks)
+  const [localRunnerId, setLocalRunnerId] = useState<string | null>(null);
+  const [localWorkspaceId, setLocalWorkspaceId] = useState<string | null>(null);
+  const [localRunnerLocked, setLocalRunnerLocked] = useState(false);
+
   // Model state
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [forceOverride, setForceOverride] = useState(false);
@@ -240,6 +252,34 @@ export function useChatAreaState({
 
     fetchWelcomeConfig();
   }, []);
+
+  // Sync local-runner binding from existing tasks (read-only when present)
+  useEffect(() => {
+    if (!selectedTaskDetail) {
+      setLocalRunnerLocked(false);
+      return;
+    }
+
+    const assistantSubtasks = (selectedTaskDetail.subtasks || []).filter(
+      s => s.role === 'assistant'
+    );
+    const latest = assistantSubtasks[assistantSubtasks.length - 1];
+    const binding = (latest?.result as Record<string, unknown>)?.local_runner as
+      | Record<string, unknown>
+      | undefined;
+    const runner = typeof binding?.runner_id === 'string' ? binding.runner_id : null;
+    const workspace = typeof binding?.workspace_id === 'string' ? binding.workspace_id : null;
+
+    if (runner && workspace) {
+      setLocalRunnerId(runner);
+      setLocalWorkspaceId(workspace);
+      setLocalRunnerLocked(true);
+    } else {
+      setLocalRunnerId(null);
+      setLocalWorkspaceId(null);
+      setLocalRunnerLocked(false);
+    }
+  }, [selectedTaskDetail?.id]);
 
   // Get random slogan for display
   const randomSlogan = useMemo<ChatSloganItem | null>(() => {
@@ -412,6 +452,11 @@ export function useChatAreaState({
     setCodeWorkspaceMode,
     repoDir,
     setRepoDir,
+    localRunnerId,
+    setLocalRunnerId,
+    localWorkspaceId,
+    setLocalWorkspaceId,
+    localRunnerLocked,
 
     // Model state
     selectedModel,

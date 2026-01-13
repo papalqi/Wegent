@@ -11,6 +11,7 @@ Models with relationships should be imported after their related models.
 from app.models.api_key import APIKey
 from app.models.kind import Kind
 from app.models.knowledge import KnowledgeDocument
+from app.models.local_runner import LocalRunner
 from app.models.namespace import Namespace
 from app.models.namespace_member import NamespaceMember
 from app.models.pr_action_audit import PRActionAudit
@@ -34,6 +35,7 @@ __all__ = [
     "TaskResource",
     "Subtask",
     "SubtaskContext",
+    "LocalRunner",
     "SharedTask",
     "SharedTeam",
     "SkillBinary",

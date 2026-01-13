@@ -33,6 +33,7 @@ Wegent 是一个开源的 AI 原生操作系统，使您能够大规模定义、
 - [创建 Bot](./guides/user/creating-bots.md) - 组装完整的智能体实例
 - [管理 Skills](./guides/user/managing-skills.md) - 上传和使用 Skills（ClaudeCode / Codex）
 - [Codex Shell 使用指南](./guides/user/codex-shell.md) - Codex 使用、基础镜像要求、排错、灰度/回滚
+- [本地 Local Runner（弱交互 Codex）](./guides/user/local-runner.md) - 在本地桌面机执行 Codex，服务器仅负责数据与控制
 - [创建 Team](./guides/user/creating-teams.md) - 构建协作团队
 - [管理任务](./guides/user/managing-tasks.md) - 创建和管理工作任务
 - [需求规范澄清](./guides/user/spec-clarification-guide.md) - Spec Clarification 需求澄清使用指南

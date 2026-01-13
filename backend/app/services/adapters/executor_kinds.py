@@ -121,6 +121,7 @@ class ExecutorKindsService(
         limit: int = 1,
         task_ids: Optional[List[int]] = None,
         type: str = "online",
+        runner_id: Optional[str] = None,
     ) -> Dict[str, List[Dict]]:
         """
         Task dispatch logic with subtask support using tasks table
@@ -157,6 +158,18 @@ class ExecutorKindsService(
                 if task_status not in ["PENDING", "RUNNING"]:
                     continue
 
+                # Optional: enforce local runner routing for task_id-based dispatch.
+                if type == "local":
+                    labels = (
+                        task_crd.metadata.labels
+                        if task_crd.metadata and task_crd.metadata.labels
+                        else {}
+                    )
+                    if labels.get("type") != "local":
+                        continue
+                    if runner_id and labels.get("localRunnerId") != runner_id:
+                        continue
+
                 # Check if the specified task has RUNNING status subtasks
                 running_subtasks = (
                     db.query(Subtask)
@@ -177,7 +190,9 @@ class ExecutorKindsService(
                     subtasks.extend(task_subtasks)
         else:
             # Scenario 2: No task_ids, first query tasks, then query first subtask for each task
-            subtasks = self._get_first_subtasks_for_tasks(db, status, limit, type)
+            subtasks = self._get_first_subtasks_for_tasks(
+                db, status, limit, type, runner_id
+            )
 
         if not subtasks:
             return {"tasks": []}
@@ -216,7 +231,7 @@ class ExecutorKindsService(
         )
 
     def _get_first_subtasks_for_tasks(
-        self, db: Session, status: str, limit: int, type: str
+        self, db: Session, status: str, limit: int, type: str, runner_id: Optional[str]
     ) -> List[Subtask]:
         """Get first subtask for multiple tasks using tasks table"""
         # Step 1: First query tasks table to get limit tasks
@@ -234,6 +249,26 @@ class ExecutorKindsService(
                     ),
                 )
                 .params(status=status)
+                .order_by(TaskResource.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+        elif type == "local":
+            if not runner_id:
+                return []
+            tasks = (
+                db.query(TaskResource)
+                .filter(
+                    TaskResource.kind == "Task",
+                    TaskResource.is_active == True,
+                    text(
+                        "JSON_EXTRACT(json, '$.metadata.labels.type') = 'local' "
+                        "and JSON_EXTRACT(json, '$.metadata.labels.localRunnerId') = :runner_id "
+                        "and JSON_EXTRACT(json, '$.status.status') = :status "
+                        "and (JSON_EXTRACT(json, '$.metadata.labels.source') IS NULL OR JSON_EXTRACT(json, '$.metadata.labels.source') != 'chat_shell')"
+                    ),
+                )
+                .params(status=status, runner_id=runner_id)
                 .order_by(TaskResource.created_at.desc())
                 .limit(limit)
                 .all()
@@ -1125,6 +1160,16 @@ class ExecutorKindsService(
                 and task_crd.metadata.labels.get("type")
                 or "online"
             )
+            local_runner_id = (
+                task_crd.metadata.labels.get("localRunnerId")
+                if task_crd.metadata and task_crd.metadata.labels
+                else None
+            )
+            local_workspace_id = (
+                task_crd.metadata.labels.get("localWorkspaceId")
+                if task_crd.metadata and task_crd.metadata.labels
+                else None
+            )
 
             # Generate auth token for skills download
             # Use user's JWT token or generate a temporary one
@@ -1257,6 +1302,14 @@ class ExecutorKindsService(
                 "progress": subtask.progress,
                 "created_at": subtask.created_at,
                 "updated_at": subtask.updated_at,
+                **(
+                    {
+                        "local_runner_id": local_runner_id,
+                        "local_workspace_id": local_workspace_id,
+                    }
+                    if type == "local"
+                    else {}
+                ),
             }
             task_payload.update(session_payload)
             formatted_subtasks.append(task_payload)

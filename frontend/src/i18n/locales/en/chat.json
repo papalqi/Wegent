@@ -4,6 +4,13 @@
     "input": "Type your message here...",
     "empty": "No messages yet. Start a conversation!"
   },
+  "local_runner_loading": "Loading local runner…",
+  "local_runner_placeholder": "Select local runner",
+  "local_runner_empty": "No runners available (start your local runner and send heartbeat first)",
+  "local_runner_online_suffix": "(online)",
+  "local_runner_offline_suffix": "(offline)",
+  "local_workspace_placeholder": "Select local workspace",
+  "local_workspace_empty": "This runner did not report any workspaces",
   "actions": {
     "send": "Send",
     "clear": "Clear Chat",

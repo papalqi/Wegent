@@ -80,6 +80,29 @@ export function isClaudeCodeShell(team: Team | null): boolean {
 }
 
 /**
+ * Check if a team uses Codex Shell type.
+ *
+ * @param team - Team to check
+ * @returns true if the team uses Codex Shell
+ */
+export function isCodexShell(team: Team | null): boolean {
+  if (!team) return false;
+
+  if (team.agent_type?.toLowerCase() === 'codex') {
+    return true;
+  }
+
+  if (team.bots && team.bots.length > 0) {
+    const firstBot = team.bots[0];
+    if (firstBot.bot?.shell_type?.toLowerCase() === 'codex') {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Check if a team supports file attachments.
  *
  * This is the primary function to use when determining whether to show

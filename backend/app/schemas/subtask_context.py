@@ -21,6 +21,7 @@ class ContextType(str, Enum):
 
     ATTACHMENT = "attachment"
     KNOWLEDGE_BASE = "knowledge_base"
+    ARTIFACT = "artifact"
 
 
 class ContextStatus(str, Enum):

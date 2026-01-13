@@ -65,6 +65,11 @@ export interface UseChatStreamHandlersOptions {
   // Context selection (knowledge bases)
   selectedContexts?: ContextItem[];
   resetContexts?: () => void;
+
+  // Local runner selection (Codex weak-interaction execution)
+  localRunnerId?: string | null;
+  localWorkspaceId?: string | null;
+  localRunnerLocked?: boolean;
 }
 
 export interface ChatStreamHandlers {
@@ -142,6 +147,9 @@ export function useChatStreamHandlers({
   scrollToBottom,
   selectedContexts = [],
   resetContexts,
+  localRunnerId = null,
+  localWorkspaceId = null,
+  localRunnerLocked = false,
 }: UseChatStreamHandlersOptions): ChatStreamHandlers {
   const { toast } = useToast();
   const { t } = useTranslation();
@@ -535,6 +543,9 @@ export function useChatStreamHandlers({
                 ? selectedBranch?.name || selectedTaskDetail?.branch_name
                 : undefined,
             task_type: taskType,
+            ...(!selectedTaskDetail?.id && !localRunnerLocked && localRunnerId && localWorkspaceId
+              ? { local_runner_id: localRunnerId, local_workspace_id: localWorkspaceId }
+              : {}),
             contexts: contextItems.length > 0 ? contextItems : undefined,
           },
           {
