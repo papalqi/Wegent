@@ -155,6 +155,12 @@ def _mysql_query(
     return CmdResult(res.code, res.stdout, res.stderr)
 
 
+def _mysql_escape(value: str) -> str:
+    # Basic escaping for safe embedding in SQL string literals.
+    # This script is used for local inspection and only needs to handle simple values.
+    return value.replace("\\", "\\\\").replace("'", "''").replace("\x00", "")
+
+
 def _table(lines: Iterable[str], indent: str = "  ") -> None:
     for line in lines:
         _safe_print(f"{indent}{line}")
@@ -186,6 +192,22 @@ def main() -> int:
         "--workspace-root", type=Path, default=Path.home() / "wecode-bot"
     )
     parser.add_argument("--docker-since", default="24h")
+    parser.add_argument(
+        "--subtasks-limit",
+        type=int,
+        default=30,
+        help="Show only the last N subtasks (use --subtasks-all for full list).",
+    )
+    parser.add_argument(
+        "--subtasks-all",
+        action="store_true",
+        help="Show all subtasks (may be noisy for long-running tasks).",
+    )
+    parser.add_argument(
+        "--probe-llm",
+        action="store_true",
+        help="Probe model base_url /models (no API key; 401/404 still confirms reachability).",
+    )
     args = parser.parse_args()
 
     now = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -275,18 +297,108 @@ def main() -> int:
             f"FROM tasks WHERE id={args.task_id};"
         ),
     )
+    task_status_value = ""
+    task_phase_value = ""
+    task_completed_at_value = ""
+    task_error_message_value = ""
     if task_status.code == 0 and task_status.stdout.strip():
         fields = (task_status.stdout.strip().split("\t") + [""] * 6)[:6]
-        _print_kv("  task.status", fields[0] or "null")
+        task_status_value = (fields[0] or "").strip()
+        task_phase_value = (fields[2] or "").strip()
+        task_completed_at_value = (fields[3] or "").strip()
+        task_error_message_value = _redact(fields[4] or "")
+        _print_kv("  task.status", task_status_value or "null")
         _print_kv("  task.progress", fields[1] or "null")
-        _print_kv("  task.phase", fields[2] or "null")
-        _print_kv("  task.completedAt", fields[3] or "null")
-        _print_kv("  task.errorMessage", _redact(fields[4] or ""))
+        _print_kv("  task.phase", task_phase_value or "null")
+        _print_kv("  task.completedAt", task_completed_at_value or "null")
+        _print_kv("  task.errorMessage", task_error_message_value)
         _print_kv("  task.updatedAt", fields[5] or "null")
     else:
         _print_kv(
             "  task.status", f"unavailable ({_redact(task_status.stderr.strip())})"
         )
+
+    _safe_print()
+    _safe_print("[llm]")
+    # Best-effort model resolution:
+    # Prefer task metadata.labels.modelId (set by frontend when overriding model).
+    labels_row = _mysql_query(
+        container=args.mysql_container,
+        user=args.mysql_user,
+        password=args.mysql_password,
+        database=args.mysql_db,
+        sql=(
+            "SELECT "
+            "JSON_UNQUOTE(JSON_EXTRACT(json,'$.metadata.labels.modelId')), "
+            "JSON_UNQUOTE(JSON_EXTRACT(json,'$.metadata.labels.forceOverrideBotModel')), "
+            "JSON_UNQUOTE(JSON_EXTRACT(json,'$.metadata.labels.taskType')), "
+            "JSON_UNQUOTE(JSON_EXTRACT(json,'$.metadata.labels.source')) "
+            f"FROM tasks WHERE id={args.task_id};"
+        ),
+    )
+    model_name = ""
+    if labels_row.code == 0 and labels_row.stdout.strip():
+        cols = (labels_row.stdout.strip().split("\t") + [""] * 4)[:4]
+        model_name = (cols[0] or "").strip()
+        if model_name.upper() == "NULL":
+            model_name = ""
+        force_override = (cols[1] or "").strip()
+        if force_override.upper() == "NULL":
+            force_override = ""
+        task_type = (cols[2] or "").strip()
+        if task_type.upper() == "NULL":
+            task_type = ""
+        source = (cols[3] or "").strip()
+        if source.upper() == "NULL":
+            source = ""
+
+        _print_kv("  task.taskType", task_type or "unknown")
+        _print_kv("  task.source", source or "unknown")
+        _print_kv("  task.modelId", model_name or "unknown")
+        _print_kv("  task.forceOverrideBotModel", force_override or "false/unknown")
+    else:
+        _print_kv("  task.modelId", "unknown (cannot read task labels)")
+
+    base_url = ""
+    if model_name:
+        model_name_sql = _mysql_escape(model_name)
+        model_row = _mysql_query(
+            container=args.mysql_container,
+            user=args.mysql_user,
+            password=args.mysql_password,
+            database=args.mysql_db,
+            sql=(
+                "SELECT "
+                "user_id, namespace, "
+                "JSON_UNQUOTE(JSON_EXTRACT(json,'$.spec.modelConfig.env.base_url')), "
+                "JSON_UNQUOTE(JSON_EXTRACT(json,'$.spec.modelConfig.env.model_id')), "
+                "JSON_UNQUOTE(JSON_EXTRACT(json,'$.spec.modelConfig.env.model')), "
+                "JSON_EXTRACT(json,'$.spec.modelConfig.env.api_key') IS NOT NULL "
+                f"FROM kinds WHERE kind='Model' AND name='{model_name_sql}' AND is_active=1 "
+                "ORDER BY updated_at DESC LIMIT 1;"
+            ),
+        )
+        if model_row.code == 0 and model_row.stdout.strip():
+            cols = (model_row.stdout.strip().split("\t") + [""] * 6)[:6]
+            base_url = (cols[2] or "").strip()
+            if base_url.upper() == "NULL":
+                base_url = ""
+            _print_kv("  model.base_url", base_url or "unknown")
+            _print_kv("  model.model_id", (cols[3] or "").strip() or "unknown")
+            _print_kv("  model.provider", (cols[4] or "").strip() or "unknown")
+            has_key = (cols[5] or "").strip()
+            _print_kv("  model.has_api_key", "yes" if has_key == "1" else "no")
+
+            if args.probe_llm and base_url:
+                probe_url = f"{base_url.rstrip('/')}/models"
+                status, _body, err = _http_get_json(probe_url, timeout_s=5)
+                if status is None:
+                    _print_kv("  probe /models", f"unreachable ({err})")
+                else:
+                    _print_kv("  probe /models", f"http {status}")
+        else:
+            _print_kv("  model.lookup", "not found in kinds")
+    _safe_print()
 
     subtasks = _mysql_query(
         container=args.mysql_container,
@@ -301,12 +413,53 @@ def main() -> int:
         ),
     )
     executor_names: list[str] = []
+    active_executor_names: list[str] = []
     running_subtask_ids: list[str] = []
+    latest_executor_name = ""
     if subtasks.code == 0 and subtasks.stdout.strip():
-        _safe_print("  subtasks:")
+        subtask_rows: list[list[str]] = []
         for line in subtasks.stdout.splitlines():
             cols = line.split("\t")
             cols += [""] * (9 - len(cols))
+            subtask_rows.append(cols[:9])
+
+            status_s = cols[2] or ""
+            ex_name = cols[5] or ""
+            if ex_name:
+                executor_names.append(ex_name)
+                latest_executor_name = ex_name
+            if status_s in ("RUNNING", "PENDING") and ex_name:
+                active_executor_names.append(ex_name)
+            if status_s == "RUNNING":
+                running_subtask_ids.append(cols[0])
+
+        _safe_print("  subtasks:")
+        status_counts: dict[str, int] = {}
+        for cols in subtask_rows:
+            status_s = cols[2] or ""
+            status_counts[status_s] = status_counts.get(status_s, 0) + 1
+
+        summary = " ".join(
+            f"{k}={v}"
+            for k, v in sorted(status_counts.items(), key=lambda kv: kv[0])
+            if k
+        )
+        if summary:
+            _print_kv("    summary", f"total={len(subtask_rows)} {summary}")
+
+        display_rows = subtask_rows
+        if (
+            not args.subtasks_all
+            and args.subtasks_limit > 0
+            and len(subtask_rows) > args.subtasks_limit
+        ):
+            display_rows = subtask_rows[-args.subtasks_limit :]
+            _print_kv(
+                "    showing",
+                f"last {args.subtasks_limit} (use --subtasks-all to show all)",
+            )
+
+        for cols in display_rows:
             (
                 subtask_id,
                 title,
@@ -317,7 +470,7 @@ def main() -> int:
                 updated_at,
                 completed_at,
                 err_msg,
-            ) = cols[:9]
+            ) = cols
             title_short = (title[:80] + "…") if len(title) > 80 else title
             err_short = _redact(err_msg.replace("\n", " ").strip())
             if len(err_short) > 120:
@@ -329,16 +482,17 @@ def main() -> int:
                 f"title={title_short}"
                 f"{' error=' + err_short if err_short else ''}"
             )
-            if ex_name:
-                executor_names.append(ex_name)
-            if status_s == "RUNNING":
-                running_subtask_ids.append(subtask_id)
     else:
         _print_kv("  subtasks", "none or unavailable")
     _safe_print()
 
     _safe_print("[executor]")
-    unique_executors = sorted({name for name in executor_names if name})
+    unique_executors = sorted({name for name in active_executor_names if name})
+    if not unique_executors and latest_executor_name:
+        _safe_print(
+            "  (no RUNNING/PENDING executor; showing latest executor for reference)"
+        )
+        unique_executors = [latest_executor_name]
     if not unique_executors:
         _safe_print("  (no executor_name in subtasks)")
     for ex_name in unique_executors:
@@ -443,9 +597,35 @@ def main() -> int:
     _safe_print()
 
     _safe_print("[diagnosis]")
-    if unique_executors:
+    err_text = (task_error_message_value or "").strip()
+    err_lower = err_text.lower()
+    llm_unavailable = (
+        "service_unavailable_error" in err_lower
+        or ("503" in err_text and "Service Unavailable" in err_text)
+        or ("所有供应商暂时不可用" in err_text)
+    )
+    if llm_unavailable:
+        _safe_print(
+            "  任务失败原因更像是模型网关/供应商侧 503（所有供应商不可用）。"
+            "这通常与 MySQL 内存无关，优先检查 model.base_url 上游与额度/路由/健康状态。"
+        )
+
+    status_norm = (task_status_value or "").strip().upper()
+    completed_norm = (task_completed_at_value or "").strip()
+    if (
+        status_norm in ("RUNNING", "PENDING")
+        and completed_norm
+        and completed_norm.upper() != "NULL"
+    ):
+        _safe_print(
+            "  注意：task.status 仍为 RUNNING/PENDING 但 completedAt 非空，可能是上一次失败/完成的残留字段。"
+            "请以最新 subtask 状态为准。"
+        )
+
+    active_unique_executors = sorted({name for name in active_executor_names if name})
+    if running_subtask_ids and active_unique_executors:
         missing = []
-        for ex_name in unique_executors:
+        for ex_name in active_unique_executors:
             status, body, _err = _http_get_json(
                 f"{args.executor_manager_url.rstrip('/')}/executor-manager/executor/status?executor_name={ex_name}"
             )
@@ -461,11 +641,15 @@ def main() -> int:
             _table([f"missing executor: {name}" for name in missing], indent="  ")
         else:
             _safe_print(
-                "  executor 看起来仍存在；若仍不完成，优先查 callback/网络/超时相关日志。"
+                "  executor 看起来仍存在；若仍不前进，优先查 callback/网络/超时相关日志。"
             )
+    elif status_norm in ("FAILED", "COMPLETED", "CANCELLED", "DELETE"):
+        _safe_print(
+            f"  task.status={status_norm}（任务已结束）。若前端仍显示可重试，确认重试入口是否真正触发了新的 USER/ASSISTANT subtask。"
+        )
     else:
         _safe_print(
-            "  未发现 executor_name；如果 UI 卡住，先确认该 task 是否真的进入执行阶段。"
+            "  未发现 RUNNING subtask；如果 UI 显示卡住，先确认该 task 是否真的进入执行阶段。"
         )
 
     return 0

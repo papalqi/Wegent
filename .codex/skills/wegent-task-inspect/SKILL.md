@@ -13,8 +13,11 @@ description: Inspect a Wegent task by task_id to determine whether it finished s
   - `--mysql-container wegent-mysql`
   - `--workspace-root /root/wecode-bot`
   - `--docker-since 7d`（扩大日志回溯范围）
+  - `--subtasks-limit 30`（默认只显示最近 N 条 subtask，减少噪音）
+  - `--subtasks-all`（显示全部 subtask）
+  - `--probe-llm`（对 `model.base_url` 做 `/models` 探测；401/404 也能用于判断“网关是否可达”）
 
-脚本会输出：服务健康、DB 中 task/subtask 状态、executor 是否存在、workspace git 状态、以及关键日志命中，并给出“为何未完成”的归因提示。
+脚本会输出：服务健康、DB 中 task/subtask 状态、模型/网关配置（`model.base_url`）、executor 是否存在、workspace git 状态、以及关键日志命中，并给出“为何未完成”的归因提示（默认只诊断活跃 subtask 的 executor，避免历史 executor 被清理导致误报）。
 
 ## 工作流（手动排查时按顺序）
 
