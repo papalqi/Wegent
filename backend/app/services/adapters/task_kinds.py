@@ -160,11 +160,18 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 )
 
             # Update existing task status to PENDING
+            now = datetime.now()
             if task_crd.status:
                 task_crd.status.status = "PENDING"
                 task_crd.status.progress = 0
+                task_crd.status.errorMessage = ""
+                task_crd.status.result = None
+                task_crd.status.completedAt = None
+                task_crd.status.statusPhase = None
+                task_crd.status.progressText = None
+                task_crd.status.updatedAt = now
             existing_task.json = task_crd.model_dump(mode="json", exclude_none=True)
-            existing_task.updated_at = datetime.now()
+            existing_task.updated_at = now
 
             task = existing_task
         else:

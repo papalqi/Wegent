@@ -87,33 +87,57 @@ def fetch_retry_context(
 
     failed_ai_subtask, task, team = query_result
 
-    # Fetch user subtask separately
-    # Key insight: parent_id stores message_id (not subtask.id) throughout the system
-    # Both in chat.py and task_kinds.py, parent_id is always set to message_id
-    user_subtask = None
-    if failed_ai_subtask and failed_ai_subtask.parent_id:
-        # Use parent_id as message_id to find the triggering USER subtask
-        # This works for both single chat and group chat
-        user_subtask = (
-            db.query(Subtask)
-            .options(joinedload(Subtask.contexts))  # Preload contexts
-            .filter(
-                Subtask.task_id == failed_ai_subtask.task_id,
-                Subtask.message_id == failed_ai_subtask.parent_id,
-                Subtask.role == SubtaskRole.USER,
+    # Fetch user subtask separately.
+    #
+    # Note:
+    # - `parent_id` is a message ordering hint and its semantics differ across chat implementations.
+    # - In TaskKindsService-based tasks, USER and ASSISTANT subtasks share the same `parent_id`
+    #   (typically the previous max message_id), so `parent_id` does NOT point to the triggering USER subtask.
+    #
+    # For retries we need the USER prompt that triggered this failed ASSISTANT subtask. We resolve it with:
+    # 1) Legacy/direct-chat semantics: treat parent_id as the triggering USER message_id.
+    # 2) Fallback: pick the most recent USER subtask before the failed ASSISTANT message_id.
+    user_subtask: Optional[Subtask] = None
+    if failed_ai_subtask:
+        if failed_ai_subtask.parent_id:
+            user_subtask = (
+                db.query(Subtask)
+                .options(joinedload(Subtask.contexts))  # Preload contexts
+                .filter(
+                    Subtask.task_id == failed_ai_subtask.task_id,
+                    Subtask.message_id == failed_ai_subtask.parent_id,
+                    Subtask.role == SubtaskRole.USER,
+                )
+                .first()
             )
-            .first()
-        )
-        if user_subtask:
-            logger.info(
-                f"Found user_subtask via parent_id as message_id: "
-                f"id={user_subtask.id}, message_id={user_subtask.message_id}, "
-                f"prompt={user_subtask.prompt[:50] if user_subtask.prompt else ''}..."
+            if user_subtask:
+                logger.info(
+                    "Found user_subtask via parent_id as message_id: "
+                    "id=%s message_id=%s",
+                    user_subtask.id,
+                    user_subtask.message_id,
+                )
+
+        if not user_subtask and failed_ai_subtask.message_id:
+            user_subtask = (
+                db.query(Subtask)
+                .options(joinedload(Subtask.contexts))  # Preload contexts
+                .filter(
+                    Subtask.task_id == failed_ai_subtask.task_id,
+                    Subtask.role == SubtaskRole.USER,
+                    Subtask.message_id < failed_ai_subtask.message_id,
+                )
+                .order_by(Subtask.message_id.desc())
+                .first()
             )
-        else:
-            logger.warning(
-                f"Could not find USER subtask with message_id={failed_ai_subtask.parent_id}"
-            )
+            if user_subtask:
+                logger.info(
+                    "Found user_subtask by message_id ordering fallback: "
+                    "id=%s message_id=%s (failed_assistant_message_id=%s)",
+                    user_subtask.id,
+                    user_subtask.message_id,
+                    failed_ai_subtask.message_id,
+                )
 
     return failed_ai_subtask, task, team, user_subtask
 
