@@ -40,3 +40,5 @@ git push origin feature/new-feature
 # 5. 合并后删除分支
 git branch -d feature/new-feature
 ```
+
+- PR 只创建到 fork 仓库（如 `papalqi/Wegent`）；不要往 upstream（`wecode-ai/Wegent`）创建 PR（upstream 仅用于同步）。
