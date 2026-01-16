@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-'use client';
+'use client'
 
-import { useState, useEffect, useMemo } from 'react';
-import { Task, TaskContainerStatus, TaskType } from '@/types/api';
-import TaskMenu from './TaskMenu';
+import { useState, useEffect, useMemo } from 'react'
+import { Task, TaskContainerStatus, TaskType } from '@/types/api'
+import TaskMenu from './TaskMenu'
 import {
   CheckCircle2,
   XCircle,
@@ -16,30 +16,31 @@ import {
   Code2,
   MessageSquare,
   Users,
-} from 'lucide-react';
+} from 'lucide-react'
 
-import { useTaskContext } from '@/features/tasks/contexts/taskContext';
-import { useChatStreamContext } from '@/features/tasks/contexts/chatStreamContext';
-import { useTranslation } from '@/hooks/useTranslation';
-import { taskApis } from '@/apis/tasks';
-import { useTaskContainerStatusMap } from '@/features/tasks/hooks/useTaskContainerStatus';
-import { TaskContainerStatusIcon } from '@/features/tasks/components/container-status/TaskContainerStatusIcon';
-import { isTaskUnread } from '@/utils/taskViewStatus';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { getTaskStatusLabelKey } from '@/utils/taskStatus';
-import { saveLastTeamByMode } from '@/utils/userPreferences';
+import { useTaskContext } from '@/features/tasks/contexts/taskContext'
+import { useChatStreamContext } from '@/features/tasks/contexts/chatStreamContext'
+import { useTranslation } from '@/hooks/useTranslation'
+import { taskApis } from '@/apis/tasks'
+import { useTaskContainerStatusMap } from '@/features/tasks/hooks/useTaskContainerStatus'
+import { TaskContainerStatusIcon } from '@/features/tasks/components/container-status/TaskContainerStatusIcon'
+import { isTaskUnread } from '@/utils/taskViewStatus'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { getTaskStatusLabelKey } from '@/utils/taskStatus'
+import { saveLastTeamByMode } from '@/utils/userPreferences'
 
 interface TaskListSectionProps {
-  tasks: Task[];
-  title: string;
-  unreadCount?: number;
-  onTaskClick?: () => void;
-  isCollapsed?: boolean;
-  showTitle?: boolean;
+  tasks: Task[]
+  title: string
+  unreadCount?: number
+  onTaskClick?: () => void
+  isCollapsed?: boolean
+  showTitle?: boolean
+  enableDrag?: boolean
 }
 
-import { useRouter } from 'next/navigation';
-import { paths } from '@/config/paths';
+import { useRouter } from 'next/navigation'
+import { paths } from '@/config/paths'
 
 export default function TaskListSection({
   tasks,
@@ -49,7 +50,7 @@ export default function TaskListSection({
   isCollapsed = false,
   showTitle = true,
 }: TaskListSectionProps) {
-  const router = useRouter();
+  const router = useRouter()
   const {
     selectedTask,
     selectedTaskDetail,
@@ -58,24 +59,24 @@ export default function TaskListSection({
     refreshSelectedTaskDetail,
     viewStatusVersion,
     markTaskAsViewed,
-  } = useTaskContext();
-  const { clearAllStreams } = useChatStreamContext();
-  const { t } = useTranslation();
+  } = useTaskContext()
+  const { clearAllStreams } = useChatStreamContext()
+  const { t } = useTranslation()
   // Use viewStatusVersion to trigger re-render when task view status changes
   // This is needed to update the unread dot immediately when a task is clicked
-  const _viewStatusVersion = viewStatusVersion;
-  const [hoveredTaskId, setHoveredTaskId] = useState<number | null>(null);
-  const [_loading, setLoading] = useState(false);
-  const [longPressTaskId, setLongPressTaskId] = useState<number | null>(null);
+  const _viewStatusVersion = viewStatusVersion
+  const [hoveredTaskId, setHoveredTaskId] = useState<number | null>(null)
+  const [_loading, setLoading] = useState(false)
+  const [longPressTaskId, setLongPressTaskId] = useState<number | null>(null)
 
   // Touch interaction state
   const [touchState, setTouchState] = useState<{
-    startX: number;
-    startY: number;
-    startTime: number;
-    taskId: number | null;
-    isScrolling: boolean;
-    longPressTimer: NodeJS.Timeout | null;
+    startX: number
+    startY: number
+    startTime: number
+    taskId: number | null
+    isScrolling: boolean
+    longPressTimer: NodeJS.Timeout | null
   }>({
     startX: 0,
     startY: 0,
@@ -83,63 +84,63 @@ export default function TaskListSection({
     taskId: null,
     isScrolling: false,
     longPressTimer: null,
-  });
+  })
 
   // Select task
   const handleTaskClick = (task: Task) => {
     // Clear all stream states when switching tasks to prevent auto-switching back
     // when the previous streaming task completes
-    clearAllStreams();
+    clearAllStreams()
 
     // Immediately mark task as viewed to clear the unread dot
     // Use current time as viewedAt to ensure it's always >= task's completed_at/updated_at
     // This is simpler and more reliable than using task timestamps which may vary
     // between list items and task details
-    markTaskAsViewed(task.id, task.status);
+    markTaskAsViewed(task.id, task.status)
 
     // IMPORTANT: Set selected task immediately to prevent visual flicker
     // This ensures the task is highlighted before navigation completes
-    setSelectedTask(task);
+    setSelectedTask(task)
 
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams();
-      params.set('taskId', String(task.id));
+      const params = new URLSearchParams()
+      params.set('taskId', String(task.id))
 
       // Navigate to the appropriate page based on task task_type
       // If task_type is not set, infer from git information
-      let targetPath = paths.chat.getHref(); // default to chat
+      let targetPath = paths.chat.getHref() // default to chat
 
       if (task.task_type === 'code') {
-        targetPath = paths.code.getHref();
+        targetPath = paths.code.getHref()
       } else if (task.task_type === 'chat') {
-        targetPath = paths.chat.getHref();
+        targetPath = paths.chat.getHref()
       } else {
         // For backward compatibility: infer type from git information
         // If task has git repo info, assume it's a code task
         if (task.git_repo && task.git_repo.trim() !== '') {
-          targetPath = paths.code.getHref();
+          targetPath = paths.code.getHref()
         } else {
-          targetPath = paths.chat.getHref();
+          targetPath = paths.chat.getHref()
         }
       }
 
-      router.push(`${targetPath}?${params.toString()}`);
+      router.push(`${targetPath}?${params.toString()}`)
 
       // Call the onTaskClick callback if provided (to close mobile sidebar)
       if (onTaskClick) {
-        onTaskClick();
+        onTaskClick()
       }
     }
-  };
+  }
 
   // Touch interaction handlers
   const handleTouchStart = (task: Task) => (event: React.TouchEvent) => {
-    const touch = event.touches[0];
+    const touch = event.touches[0]
     const longPressTimer = setTimeout(() => {
       // Long press detected - show menu on mobile
-      setLongPressTaskId(task.id);
-      setTouchState(prev => ({ ...prev, isScrolling: true })); // Prevent click after long press
-    }, 500);
+      setLongPressTaskId(task.id)
+      setTouchState(prev => ({ ...prev, isScrolling: true })) // Prevent click after long press
+    }, 500)
 
     setTouchState({
       startX: touch.clientX,
@@ -148,39 +149,39 @@ export default function TaskListSection({
       taskId: task.id,
       isScrolling: false,
       longPressTimer,
-    });
-  };
+    })
+  }
 
   const handleTouchMove = (event: React.TouchEvent) => {
-    if (!touchState.taskId) return;
+    if (!touchState.taskId) return
 
-    const touch = event.touches[0];
-    const deltaX = Math.abs(touch.clientX - touchState.startX);
-    const deltaY = Math.abs(touch.clientY - touchState.startY);
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    const touch = event.touches[0]
+    const deltaX = Math.abs(touch.clientX - touchState.startX)
+    const deltaY = Math.abs(touch.clientY - touchState.startY)
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
 
     // If moved more than 10px, consider it as scrolling
     if (distance > 10) {
       if (touchState.longPressTimer) {
-        clearTimeout(touchState.longPressTimer);
+        clearTimeout(touchState.longPressTimer)
       }
-      setTouchState(prev => ({ ...prev, isScrolling: true, longPressTimer: null }));
+      setTouchState(prev => ({ ...prev, isScrolling: true, longPressTimer: null }))
     }
-  };
+  }
 
   const handleTouchEnd = (task: Task) => (_event: React.TouchEvent) => {
     if (touchState.longPressTimer) {
-      clearTimeout(touchState.longPressTimer);
+      clearTimeout(touchState.longPressTimer)
     }
 
-    const touchDuration = Date.now() - touchState.startTime;
+    const touchDuration = Date.now() - touchState.startTime
 
     // Only trigger click if:
     // 1. Not scrolling
     // 2. Touch duration < 500ms (not a long press)
     // 3. Touch is on the same task
     if (!touchState.isScrolling && touchDuration < 500 && touchState.taskId === task.id) {
-      handleTaskClick(task);
+      handleTaskClick(task)
     }
 
     setTouchState({
@@ -190,121 +191,121 @@ export default function TaskListSection({
       taskId: null,
       isScrolling: false,
       longPressTimer: null,
-    });
-  };
+    })
+  }
 
   // Cleanup effect for touch state
   useEffect(() => {
     return () => {
       if (touchState.longPressTimer) {
-        clearTimeout(touchState.longPressTimer);
+        clearTimeout(touchState.longPressTimer)
       }
-    };
-  }, [touchState.longPressTimer]);
+    }
+  }, [touchState.longPressTimer])
 
   // Handle clicks outside to close long press menu
   useEffect(() => {
     const handleClickOutside = () => {
       if (longPressTaskId !== null) {
-        setLongPressTaskId(null);
+        setLongPressTaskId(null)
       }
-    };
+    }
 
     if (longPressTaskId !== null) {
-      document.addEventListener('click', handleClickOutside);
+      document.addEventListener('click', handleClickOutside)
       return () => {
-        document.removeEventListener('click', handleClickOutside);
-      };
+        document.removeEventListener('click', handleClickOutside)
+      }
     }
-  }, [longPressTaskId]);
+  }, [longPressTaskId])
 
   // Copy task ID
   const handleCopyTaskId = async (taskId: number) => {
-    const textToCopy = taskId.toString();
+    const textToCopy = taskId.toString()
     if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
       try {
-        await navigator.clipboard.writeText(textToCopy);
-        return;
+        await navigator.clipboard.writeText(textToCopy)
+        return
       } catch (err) {
-        console.error('Copy failed', err);
+        console.error('Copy failed', err)
       }
     }
     try {
-      const textarea = document.createElement('textarea');
-      textarea.value = textToCopy;
-      textarea.style.cssText = 'position:fixed;opacity:0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
+      const textarea = document.createElement('textarea')
+      textarea.value = textToCopy
+      textarea.style.cssText = 'position:fixed;opacity:0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
     } catch (err) {
-      console.error('Fallback copy failed', err);
+      console.error('Fallback copy failed', err)
     }
-  };
+  }
 
   // Delete task
   const handleDeleteTask = async (taskId: number) => {
-    setLoading(true);
+    setLoading(true)
     try {
-      await taskApis.deleteTask(taskId);
-      setSelectedTask(null);
+      await taskApis.deleteTask(taskId)
+      setSelectedTask(null)
       if (typeof window !== 'undefined') {
-        const url = new URL(window.location.href);
-        url.searchParams.delete('taskId');
-        router.replace(url.pathname + url.search);
-        refreshTasks();
+        const url = new URL(window.location.href)
+        url.searchParams.delete('taskId')
+        router.replace(url.pathname + url.search)
+        refreshTasks()
       }
     } catch (err) {
-      console.error('Delete failed', err);
+      console.error('Delete failed', err)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleRefreshStatus = (taskId: number) => {
-    refreshTasks();
+    refreshTasks()
     if (selectedTaskDetail?.id === taskId) {
-      refreshSelectedTaskDetail(false);
+      refreshSelectedTaskDetail(false)
     }
-  };
+  }
 
   const handleCancelTask = async (taskId: number) => {
-    setLoading(true);
+    setLoading(true)
     try {
-      await taskApis.cancelTask(taskId);
-      handleRefreshStatus(taskId);
+      await taskApis.cancelTask(taskId)
+      handleRefreshStatus(taskId)
     } catch (err) {
-      console.error('Cancel failed', err);
+      console.error('Cancel failed', err)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const inferTaskMode = (task: Task): 'chat' | 'code' => {
-    if (task.task_type === 'code') return 'code';
-    if (task.task_type === 'chat') return 'chat';
-    if (task.git_repo && task.git_repo.trim() !== '') return 'code';
-    return 'chat';
-  };
+    if (task.task_type === 'code') return 'code'
+    if (task.task_type === 'chat') return 'chat'
+    if (task.git_repo && task.git_repo.trim() !== '') return 'code'
+    return 'chat'
+  }
 
   const codeTaskIds = useMemo(() => {
     return tasks
       .filter(task => !task.is_group_chat && inferTaskMode(task) === 'code')
-      .map(task => task.id);
-  }, [tasks]);
+      .map(task => task.id)
+  }, [tasks])
 
   const { map: containerStatusMap } = useTaskContainerStatusMap(codeTaskIds, {
     intervalMs: 20_000,
     enabled: true,
     maxTasks: 50,
-  });
+  })
 
   const getContainerStatusLabel = (status: TaskContainerStatus) => {
-    if (status === 'running') return t('common:tasks.container_status_running');
-    if (status === 'exited') return t('common:tasks.container_status_exited');
-    if (status === 'not_found') return t('common:tasks.container_status_not_found');
-    return t('common:tasks.container_status_unknown');
-  };
+    if (status === 'running') return t('common:tasks.container_status_running')
+    if (status === 'exited') return t('common:tasks.container_status_exited')
+    if (status === 'not_found') return t('common:tasks.container_status_not_found')
+    return t('common:tasks.container_status_unknown')
+  }
 
   const handleRestartTask = (task: Task) => {
     const confirmed = confirm(
@@ -312,92 +313,92 @@ export default function TaskListSection({
         'common:tasks.restart_confirm_message',
         'Restart will start a new task and reset the current view. Continue?'
       )
-    );
-    if (!confirmed) return;
+    )
+    if (!confirmed) return
 
-    const mode = inferTaskMode(task);
-    const targetPath = mode === 'code' ? paths.code.getHref() : paths.chat.getHref();
+    const mode = inferTaskMode(task)
+    const targetPath = mode === 'code' ? paths.code.getHref() : paths.chat.getHref()
 
     if (typeof window !== 'undefined' && task.team_id) {
-      saveLastTeamByMode(task.team_id, mode);
+      saveLastTeamByMode(task.team_id, mode)
     }
 
-    setSelectedTask(null);
-    clearAllStreams();
-    router.replace(targetPath);
-    onTaskClick?.();
-  };
+    setSelectedTask(null)
+    clearAllStreams()
+    router.replace(targetPath)
+    onTaskClick?.()
+  }
 
-  if (tasks.length === 0) return null;
+  if (tasks.length === 0) return null
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'COMPLETED':
-        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+        return <CheckCircle2 className="w-4 h-4 text-green-500" />
       case 'FAILED':
-        return <XCircle className="w-4 h-4 text-red-500" />;
+        return <XCircle className="w-4 h-4 text-red-500" />
       case 'CANCELLED':
-        return <StopCircle className="w-4 h-4 text-gray-400" />;
+        return <StopCircle className="w-4 h-4 text-gray-400" />
       case 'RUNNING':
         return (
           <RotateCw
             className="w-4 h-4 text-blue-500 animate-spin"
             style={{ animationDuration: '2s' }}
           />
-        );
+        )
       case 'PENDING':
-        return <PauseCircle className="w-4 h-4 text-yellow-500" />;
+        return <PauseCircle className="w-4 h-4 text-yellow-500" />
       case 'CANCELLING':
         return (
           <RotateCw
             className="w-4 h-4 text-orange-500 animate-spin"
             style={{ animationDuration: '1.2s' }}
           />
-        );
+        )
       default:
-        return <PauseCircle className="w-4 h-4 text-gray-400" />;
+        return <PauseCircle className="w-4 h-4 text-gray-400" />
     }
-  };
+  }
 
   const formatTimeAgo = (dateString: string) => {
-    const now = new Date();
-    const date = new Date(dateString);
-    const diffMs = now.getTime() - date.getTime();
+    const now = new Date()
+    const date = new Date(dateString)
+    const diffMs = now.getTime() - date.getTime()
 
-    const MINUTE_MS = 60 * 1000;
-    const HOUR_MS = 60 * MINUTE_MS;
-    const DAY_MS = 24 * HOUR_MS;
+    const MINUTE_MS = 60 * 1000
+    const HOUR_MS = 60 * MINUTE_MS
+    const DAY_MS = 24 * HOUR_MS
 
     // Handle negative time difference (client time earlier than server time)
     // or very small positive differences (< 1 minute)
     if (diffMs < MINUTE_MS) {
-      return '0m';
+      return '0m'
     } else if (diffMs < HOUR_MS) {
-      return `${Math.floor(diffMs / MINUTE_MS)}m`;
+      return `${Math.floor(diffMs / MINUTE_MS)}m`
     } else if (diffMs < DAY_MS) {
-      return `${Math.floor(diffMs / HOUR_MS)}h`;
+      return `${Math.floor(diffMs / HOUR_MS)}h`
     } else {
-      return `${Math.floor(diffMs / DAY_MS)}d`;
+      return `${Math.floor(diffMs / DAY_MS)}d`
     }
-  };
+  }
 
   const getUnreadDotColor = (task: Task) => {
     // For group chat tasks, always use green to indicate new messages
     if (task.is_group_chat) {
-      return 'bg-green-500';
+      return 'bg-green-500'
     }
     // For non-group-chat tasks, use status-based colors
     switch (task.status) {
       case 'COMPLETED':
-        return 'bg-green-500';
+        return 'bg-green-500'
       case 'FAILED':
-        return 'bg-red-500';
+        return 'bg-red-500'
       case 'CANCELLED':
-        return 'bg-gray-400';
+        return 'bg-gray-400'
       default:
-        return 'bg-gray-400';
+        return 'bg-gray-400'
     }
-  };
+  }
 
   // Determine whether to show status icon in expanded mode
   // Terminal states only show icon when unread, non-terminal states always show
@@ -405,37 +406,37 @@ export default function TaskListSection({
   const shouldShowStatusIcon = (task: Task): boolean => {
     // For group chat tasks, show icon when there are unread messages
     if (task.is_group_chat) {
-      return isTaskUnread(task);
+      return isTaskUnread(task)
     }
-    const terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
+    const terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED']
     if (terminalStates.includes(task.status)) {
-      const unread = isTaskUnread(task);
-      return unread;
+      const unread = isTaskUnread(task)
+      return unread
     }
-    return true;
-  };
+    return true
+  }
 
   const getTaskTypeIcon = (task: Task) => {
-    let taskType: TaskType | undefined = task.task_type;
+    let taskType: TaskType | undefined = task.task_type
     if (!taskType) {
       if (task.git_repo && task.git_repo.trim() !== '') {
-        taskType = 'code';
+        taskType = 'code'
       } else {
-        taskType = 'chat';
+        taskType = 'chat'
       }
     }
 
     // Show group chat icon for group chats
     if (task.is_group_chat) {
-      return <Users className="w-3.5 h-3.5 text-text-primary" />;
+      return <Users className="w-3.5 h-3.5 text-text-primary" />
     }
 
     if (taskType === 'code') {
-      return <Code2 className="w-3.5 h-3.5 text-text-primary" />;
+      return <Code2 className="w-3.5 h-3.5 text-text-primary" />
     } else {
-      return <MessageSquare className="w-3.5 h-3.5 text-text-primary" />;
+      return <MessageSquare className="w-3.5 h-3.5 text-text-primary" />
     }
-  };
+  }
 
   return (
     <div className={`mb-2 w-full ${isCollapsed ? 'px-2' : ''}`}>
@@ -451,33 +452,31 @@ export default function TaskListSection({
           )}
       <div className="space-y-0.5">
         {tasks.map(task => {
-          const showMenu = hoveredTaskId === task.id || longPressTaskId === task.id;
+          const showMenu = hoveredTaskId === task.id || longPressTaskId === task.id
 
           // Collapsed mode: Show only status icon with tooltip
           if (isCollapsed) {
             const taskTypeLabel = (() => {
-              let taskType: TaskType | undefined = task.task_type;
+              let taskType: TaskType | undefined = task.task_type
               if (!taskType) {
                 if (task.git_repo && task.git_repo.trim() !== '') {
-                  taskType = 'code';
+                  taskType = 'code'
                 } else {
-                  taskType = 'chat';
+                  taskType = 'chat'
                 }
               }
-              return taskType === 'code'
-                ? t('common:navigation.code')
-                : t('common:navigation.chat');
-            })();
+              return taskType === 'code' ? t('common:navigation.code') : t('common:navigation.chat')
+            })()
 
             const truncatedTitle =
-              task.title.length > 30 ? task.title.slice(0, 30) + '...' : task.title;
-            const statusKey = getTaskStatusLabelKey(task.status);
-            const statusLabel = statusKey ? t(statusKey) : task.status;
-            const taskMode = inferTaskMode(task);
+              task.title.length > 30 ? task.title.slice(0, 30) + '...' : task.title
+            const statusKey = getTaskStatusLabelKey(task.status)
+            const statusLabel = statusKey ? t(statusKey) : task.status
+            const taskMode = inferTaskMode(task)
             const containerStatus =
               taskMode === 'code' && !task.is_group_chat
                 ? (containerStatusMap[task.id]?.status ?? 'unknown')
-                : null;
+                : null
 
             return (
               <TooltipProvider key={task.id}>
@@ -514,28 +513,28 @@ export default function TaskListSection({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            );
+            )
           }
 
           // Expanded mode: Show full task item with tooltip
           const taskTypeLabel = (() => {
-            let taskType: TaskType | undefined = task.task_type;
+            let taskType: TaskType | undefined = task.task_type
             if (!taskType) {
               if (task.git_repo && task.git_repo.trim() !== '') {
-                taskType = 'code';
+                taskType = 'code'
               } else {
-                taskType = 'chat';
+                taskType = 'chat'
               }
             }
-            return taskType === 'code' ? t('common:navigation.code') : t('common:navigation.chat');
-          })();
-          const statusKey = getTaskStatusLabelKey(task.status);
-          const statusLabel = statusKey ? t(statusKey) : task.status;
-          const taskMode = inferTaskMode(task);
+            return taskType === 'code' ? t('common:navigation.code') : t('common:navigation.chat')
+          })()
+          const statusKey = getTaskStatusLabelKey(task.status)
+          const statusLabel = statusKey ? t(statusKey) : task.status
+          const taskMode = inferTaskMode(task)
           const containerStatus =
             taskMode === 'code' && !task.is_group_chat
               ? (containerStatusMap[task.id]?.status ?? 'unknown')
-              : null;
+              : null
 
           return (
             <TooltipProvider key={task.id}>
@@ -621,9 +620,9 @@ export default function TaskListSection({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          );
+          )
         })}
       </div>
     </div>
-  );
+  )
 }

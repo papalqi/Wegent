@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-'use client';
+'use client'
 
-import React, { memo, useState } from 'react';
+import React, { memo, useState } from 'react'
 import type {
   TaskDetail,
   Team,
@@ -12,133 +12,144 @@ import type {
   GitBranch,
   Attachment,
   SubtaskContextBrief,
-} from '@/types/api';
-import { Bot, Download, AlertCircle, User, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import MarkdownEditor from '@uiw/react-markdown-editor';
-import MarkdownWithMermaid from '@/components/common/MarkdownWithMermaid';
-import { ThinkingDisplay } from './thinking';
-import ClarificationForm from '../clarification/ClarificationForm';
-import FinalPromptMessage from './FinalPromptMessage';
-import ClarificationAnswerSummary from '../clarification/ClarificationAnswerSummary';
-import ContextBadgeList from './ContextBadgeList';
-import BubbleTools, { CopyButton } from './BubbleTools';
-import { SourceReferences } from '../chat/SourceReferences';
-import CollapsibleMessage from './CollapsibleMessage';
-import MessageDebugPanel, { type MessageDebugPayload } from './MessageDebugPanel';
-import CodexEventStreamPanel from './CodexEventStreamPanel';
-import type { ClarificationData, FinalPromptData, ClarificationAnswer } from '@/types/api';
-import type { SourceReference } from '@/types/socket';
-import { useTraceAction } from '@/hooks/useTraceAction';
-import { useMessageFeedback } from '@/hooks/useMessageFeedback';
-import { useToast } from '@/hooks/use-toast';
-import { SmartLink, SmartImage, SmartTextLine } from '@/components/common/SmartUrlRenderer';
-import { formatDateTime } from '@/utils/dateTime';
-import { isCodeShellResumeEnabled } from '@/lib/runtime-config';
+} from '@/types/api'
+import { Bot, Download, AlertCircle, User, RefreshCw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import MarkdownEditor from '@uiw/react-markdown-editor'
+import MarkdownWithMermaid from '@/components/common/MarkdownWithMermaid'
+import { ThinkingDisplay } from './thinking'
+import ClarificationForm from '../clarification/ClarificationForm'
+import FinalPromptMessage from './FinalPromptMessage'
+import ClarificationAnswerSummary from '../clarification/ClarificationAnswerSummary'
+import ContextBadgeList from './ContextBadgeList'
+import BubbleTools, { CopyButton } from './BubbleTools'
+import { SourceReferences } from '../chat/SourceReferences'
+import CollapsibleMessage from './CollapsibleMessage'
+import MessageDebugPanel, { type MessageDebugPayload } from './MessageDebugPanel'
+import CodexEventStreamPanel from './CodexEventStreamPanel'
+import type { ClarificationData, FinalPromptData, ClarificationAnswer } from '@/types/api'
+import type { SourceReference } from '@/types/socket'
+import { useTraceAction } from '@/hooks/useTraceAction'
+import { useMessageFeedback } from '@/hooks/useMessageFeedback'
+import { useToast } from '@/hooks/use-toast'
+import { SmartLink, SmartImage, SmartTextLine } from '@/components/common/SmartUrlRenderer'
+import { formatDateTime } from '@/utils/dateTime'
+import { isCodeShellResumeEnabled } from '@/lib/runtime-config'
 export interface Message {
-  type: 'user' | 'ai';
-  content: string;
-  timestamp: number;
+  type: 'user' | 'ai'
+  content: string
+  timestamp: number
   /** Debug payload for troubleshooting (sanitized on render) */
-  debug?: MessageDebugPayload;
-  botName?: string;
-  subtaskStatus?: string;
-  subtaskId?: number;
+  debug?: MessageDebugPayload
+  botName?: string
+  subtaskStatus?: string
+  subtaskId?: number
+  /** Reasoning content from models like DeepSeek R1 */
+  reasoningContent?: string
   thinking?: Array<{
-    title: string;
-    next_action: string;
-    details?: Record<string, unknown>;
-    action?: string;
-    result?: string;
-    reasoning?: string;
-    confidence?: number;
-    value?: unknown;
-  }> | null;
+    title: string
+    next_action: string
+    details?: Record<string, unknown>
+    action?: string
+    result?: string
+    reasoning?: string
+    confidence?: number
+    value?: unknown
+  }> | null
   /** Full result data from backend (for code executor with workbench, or chat with shell_type) */
   result?: {
-    value?: string;
-    thinking?: unknown[];
-    workbench?: Record<string, unknown>;
-    shell_type?: string; // Shell type (Chat, ClaudeCode, Agno, etc.)
+    value?: string
+    thinking?: unknown[]
+    workbench?: Record<string, unknown>
+    shell_type?: string // Shell type (Chat, ClaudeCode, Agno, etc.)
     /** Code Shell session identifiers for resume semantics */
-    resume_session_id?: string;
-    session_id?: string;
-    retry_mode?: 'resume' | 'new_session';
+    resume_session_id?: string
+    session_id?: string
+    retry_mode?: 'resume' | 'new_session'
     /** Raw Codex `codex exec --json` event stream (persisted on backend for refresh replay) */
-    codex_events?: unknown[];
-    sources?: SourceReference[]; // RAG knowledge base sources
-  };
+    codex_events?: unknown[]
+    sources?: SourceReference[] // RAG knowledge base sources
+  }
   /** @deprecated Use contexts instead */
-  attachments?: Attachment[];
+  attachments?: Attachment[]
   /** Unified contexts (attachments, knowledge bases, etc.) */
-  contexts?: SubtaskContextBrief[];
+  contexts?: SubtaskContextBrief[]
   /** Recovered content from Redis/DB when user refreshes during streaming */
-  recoveredContent?: string;
+  recoveredContent?: string
   /** Flag indicating this message has recovered content */
-  isRecovered?: boolean;
+  isRecovered?: boolean
   /** Flag indicating the content is incomplete (client disconnected) */
-  isIncomplete?: boolean;
+  isIncomplete?: boolean
   /** Flag indicating this message is waiting for first character (streaming but no content yet) */
-  isWaiting?: boolean;
+  isWaiting?: boolean
   /** Group chat: sender user name (for USER type messages) */
-  senderUserName?: string;
+  senderUserName?: string
   /** Group chat: sender user ID (for determining message alignment) */
-  senderUserId?: number;
+  senderUserId?: number
   /** Whether this is a group chat or chat agent type (to show sender names) */
-  shouldShowSender?: boolean;
+  shouldShowSender?: boolean
   /** Message status: pending, streaming, completed, error */
-  status?: 'pending' | 'streaming' | 'completed' | 'error';
+  status?: 'pending' | 'streaming' | 'completed' | 'error'
   /** Error message if status is 'error' */
-  error?: string;
+  error?: string
   /** RAG knowledge base sources (top-level for backward compatibility) */
-  sources?: SourceReference[];
+  sources?: SourceReference[]
 }
 
 /** Configuration for paragraph-level action button */
 export interface ParagraphAction {
   /** Icon to display on hover */
-  icon: React.ReactNode;
+  icon: React.ReactNode
   /** Tooltip text for the action button */
-  tooltip?: string;
+  tooltip?: string
   /** Callback when action is triggered - receives paragraph text and optional click event */
-  onAction: (paragraphText: string, event?: React.MouseEvent) => void;
+  onAction: (paragraphText: string, event?: React.MouseEvent) => void
   /** Optional: Render a popover content instead of just calling onAction */
-  renderPopover?: (props: { paragraphText: string; onClose: () => void }) => React.ReactNode;
+  renderPopover?: (props: { paragraphText: string; onClose: () => void }) => React.ReactNode
 }
 
 export interface MessageBubbleProps {
-  msg: Message;
-  index: number;
-  selectedTaskDetail: TaskDetail | null;
-  selectedTeam?: Team | null;
-  selectedRepo?: GitRepoInfo | null;
-  selectedBranch?: GitBranch | null;
-  theme: 'light' | 'dark';
-  t: (key: string) => string;
+  msg: Message
+  index: number
+  selectedTaskDetail: TaskDetail | null
+  selectedTeam?: Team | null
+  selectedRepo?: GitRepoInfo | null
+  selectedBranch?: GitBranch | null
+  theme: 'light' | 'dark'
+  t: (key: string) => string
   /** Whether to show waiting indicator (streaming but no content yet) */
-  isWaiting?: boolean;
+  isWaiting?: boolean
+  /** Whether the task is waiting for confirmation (pipeline stage) */
+  isPendingConfirmation?: boolean
   /** Generic callback when a component inside the message bubble wants to send a message (e.g., ClarificationForm) */
-  onSendMessage?: (content: string) => void;
+  onSendMessage?: (content: string) => void
   /** Callback when user selects text in AI message (optional) - receives selected text */
-  onTextSelect?: (selectedText: string) => void;
+  onTextSelect?: (selectedText: string) => void
+  /** Callback to re-select a context item from message (e.g. attachments/knowledge bases) */
+  onContextReselect?: (context: SubtaskContextBrief) => void
+  /** Enable inline editing for user messages */
+  isEditing?: boolean
+  onEdit?: (message: Message) => void
+  onEditSave?: (newContent: string) => Promise<void> | void
+  onEditCancel?: () => void
   /** Paragraph-level action configuration - shows action button on hover for each paragraph in AI messages */
-  paragraphAction?: ParagraphAction;
+  paragraphAction?: ParagraphAction
   /**
    * Whether this message is from the current user (for group chat alignment).
    * In group chat, only current user's messages should be right-aligned.
    * Other users' messages should be left-aligned like AI messages.
    * If not provided, defaults to true for user messages (backward compatible).
    */
-  isCurrentUserMessage?: boolean;
+  isCurrentUserMessage?: boolean
   /** Callback when user clicks retry button for failed messages */
-  onRetry?: (message: Message, retryMode?: 'resume' | 'new_session') => void;
+  onRetry?: (message: Message, retryMode?: 'resume' | 'new_session') => void
   /** Message type for feedback storage key differentiation */
-  feedbackMessageType?: 'original' | 'correction';
+  feedbackMessageType?: 'original' | 'correction'
   /** Whether this is a group chat (for enabling message collapsing) */
-  isGroupChat?: boolean;
+  isGroupChat?: boolean
 }
 
 // Component for rendering a paragraph with hover action button
@@ -147,25 +158,25 @@ const ParagraphWithAction = ({
   paragraphText,
   action,
 }: {
-  children: React.ReactNode;
-  paragraphText: string;
-  action: ParagraphAction;
+  children: React.ReactNode
+  paragraphText: string
+  action: ParagraphAction
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false)
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false)
 
   const handleAction = (e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation()
     // If renderPopover is provided, the Popover will handle the action
     // Otherwise, call onAction directly with the event for positioning
     if (!action.renderPopover) {
-      action.onAction(paragraphText, e);
+      action.onAction(paragraphText, e)
     }
-  };
+  }
 
   const handleClosePopover = () => {
-    setIsPopoverOpen(false);
-  };
+    setIsPopoverOpen(false)
+  }
 
   // Render the action button
   const renderActionButton = () => {
@@ -179,7 +190,7 @@ const ParagraphWithAction = ({
       >
         {action.icon}
       </Button>
-    );
+    )
 
     // If renderPopover is provided, wrap button in Popover
     if (action.renderPopover) {
@@ -198,7 +209,7 @@ const ParagraphWithAction = ({
             })}
           </PopoverContent>
         </Popover>
-      );
+      )
     }
 
     // Otherwise, just show tooltip if provided
@@ -208,11 +219,11 @@ const ParagraphWithAction = ({
           <TooltipTrigger asChild>{button}</TooltipTrigger>
           <TooltipContent side="right">{action.tooltip}</TooltipContent>
         </Tooltip>
-      );
+      )
     }
 
-    return button;
-  };
+    return button
+  }
 
   return (
     <div
@@ -230,8 +241,8 @@ const ParagraphWithAction = ({
         {renderActionButton()}
       </div>
     </div>
-  );
-};
+  )
+}
 
 const MessageBubble = memo(
   function MessageBubble({
@@ -253,8 +264,8 @@ const MessageBubble = memo(
     isGroupChat,
   }: MessageBubbleProps) {
     // Use trace hook for telemetry (auto-includes user and task context)
-    const { trace } = useTraceAction();
-    const { toast } = useToast();
+    const { trace } = useTraceAction()
+    const { toast } = useToast()
 
     // Use feedback hook for managing like/dislike state with localStorage persistence
     const { feedback, handleLike, handleDislike } = useMessageFeedback({
@@ -268,66 +279,66 @@ const MessageBubble = memo(
           'feedback.category': feedbackMessageType || 'original',
           ...(msg.subtaskId && { 'subtask.id': msg.subtaskId }),
         }),
-    });
+    })
 
     // Determine if this is a user-type message (for styling purposes)
-    const isUserTypeMessage = msg.type === 'user';
+    const isUserTypeMessage = msg.type === 'user'
 
     const normalizeShellType = (value: string | undefined): string | undefined => {
-      if (typeof value !== 'string') return undefined;
+      if (typeof value !== 'string') return undefined
       const normalized = value
         .trim()
         .toLowerCase()
-        .replace(/[^a-z0-9]/g, '');
-      return normalized || undefined;
-    };
+        .replace(/[^a-z0-9]/g, '')
+      return normalized || undefined
+    }
 
     const isRecord = (value: unknown): value is Record<string, unknown> => {
-      return typeof value === 'object' && value !== null && !Array.isArray(value);
-    };
+      return typeof value === 'object' && value !== null && !Array.isArray(value)
+    }
 
     const getStringField = (obj: unknown, key: string): string | undefined => {
-      if (!isRecord(obj)) return undefined;
-      const value = obj[key];
-      if (typeof value !== 'string') return undefined;
-      const trimmed = value.trim();
-      return trimmed || undefined;
-    };
+      if (!isRecord(obj)) return undefined
+      const value = obj[key]
+      if (typeof value !== 'string') return undefined
+      const trimmed = value.trim()
+      return trimmed || undefined
+    }
 
-    const debugResult = isRecord(msg.debug) ? msg.debug.result : undefined;
+    const debugResult = isRecord(msg.debug) ? msg.debug.result : undefined
     const subtaskResult = msg.subtaskId
       ? selectedTaskDetail?.subtasks?.find(st => st.id === msg.subtaskId)?.result
-      : undefined;
+      : undefined
 
     const shellType =
       msg.result?.shell_type ||
       getStringField(debugResult, 'shell_type') ||
       getStringField(subtaskResult, 'shell_type') ||
       selectedTaskDetail?.team?.bots?.[0]?.bot?.shell_type ||
-      selectedTaskDetail?.team?.agent_type;
-    const normalizedShellType = normalizeShellType(shellType);
+      selectedTaskDetail?.team?.agent_type
+    const normalizedShellType = normalizeShellType(shellType)
 
     const isCodeShellMessage =
       !isUserTypeMessage &&
-      (normalizedShellType === 'codex' || normalizedShellType === 'claudecode');
-    const codeShellResumeEnabled = isCodeShellResumeEnabled();
+      (normalizedShellType === 'codex' || normalizedShellType === 'claudecode')
+    const codeShellResumeEnabled = isCodeShellResumeEnabled()
 
     // Determine if this message should be right-aligned (current user's message)
     // For group chat: only current user's messages are right-aligned
     // For non-group chat (backward compatible): all user messages are right-aligned
     // Default to true for user messages if isCurrentUserMessage is not provided
-    const shouldAlignRight = isUserTypeMessage && (isCurrentUserMessage ?? true);
+    const shouldAlignRight = isUserTypeMessage && (isCurrentUserMessage ?? true)
 
-    const bubbleBaseClasses = `relative w-full p-5 text-text-primary ${isUserTypeMessage ? 'overflow-visible' : 'pb-10'}`;
+    const bubbleBaseClasses = `relative w-full p-5 text-text-primary ${isUserTypeMessage ? 'overflow-visible' : 'pb-10'}`
     const bubbleTypeClasses = isUserTypeMessage
       ? 'group rounded-2xl border border-border bg-surface shadow-sm'
-      : '';
+      : ''
 
     const formatTimestamp = (timestamp: number | undefined) => {
-      return formatDateTime(timestamp);
-    };
+      return formatDateTime(timestamp)
+    }
 
-    const timestampLabel = formatTimestamp(msg.timestamp);
+    const timestampLabel = formatTimestamp(msg.timestamp)
     const headerIcon = isUserTypeMessage ? null : msg.botName ===
       t('chat:correction.result_title') ? (
       <svg
@@ -348,8 +359,8 @@ const MessageBubble = memo(
       </svg>
     ) : (
       <Bot className="w-4 h-4" />
-    );
-    const headerLabel = isUserTypeMessage ? '' : msg.botName || t('messages.bot') || 'Bot';
+    )
+    const headerLabel = isUserTypeMessage ? '' : msg.botName || t('messages.bot') || 'Bot'
 
     // Determine if message is currently streaming (to disable URL metadata fetching)
     // During streaming, we show simple links to avoid excessive API calls
@@ -359,46 +370,46 @@ const MessageBubble = memo(
       msg.subtaskStatus === 'PROCESSING' ||
       msg.subtaskStatus === 'CANCELLING' ||
       isWaiting ||
-      msg.isWaiting;
+      msg.isWaiting
 
     const renderMarkdownResult = (rawResult: string, promptPart?: string) => {
-      const trimmed = (rawResult ?? '').trim();
-      const fencedMatch = trimmed.match(/^```(?:\s*(?:markdown|md))?\s*\n([\s\S]*?)\n```$/);
-      let normalizedResult = fencedMatch ? fencedMatch[1] : trimmed;
+      const trimmed = (rawResult ?? '').trim()
+      const fencedMatch = trimmed.match(/^```(?:\s*(?:markdown|md))?\s*\n([\s\S]*?)\n```$/)
+      let normalizedResult = fencedMatch ? fencedMatch[1] : trimmed
 
       // Pre-process markdown to handle edge cases where ** is followed by punctuation
       // Markdown parsers don't recognize **'text'** or **text**。 as bold
       // Convert these patterns to HTML <strong> tags for proper rendering
-      normalizedResult = normalizedResult.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-      normalizedResult = normalizedResult.replace(/^__PROGRESS_BAR__:.*?:\d+$/gm, '');
+      normalizedResult = normalizedResult.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      normalizedResult = normalizedResult.replace(/^__PROGRESS_BAR__:.*?:\d+$/gm, '')
 
       // Helper to extract text content from React children
       const extractText = (node: React.ReactNode): string => {
-        if (typeof node === 'string') return node;
-        if (typeof node === 'number') return String(node);
-        if (Array.isArray(node)) return node.map(extractText).join('');
+        if (typeof node === 'string') return node
+        if (typeof node === 'number') return String(node)
+        if (Array.isArray(node)) return node.map(extractText).join('')
         if (React.isValidElement(node)) {
-          const props = node.props as { children?: React.ReactNode };
+          const props = node.props as { children?: React.ReactNode }
           if (props.children) {
-            return extractText(props.children);
+            return extractText(props.children)
           }
         }
-        return '';
-      };
+        return ''
+      }
 
       // Helper to wrap content with paragraph action
       const wrapWithAction = (element: React.ReactNode, text: string) => {
-        if (!paragraphAction || !text.trim()) return element;
+        if (!paragraphAction || !text.trim()) return element
         return (
           <ParagraphWithAction paragraphText={text} action={paragraphAction}>
             {element}
           </ParagraphWithAction>
-        );
-      };
+        )
+      }
 
       // Check if message should be collapsible (only for completed AI messages in group chat, not streaming)
       // Only enable collapsing for group chat messages
-      const shouldEnableCollapse = !isStreaming && msg.subtaskStatus !== 'RUNNING' && isGroupChat;
+      const shouldEnableCollapse = !isStreaming && msg.subtaskStatus !== 'RUNNING' && isGroupChat
 
       const markdownContent = (
         <MarkdownWithMermaid
@@ -409,74 +420,74 @@ const MessageBubble = memo(
               ? {
                   a: ({ href, children }) => {
                     if (!href) {
-                      return <span>{children}</span>;
+                      return <span>{children}</span>
                     }
                     return (
                       <SmartLink href={href} disabled={isStreaming}>
                         {children}
                       </SmartLink>
-                    );
+                    )
                   },
                   img: ({ src, alt }) => {
-                    if (!src || typeof src !== 'string') return null;
-                    return <SmartImage src={src} alt={alt} />;
+                    if (!src || typeof src !== 'string') return null
+                    return <SmartImage src={src} alt={alt} />
                   },
                   p: ({ children }) => {
-                    const text = extractText(children);
-                    return wrapWithAction(<p>{children}</p>, text);
+                    const text = extractText(children)
+                    return wrapWithAction(<p>{children}</p>, text)
                   },
                   h1: ({ children }) => {
-                    const text = extractText(children);
-                    return wrapWithAction(<h1>{children}</h1>, text);
+                    const text = extractText(children)
+                    return wrapWithAction(<h1>{children}</h1>, text)
                   },
                   h2: ({ children }) => {
-                    const text = extractText(children);
-                    return wrapWithAction(<h2>{children}</h2>, text);
+                    const text = extractText(children)
+                    return wrapWithAction(<h2>{children}</h2>, text)
                   },
                   h3: ({ children }) => {
-                    const text = extractText(children);
-                    return wrapWithAction(<h3>{children}</h3>, text);
+                    const text = extractText(children)
+                    return wrapWithAction(<h3>{children}</h3>, text)
                   },
                   h4: ({ children }) => {
-                    const text = extractText(children);
-                    return wrapWithAction(<h4>{children}</h4>, text);
+                    const text = extractText(children)
+                    return wrapWithAction(<h4>{children}</h4>, text)
                   },
                   h5: ({ children }) => {
-                    const text = extractText(children);
-                    return wrapWithAction(<h5>{children}</h5>, text);
+                    const text = extractText(children)
+                    return wrapWithAction(<h5>{children}</h5>, text)
                   },
                   h6: ({ children }) => {
-                    const text = extractText(children);
-                    return wrapWithAction(<h6>{children}</h6>, text);
+                    const text = extractText(children)
+                    return wrapWithAction(<h6>{children}</h6>, text)
                   },
                   li: ({ children }) => {
-                    const text = extractText(children);
-                    return wrapWithAction(<li>{children}</li>, text);
+                    const text = extractText(children)
+                    return wrapWithAction(<li>{children}</li>, text)
                   },
                   blockquote: ({ children }) => {
-                    const text = extractText(children);
-                    return wrapWithAction(<blockquote>{children}</blockquote>, text);
+                    const text = extractText(children)
+                    return wrapWithAction(<blockquote>{children}</blockquote>, text)
                   },
                 }
               : {
                   a: ({ href, children }) => {
                     if (!href) {
-                      return <span>{children}</span>;
+                      return <span>{children}</span>
                     }
                     return (
                       <SmartLink href={href} disabled={isStreaming}>
                         {children}
                       </SmartLink>
-                    );
+                    )
                   },
                   img: ({ src, alt }) => {
-                    if (!src || typeof src !== 'string') return null;
-                    return <SmartImage src={src} alt={alt} />;
+                    if (!src || typeof src !== 'string') return null
+                    return <SmartImage src={src} alt={alt} />
                   },
                 }
           }
         />
-      );
+      )
 
       return (
         <>
@@ -495,14 +506,14 @@ const MessageBubble = memo(
                 onClick: () => {
                   const blob = new Blob([`${normalizedResult}`], {
                     type: 'text/plain;charset=utf-8',
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = 'message.md';
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  trace.download(msg.type, msg.subtaskId);
+                  })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = 'message.md'
+                  a.click()
+                  URL.revokeObjectURL(url)
+                  trace.download(msg.type, msg.subtaskId)
                 },
               },
             ]}
@@ -515,21 +526,21 @@ const MessageBubble = memo(
             }}
           />
         </>
-      );
-    };
+      )
+    }
 
     const renderPlainMessage = (message: Message) => {
       // Check if this is an external API params message
       if (message.type === 'user' && message.content.includes('[EXTERNAL_API_PARAMS]')) {
         const paramsMatch = message.content.match(
           /\[EXTERNAL_API_PARAMS\]([\s\S]*?)\[\/EXTERNAL_API_PARAMS\]/
-        );
+        )
         if (paramsMatch) {
           try {
-            const params = JSON.parse(paramsMatch[1]);
+            const params = JSON.parse(paramsMatch[1])
             const remainingContent = message.content
               .replace(/\[EXTERNAL_API_PARAMS\][\s\S]*?\[\/EXTERNAL_API_PARAMS\]\n?/, '')
-              .trim();
+              .trim()
 
             return (
               <div className="space-y-3">
@@ -552,33 +563,33 @@ const MessageBubble = memo(
                 </div>
                 {remainingContent && <div className="text-sm break-all">{remainingContent}</div>}
               </div>
-            );
+            )
           } catch (e) {
-            console.error('Failed to parse EXTERNAL_API_PARAMS:', e);
+            console.error('Failed to parse EXTERNAL_API_PARAMS:', e)
           }
         }
       }
 
       // Check if this is a Markdown clarification answer (user message)
       if (message.type === 'user' && message.content.includes('## 📝 我的回答')) {
-        const answerPayload: ClarificationAnswer[] = [];
-        const questionRegex = /### ([A-Z_\d]+): (.*?)\n\*\*Answer\*\*: ([\s\S]*?)(?=\n###|$)/g;
-        let match;
+        const answerPayload: ClarificationAnswer[] = []
+        const questionRegex = /### ([A-Z_\d]+): (.*?)\n\*\*Answer\*\*: ([\s\S]*?)(?=\n###|$)/g
+        let match
 
         while ((match = questionRegex.exec(message.content)) !== null) {
-          const questionId = match[1].toLowerCase();
-          const questionText = match[2].trim();
-          const answerContent = match[3].trim();
+          const questionId = match[1].toLowerCase()
+          const questionText = match[2].trim()
+          const answerContent = match[3].trim()
 
           if (answerContent.startsWith('-')) {
-            const optionRegex = /- `([^`]+)` - (.*?)(?=\n-|$)/g;
-            const values: string[] = [];
-            const labels: string[] = [];
-            let optMatch;
+            const optionRegex = /- `([^`]+)` - (.*?)(?=\n-|$)/g
+            const values: string[] = []
+            const labels: string[] = []
+            let optMatch
 
             while ((optMatch = optionRegex.exec(answerContent)) !== null) {
-              values.push(optMatch[1]);
-              labels.push(optMatch[2].trim());
+              values.push(optMatch[1])
+              labels.push(optMatch[2].trim())
             }
 
             answerPayload.push({
@@ -587,9 +598,9 @@ const MessageBubble = memo(
               answer_type: 'choice',
               value: values,
               selected_labels: labels,
-            });
+            })
           } else if (answerContent.startsWith('`')) {
-            const singleMatch = answerContent.match(/`([^`]+)` - (.*)/);
+            const singleMatch = answerContent.match(/`([^`]+)` - (.*)/)
             if (singleMatch) {
               answerPayload.push({
                 question_id: questionId,
@@ -597,7 +608,7 @@ const MessageBubble = memo(
                 answer_type: 'choice',
                 value: singleMatch[1],
                 selected_labels: singleMatch[2].trim(),
-              });
+              })
             }
           } else {
             answerPayload.push({
@@ -605,7 +616,7 @@ const MessageBubble = memo(
               question_text: questionText,
               answer_type: 'custom',
               value: answerContent,
-            });
+            })
           }
         }
 
@@ -615,16 +626,16 @@ const MessageBubble = memo(
               data={{ type: 'clarification_answer', answers: answerPayload }}
               rawContent={message.content}
             />
-          );
+          )
         }
       }
 
       return (message.content?.split('\n') || []).map((line, idx) => {
         if (line.startsWith('__PROMPT_TRUNCATED__:')) {
-          const lineMatch = line.match(/^__PROMPT_TRUNCATED__:(.*)::(.*)$/);
+          const lineMatch = line.match(/^__PROMPT_TRUNCATED__:(.*)::(.*)$/)
           if (lineMatch) {
-            const shortPrompt = lineMatch[1];
-            const fullPrompt = lineMatch[2];
+            const shortPrompt = lineMatch[1]
+            const fullPrompt = lineMatch[2]
             return (
               <span
                 key={idx}
@@ -633,19 +644,19 @@ const MessageBubble = memo(
               >
                 {shortPrompt}
               </span>
-            );
+            )
           }
         }
 
         if (line.includes('__PROGRESS_BAR__:')) {
-          return null;
+          return null
         }
 
         // Use SmartTextLine to detect and render URLs (images and links) in plain text
         // Pass disabled={isStreaming} to avoid metadata fetching during streaming
-        return <SmartTextLine key={idx} text={line} disabled={isStreaming} />;
-      });
-    };
+        return <SmartTextLine key={idx} text={line} disabled={isStreaming} />
+      })
+    }
     // Helper function to parse Markdown clarification questions
     // Supports flexible formats: with/without code blocks, emoji variations, different header levels
     // Extracts content between the header and the last ``` (or end of content if no valid closing ```)
@@ -658,141 +669,141 @@ const MessageBubble = memo(
       // Old format: ## 💬 智能追问 (Smart Follow-up Questions)
       // New format: ## 🤔 需求澄清问题 (Clarification Questions)
       const smartFollowUpRegex =
-        /#{1,6}\s*(?:💬\s*)?(?:智能追问|smart\s*follow[- ]?up(?:\s*questions?)?)/im;
+        /#{1,6}\s*(?:💬\s*)?(?:智能追问|smart\s*follow[- ]?up(?:\s*questions?)?)/im
       const clarificationQuestionsRegex =
-        /#{1,6}\s*(?:🤔\s*)?(?:需求)?(?:澄清问题?|clarification\s*questions?)/im;
+        /#{1,6}\s*(?:🤔\s*)?(?:需求)?(?:澄清问题?|clarification\s*questions?)/im
 
       // Try both patterns
-      const smartFollowUpMatch = content.match(smartFollowUpRegex);
-      const clarificationMatch = content.match(clarificationQuestionsRegex);
+      const smartFollowUpMatch = content.match(smartFollowUpRegex)
+      const clarificationMatch = content.match(clarificationQuestionsRegex)
 
       // Use the first match found (prefer the one that appears earlier in content)
-      let headerMatch: RegExpMatchArray | null = null;
+      let headerMatch: RegExpMatchArray | null = null
       if (smartFollowUpMatch && clarificationMatch) {
         // Both matched, use the one that appears first
         headerMatch =
           smartFollowUpMatch.index! <= clarificationMatch.index!
             ? smartFollowUpMatch
-            : clarificationMatch;
+            : clarificationMatch
       } else {
-        headerMatch = smartFollowUpMatch || clarificationMatch;
+        headerMatch = smartFollowUpMatch || clarificationMatch
       }
 
       if (!headerMatch) {
-        return null;
+        return null
       }
 
       // Find the position of the header and extract everything from the header onwards
-      const headerIndex = headerMatch.index!;
-      const prefixText = content.substring(0, headerIndex).trim();
-      let actualContent = content.substring(headerIndex);
-      let suffixText = '';
+      const headerIndex = headerMatch.index!
+      const prefixText = content.substring(0, headerIndex).trim()
+      let actualContent = content.substring(headerIndex)
+      let suffixText = ''
 
       // Find the last ``` in the content
-      const lastCodeBlockMarkerIndex = actualContent.lastIndexOf('\n```');
+      const lastCodeBlockMarkerIndex = actualContent.lastIndexOf('\n```')
 
       if (lastCodeBlockMarkerIndex !== -1) {
         // Check if the last ``` is within 2 lines of the actual end
-        const contentAfterMarker = actualContent.substring(lastCodeBlockMarkerIndex + 4); // +4 for '\n```'
-        const linesAfterMarker = contentAfterMarker.split('\n').filter(line => line.trim() !== '');
+        const contentAfterMarker = actualContent.substring(lastCodeBlockMarkerIndex + 4) // +4 for '\n```'
+        const linesAfterMarker = contentAfterMarker.split('\n').filter(line => line.trim() !== '')
 
         if (linesAfterMarker.length <= 2) {
           // Valid closing ```, extract content before it and save content after as potential suffix
-          const potentialSuffix = contentAfterMarker.trim();
-          actualContent = actualContent.substring(0, lastCodeBlockMarkerIndex).trim();
+          const potentialSuffix = contentAfterMarker.trim()
+          actualContent = actualContent.substring(0, lastCodeBlockMarkerIndex).trim()
           // If there's content after the closing ```, save it as suffix
           if (potentialSuffix) {
-            suffixText = potentialSuffix;
+            suffixText = potentialSuffix
           }
         }
         // If the ``` is too far from the end, keep the full content
       }
 
-      const questions: ClarificationData['questions'] = [];
+      const questions: ClarificationData['questions'] = []
 
       // Flexible question header detection
       // Matches: ### Q1:, ### Q1：, **Q1:**, Q1:, Q1., 1., 1:, etc.
       const questionRegex =
-        /(?:^|\n)(?:#{1,6}\s*)?(?:\*\*)?Q?(\d+)(?:\*\*)?[:.：]\s*(.*?)(?=\n(?:#{1,6}\s*)?(?:\*\*)?(?:Q?\d+|Type|类型)|\n\*\*(?:Type|类型)\*\*|$)/gi;
-      const matches = Array.from(actualContent.matchAll(questionRegex));
+        /(?:^|\n)(?:#{1,6}\s*)?(?:\*\*)?Q?(\d+)(?:\*\*)?[:.：]\s*(.*?)(?=\n(?:#{1,6}\s*)?(?:\*\*)?(?:Q?\d+|Type|类型)|\n\*\*(?:Type|类型)\*\*|$)/gi
+      const matches = Array.from(actualContent.matchAll(questionRegex))
 
       // Track the end position of the last successfully parsed question
-      let lastParsedEndIndex = 0;
+      let lastParsedEndIndex = 0
 
       for (const match of matches) {
         try {
-          const questionNumber = parseInt(match[1]);
-          const questionText = match[2].trim();
+          const questionNumber = parseInt(match[1])
+          const questionText = match[2].trim()
 
-          if (!questionText) continue;
+          if (!questionText) continue
 
           // Find the question block (from current match to next question or end)
-          const startIndex = match.index!;
+          const startIndex = match.index!
           const nextQuestionMatch = actualContent
             .substring(startIndex + match[0].length)
-            .match(/\n(?:#{1,6}\s*)?(?:\*\*)?Q?\d+[:.：]/i);
+            .match(/\n(?:#{1,6}\s*)?(?:\*\*)?Q?\d+[:.：]/i)
           const endIndex = nextQuestionMatch
             ? startIndex + match[0].length + nextQuestionMatch.index!
-            : actualContent.length;
-          const questionBlock = actualContent.substring(startIndex, endIndex);
+            : actualContent.length
+          const questionBlock = actualContent.substring(startIndex, endIndex)
 
           // Flexible type detection
           // Matches: **Type**: value, Type: value, **类型**: value, 类型: value
-          const typeMatch = questionBlock.match(/(?:\*\*)?(?:Type|类型)(?:\*\*)?[:\s：]+\s*(\w+)/i);
-          if (!typeMatch) continue;
+          const typeMatch = questionBlock.match(/(?:\*\*)?(?:Type|类型)(?:\*\*)?[:\s：]+\s*(\w+)/i)
+          if (!typeMatch) continue
 
-          const typeValue = typeMatch[1].toLowerCase();
-          let questionType: 'single_choice' | 'multiple_choice' | 'text_input';
+          const typeValue = typeMatch[1].toLowerCase()
+          let questionType: 'single_choice' | 'multiple_choice' | 'text_input'
 
           if (typeValue.includes('single') || typeValue === 'single_choice') {
-            questionType = 'single_choice';
+            questionType = 'single_choice'
           } else if (typeValue.includes('multi') || typeValue === 'multiple_choice') {
-            questionType = 'multiple_choice';
+            questionType = 'multiple_choice'
           } else if (typeValue.includes('text') || typeValue === 'text_input') {
-            questionType = 'text_input';
+            questionType = 'text_input'
           } else {
-            questionType = 'single_choice'; // default fallback
+            questionType = 'single_choice' // default fallback
           }
 
-          const questionId = `q${questionNumber}`;
+          const questionId = `q${questionNumber}`
 
           if (questionType === 'text_input') {
             questions.push({
               question_id: questionId,
               question_text: questionText,
               question_type: 'text_input',
-            });
-            lastParsedEndIndex = endIndex;
+            })
+            lastParsedEndIndex = endIndex
           } else {
-            const options: ClarificationData['questions'][0]['options'] = [];
+            const options: ClarificationData['questions'][0]['options'] = []
             // Track the end position of the last option within this question block
-            let lastOptionEndInBlock = 0;
+            let lastOptionEndInBlock = 0
 
             // Flexible option detection
             // Matches: - [✓] `value` - Label, - [x] value - Label, - [ ] `value` - Label, - `value` - Label
             // The lookahead matches: next option line, bold text, header, empty line, or end of string
             const optionRegex =
-              /- \[([✓xX* ]?)\]\s*`?([^`\n-]+)`?\s*-\s*([^\n]*)(?=\n-|\n\*\*|\n#{1,6}|\n\n|\n?$)/g;
-            let optionMatch;
+              /- \[([✓xX* ]?)\]\s*`?([^`\n-]+)`?\s*-\s*([^\n]*)(?=\n-|\n\*\*|\n#{1,6}|\n\n|\n?$)/g
+            let optionMatch
 
             while ((optionMatch = optionRegex.exec(questionBlock)) !== null) {
-              const checkMark = optionMatch[1].trim();
+              const checkMark = optionMatch[1].trim()
               const isRecommended =
-                checkMark === '✓' || checkMark.toLowerCase() === 'x' || checkMark === '*';
-              const value = optionMatch[2].trim();
+                checkMark === '✓' || checkMark.toLowerCase() === 'x' || checkMark === '*'
+              const value = optionMatch[2].trim()
               const label = optionMatch[3]
                 .trim()
                 .replace(/\s*\((?:recommended|推荐)\)\s*$/i, '')
-                .trim();
+                .trim()
 
               if (value) {
                 options.push({
                   value,
                   label: label || value,
                   recommended: isRecommended,
-                });
+                })
                 // Update the end position of the last option
-                lastOptionEndInBlock = optionMatch.index + optionMatch[0].length;
+                lastOptionEndInBlock = optionMatch.index + optionMatch[0].length
               }
             }
 
@@ -800,27 +811,27 @@ const MessageBubble = memo(
             // Matches: - `value` - Label, - value - Label
             if (options.length === 0) {
               const simpleOptionRegex =
-                /-\s*`?([^`\n-]+)`?\s*-\s*([^\n]*)(?=\n-|\n\*\*|\n#{1,6}|\n\n|\n?$)/g;
-              let simpleMatch;
+                /-\s*`?([^`\n-]+)`?\s*-\s*([^\n]*)(?=\n-|\n\*\*|\n#{1,6}|\n\n|\n?$)/g
+              let simpleMatch
 
               while ((simpleMatch = simpleOptionRegex.exec(questionBlock)) !== null) {
-                const value = simpleMatch[1].trim();
+                const value = simpleMatch[1].trim()
                 const label = simpleMatch[2]
                   .trim()
                   .replace(/\s*\((?:recommended|推荐)\)\s*$/i, '')
-                  .trim();
+                  .trim()
                 const isRecommended =
                   simpleMatch[2].toLowerCase().includes('recommended') ||
-                  simpleMatch[2].includes('推荐');
+                  simpleMatch[2].includes('推荐')
 
                 if (value && !value.startsWith('[')) {
                   options.push({
                     value,
                     label: label || value,
                     recommended: isRecommended,
-                  });
+                  })
                   // Update the end position of the last option
-                  lastOptionEndInBlock = simpleMatch.index + simpleMatch[0].length;
+                  lastOptionEndInBlock = simpleMatch.index + simpleMatch[0].length
                 }
               }
             }
@@ -831,28 +842,28 @@ const MessageBubble = memo(
                 question_text: questionText,
                 question_type: questionType,
                 options,
-              });
+              })
               // Use the actual end position of the last option, not the entire question block
               // This allows us to capture any text after the last option as suffix
-              lastParsedEndIndex = startIndex + lastOptionEndInBlock;
+              lastParsedEndIndex = startIndex + lastOptionEndInBlock
             }
           }
         } catch {
           // Continue parsing other questions even if one fails
-          continue;
+          continue
         }
       }
 
-      if (questions.length === 0) return null;
+      if (questions.length === 0) return null
 
       // Extract suffix text: content after the last successfully parsed question
       // Only extract from actualContent if we haven't already extracted suffix from after the code block
       if (!suffixText && lastParsedEndIndex > 0 && lastParsedEndIndex < actualContent.length) {
-        const extractedSuffix = actualContent.substring(lastParsedEndIndex).trim();
+        const extractedSuffix = actualContent.substring(lastParsedEndIndex).trim()
         // Clean up suffix text: remove leading closing code block markers if present
-        const cleanedSuffix = extractedSuffix.replace(/^```\s*\n?/, '').trim();
+        const cleanedSuffix = extractedSuffix.replace(/^```\s*\n?/, '').trim()
         if (cleanedSuffix) {
-          suffixText = cleanedSuffix;
+          suffixText = cleanedSuffix
         }
       }
 
@@ -863,8 +874,8 @@ const MessageBubble = memo(
         },
         prefixText,
         suffixText,
-      };
-    };
+      }
+    }
 
     // Helper function to parse Markdown final prompt
     // Supports flexible formats: with/without code blocks, emoji variations, different header levels
@@ -873,73 +884,73 @@ const MessageBubble = memo(
       // Flexible header detection for final prompt
       // Matches: ## ✅ 最终需求提示词, ## Final Requirement Prompt, ### 最终提示词, # final prompt, etc.
       const finalPromptHeaderRegex =
-        /#{1,6}\s*(?:✅\s*)?(?:最终(?:需求)?提示词|final\s*(?:requirement\s*)?prompt)/im;
-      const headerMatch = content.match(finalPromptHeaderRegex);
+        /#{1,6}\s*(?:✅\s*)?(?:最终(?:需求)?提示词|final\s*(?:requirement\s*)?prompt)/im
+      const headerMatch = content.match(finalPromptHeaderRegex)
       if (!headerMatch) {
-        return null;
+        return null
       }
 
       // Find the position of the header and extract everything from the header line onwards
-      const headerIndex = headerMatch.index!;
-      const contentFromHeader = content.substring(headerIndex);
+      const headerIndex = headerMatch.index!
+      const contentFromHeader = content.substring(headerIndex)
 
       // Find the end of the header line
-      const headerLineEndIndex = contentFromHeader.indexOf('\n');
+      const headerLineEndIndex = contentFromHeader.indexOf('\n')
       if (headerLineEndIndex === -1) {
         // Header is the only line, no content after it
-        return null;
+        return null
       }
 
       // Get content after the header line
-      const afterHeader = contentFromHeader.substring(headerLineEndIndex + 1);
+      const afterHeader = contentFromHeader.substring(headerLineEndIndex + 1)
 
       // Find the last ``` in the content
-      const lastCodeBlockMarkerIndex = afterHeader.lastIndexOf('\n```');
+      const lastCodeBlockMarkerIndex = afterHeader.lastIndexOf('\n```')
 
-      let promptContent: string;
+      let promptContent: string
 
       if (lastCodeBlockMarkerIndex !== -1) {
         // Check if the last ``` is within 2 lines of the actual end
-        const contentAfterMarker = afterHeader.substring(lastCodeBlockMarkerIndex + 4); // +4 for '\n```'
-        const linesAfterMarker = contentAfterMarker.split('\n').filter(line => line.trim() !== '');
+        const contentAfterMarker = afterHeader.substring(lastCodeBlockMarkerIndex + 4) // +4 for '\n```'
+        const linesAfterMarker = contentAfterMarker.split('\n').filter(line => line.trim() !== '')
 
         if (linesAfterMarker.length <= 2) {
           // Valid closing ```, extract content before it
-          promptContent = afterHeader.substring(0, lastCodeBlockMarkerIndex).trim();
+          promptContent = afterHeader.substring(0, lastCodeBlockMarkerIndex).trim()
         } else {
           // The ``` is too far from the end, model probably didn't output proper closing
           // Take everything to the end
-          promptContent = afterHeader.trim();
+          promptContent = afterHeader.trim()
         }
       } else {
         // No closing ``` found, take everything to the end
-        promptContent = afterHeader.trim();
+        promptContent = afterHeader.trim()
       }
 
       if (!promptContent) {
-        return null;
+        return null
       }
 
       return {
         type: 'final_prompt',
         final_prompt: promptContent,
-      };
-    };
+      }
+    }
     const renderAiMessage = (message: Message, messageIndex: number) => {
-      const content = message.content ?? '';
+      const content = message.content ?? ''
 
       try {
-        let contentToParse = content;
+        let contentToParse = content
 
         if (content.includes('${$$}$')) {
-          const [, result] = content.split('${$$}$');
+          const [, result] = content.split('${$$}$')
           if (result) {
-            contentToParse = result;
+            contentToParse = result
           }
         }
-        const markdownClarification = parseMarkdownClarification(contentToParse);
+        const markdownClarification = parseMarkdownClarification(contentToParse)
         if (markdownClarification) {
-          const { data, prefixText, suffixText } = markdownClarification;
+          const { data, prefixText, suffixText } = markdownClarification
           return (
             <div className="space-y-4">
               {/* Render prefix text (content before the clarification form) */}
@@ -951,17 +962,17 @@ const MessageBubble = memo(
                   components={{
                     a: ({ href, children }) => {
                       if (!href) {
-                        return <span>{children}</span>;
+                        return <span>{children}</span>
                       }
                       return (
                         <SmartLink href={href} disabled={isStreaming}>
                           {children}
                         </SmartLink>
-                      );
+                      )
                     },
                     img: ({ src, alt }) => {
-                      if (!src || typeof src !== 'string') return null;
-                      return <SmartImage src={src} alt={alt} />;
+                      if (!src || typeof src !== 'string') return null
+                      return <SmartImage src={src} alt={alt} />
                     },
                   }}
                 />
@@ -984,27 +995,27 @@ const MessageBubble = memo(
                     components={{
                       a: ({ href, children }) => {
                         if (!href) {
-                          return <span>{children}</span>;
+                          return <span>{children}</span>
                         }
                         return (
                           <SmartLink href={href} disabled={isStreaming}>
                             {children}
                           </SmartLink>
-                        );
+                        )
                       },
                       img: ({ src, alt }) => {
-                        if (!src || typeof src !== 'string') return null;
-                        return <SmartImage src={src} alt={alt} />;
+                        if (!src || typeof src !== 'string') return null
+                        return <SmartImage src={src} alt={alt} />
                       },
                     }}
                   />
                 </div>
               )}
             </div>
-          );
+          )
         }
 
-        const markdownFinalPrompt = parseMarkdownFinalPrompt(contentToParse);
+        const markdownFinalPrompt = parseMarkdownFinalPrompt(contentToParse)
         if (markdownFinalPrompt) {
           return (
             <FinalPromptMessage
@@ -1013,32 +1024,32 @@ const MessageBubble = memo(
               selectedRepo={selectedRepo}
               selectedBranch={selectedBranch}
             />
-          );
+          )
         }
       } catch (error) {
-        console.error('Failed to parse message content:', error);
+        console.error('Failed to parse message content:', error)
       }
 
       if (!content.includes('${$$}$')) {
         // Render AI message as markdown by default
-        return renderMarkdownResult(content);
+        return renderMarkdownResult(content)
       }
 
-      const [prompt, result] = content.split('${$$}$');
+      const [prompt, result] = content.split('${$$}$')
       return (
         <>
           {prompt && <div className="text-sm whitespace-pre-line mb-2">{prompt}</div>}
           {result && renderMarkdownResult(result, prompt)}
         </>
-      );
-    };
+      )
+    }
 
     const renderMessageBody = (message: Message, messageIndex: number) =>
-      message.type === 'ai' ? renderAiMessage(message, messageIndex) : renderPlainMessage(message);
+      message.type === 'ai' ? renderAiMessage(message, messageIndex) : renderPlainMessage(message)
 
     // Render recovered content notice
     const renderRecoveryNotice = () => {
-      if (!msg.isRecovered) return null;
+      if (!msg.isRecovered) return null
 
       return (
         <div className="bg-muted border-l-4 border-primary p-3 mt-2 rounded-r-lg">
@@ -1058,23 +1069,23 @@ const MessageBubble = memo(
             </div>
           </div>
         </div>
-      );
-    };
+      )
+    }
 
     // Render recovered content with typewriter effect (content is already processed by RecoveredMessageBubble)
     // Also handles clarification form parsing for streaming content
     const renderRecoveredContent = () => {
-      if (!msg.recoveredContent || msg.subtaskStatus !== 'RUNNING') return null;
+      if (!msg.recoveredContent || msg.subtaskStatus !== 'RUNNING') return null
 
       // Pre-process markdown to handle edge cases where ** is followed by punctuation
       // Same fix as in renderMarkdownResult - convert all ** to <strong> tags
-      const contentToRender = msg.recoveredContent.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      const contentToRender = msg.recoveredContent.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
 
       // Try to parse clarification format from recovered/streaming content
       // This ensures clarification forms are rendered correctly during streaming
-      const markdownClarification = parseMarkdownClarification(contentToRender);
+      const markdownClarification = parseMarkdownClarification(contentToRender)
       if (markdownClarification) {
-        const { data, prefixText, suffixText } = markdownClarification;
+        const { data, prefixText, suffixText } = markdownClarification
         return (
           <div className="space-y-4">
             {/* Render prefix text (content before the clarification form) */}
@@ -1086,17 +1097,17 @@ const MessageBubble = memo(
                 components={{
                   a: ({ href, children }) => {
                     if (!href) {
-                      return <span>{children}</span>;
+                      return <span>{children}</span>
                     }
                     return (
                       <SmartLink href={href} disabled={isStreaming}>
                         {children}
                       </SmartLink>
-                    );
+                    )
                   },
                   img: ({ src, alt }) => {
-                    if (!src || typeof src !== 'string') return null;
-                    return <SmartImage src={src} alt={alt} />;
+                    if (!src || typeof src !== 'string') return null
+                    return <SmartImage src={src} alt={alt} />
                   },
                 }}
               />
@@ -1119,17 +1130,17 @@ const MessageBubble = memo(
                   components={{
                     a: ({ href, children }) => {
                       if (!href) {
-                        return <span>{children}</span>;
+                        return <span>{children}</span>
                       }
                       return (
                         <SmartLink href={href} disabled={isStreaming}>
                           {children}
                         </SmartLink>
-                      );
+                      )
                     },
                     img: ({ src, alt }) => {
-                      if (!src || typeof src !== 'string') return null;
-                      return <SmartImage src={src} alt={alt} />;
+                      if (!src || typeof src !== 'string') return null
+                      return <SmartImage src={src} alt={alt} />
                     },
                   }}
                 />
@@ -1148,14 +1159,14 @@ const MessageBubble = memo(
                   onClick: () => {
                     const blob = new Blob([contentToRender], {
                       type: 'text/plain;charset=utf-8',
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'message.md';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    trace.download(msg.type, msg.subtaskId);
+                    })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = 'message.md'
+                    a.click()
+                    URL.revokeObjectURL(url)
+                    trace.download(msg.type, msg.subtaskId)
                   },
                 },
               ]}
@@ -1168,11 +1179,11 @@ const MessageBubble = memo(
               }}
             />
           </div>
-        );
+        )
       }
 
       // Try to parse final prompt format
-      const markdownFinalPrompt = parseMarkdownFinalPrompt(contentToRender);
+      const markdownFinalPrompt = parseMarkdownFinalPrompt(contentToRender)
       if (markdownFinalPrompt) {
         return (
           <FinalPromptMessage
@@ -1181,7 +1192,7 @@ const MessageBubble = memo(
             selectedRepo={selectedRepo}
             selectedBranch={selectedBranch}
           />
-        );
+        )
       }
 
       // Default: render as markdown
@@ -1195,17 +1206,17 @@ const MessageBubble = memo(
                 components={{
                   a: ({ href, children }) => {
                     if (!href) {
-                      return <span>{children}</span>;
+                      return <span>{children}</span>
                     }
                     return (
                       <SmartLink href={href} disabled={isStreaming}>
                         {children}
                       </SmartLink>
-                    );
+                    )
                   },
                   img: ({ src, alt }) => {
-                    if (!src || typeof src !== 'string') return null;
-                    return <SmartImage src={src} alt={alt} />;
+                    if (!src || typeof src !== 'string') return null
+                    return <SmartImage src={src} alt={alt} />
                   },
                 }}
               />
@@ -1222,14 +1233,14 @@ const MessageBubble = memo(
                     onClick: () => {
                       const blob = new Blob([contentToRender], {
                         type: 'text/plain;charset=utf-8',
-                      });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = 'message.md';
-                      a.click();
-                      URL.revokeObjectURL(url);
-                      trace.download(msg.type, msg.subtaskId);
+                      })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = 'message.md'
+                      a.click()
+                      URL.revokeObjectURL(url)
+                      trace.download(msg.type, msg.subtaskId)
                     },
                   },
                 ]}
@@ -1244,19 +1255,19 @@ const MessageBubble = memo(
             </>
           ) : null}
         </div>
-      );
-    };
+      )
+    }
 
     // Handle text selection in AI messages
     const handleTextSelection = () => {
-      if (!onTextSelect || isUserTypeMessage) return;
+      if (!onTextSelect || isUserTypeMessage) return
 
-      const selection = window.getSelection();
+      const selection = window.getSelection()
       if (selection && selection.toString().trim()) {
-        const selectedText = selection.toString().trim();
-        onTextSelect(selectedText);
+        const selectedText = selection.toString().trim()
+        onTextSelect(selectedText)
       }
-    };
+    }
 
     // DEBUG: Log shell_type check
     if (msg.thinking) {
@@ -1265,7 +1276,7 @@ const MessageBubble = memo(
         hasResult: !!msg.result,
         shell_type: msg.result?.shell_type,
         isChat: msg.result?.shell_type === 'Chat',
-      });
+      })
     }
 
     return (
@@ -1355,7 +1366,7 @@ const MessageBubble = memo(
                             const resumeSessionId =
                               msg.result?.resume_session_id ||
                               getStringField(debugResult, 'resume_session_id') ||
-                              getStringField(subtaskResult, 'resume_session_id');
+                              getStringField(subtaskResult, 'resume_session_id')
 
                             if (normalizedShellType === 'codex' && !resumeSessionId) {
                               toast({
@@ -1363,10 +1374,10 @@ const MessageBubble = memo(
                                 title:
                                   t('chat:errors.no_resume_session') ||
                                   '没有可恢复会话，请用新会话重试',
-                              });
-                              return;
+                              })
+                              return
                             }
-                            onRetry(msg, 'resume');
+                            onRetry(msg, 'resume')
                           }}
                         >
                           {t('chat:actions.retry_resume') || 'Resume 重试'}
@@ -1427,7 +1438,7 @@ const MessageBubble = memo(
           </div>
         </div>
       </div>
-    );
+    )
   },
   (prevProps, nextProps) => {
     // Custom comparison function for memo
@@ -1435,15 +1446,15 @@ const MessageBubble = memo(
     // Note: Compare thinking array length to detect updates (for executor tasks)
     const prevThinkingLen = Array.isArray(prevProps.msg.thinking)
       ? prevProps.msg.thinking.length
-      : 0;
+      : 0
     const nextThinkingLen = Array.isArray(nextProps.msg.thinking)
       ? nextProps.msg.thinking.length
-      : 0;
+      : 0
 
     const prevSourcesLen =
-      prevProps.msg.sources?.length || prevProps.msg.result?.sources?.length || 0;
+      prevProps.msg.sources?.length || prevProps.msg.result?.sources?.length || 0
     const nextSourcesLen =
-      nextProps.msg.sources?.length || nextProps.msg.result?.sources?.length || 0;
+      nextProps.msg.sources?.length || nextProps.msg.result?.sources?.length || 0
 
     const shouldSkipRender =
       prevProps.msg.content === nextProps.msg.content &&
@@ -1461,10 +1472,10 @@ const MessageBubble = memo(
       prevProps.isCurrentUserMessage === nextProps.isCurrentUserMessage &&
       prevProps.onRetry === nextProps.onRetry &&
       prevThinkingLen === nextThinkingLen &&
-      prevSourcesLen === nextSourcesLen;
+      prevSourcesLen === nextSourcesLen
 
-    return shouldSkipRender;
+    return shouldSkipRender
   }
-);
+)
 
-export default MessageBubble;
+export default MessageBubble

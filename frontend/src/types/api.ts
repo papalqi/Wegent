@@ -271,6 +271,8 @@ export interface TaskDetail {
   team: Team
   subtasks: TaskDetailSubtask[]
   workbench?: WorkbenchData | null
+  /** App preview information (set by expose_service tool when service starts) */
+  app?: TaskApp | null
   model_id?: string | null // Model name used for this task
   is_group_chat?: boolean // Whether this task is a group chat
   is_group_owner?: boolean // Whether current user is the group owner

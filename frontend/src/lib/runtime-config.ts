@@ -23,6 +23,28 @@ export interface RuntimeConfig {
   enableChatContext: boolean
   /** Enable Code Shell resume semantics (Codex resume_session_id, ClaudeCode session_id reuse) */
   codeShellResumeEnabled: boolean
+  /** Documentation URL (opened in new tab) */
+  docsUrl: string
+  /** Feedback URL (opened in new tab) */
+  feedbackUrl: string
+  /** VSCode deep link template (optional) */
+  vscodeLinkTemplate: string
+  /** Enable Wiki module */
+  enableWiki: boolean
+  /** Enable "Add Repo" in Code Knowledge */
+  enableCodeKnowledgeAddRepo: boolean
+  /** Enable quota usage display */
+  enableDisplayQuotas: boolean
+  /** Login mode */
+  loginMode: 'password' | 'oidc' | 'all'
+  /** OIDC login button text override */
+  oidcLoginText: string
+  /** Enable OpenTelemetry tracing in frontend */
+  otelEnabled: boolean
+  /** OpenTelemetry service name */
+  otelServiceName: string
+  /** OTEL collector HTTP endpoint (e.g. http://otel-collector:4318) */
+  otelCollectorEndpoint: string
 }
 
 // Cache for runtime config to avoid repeated API calls
@@ -65,6 +87,26 @@ export const fetchRuntimeConfig = async (): Promise<RuntimeConfig> => {
         enableChatContext: process.env.NEXT_PUBLIC_ENABLE_CHAT_CONTEXT === 'true',
         codeShellResumeEnabled:
           process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED?.toLowerCase() !== 'false',
+        docsUrl:
+          process.env.NEXT_PUBLIC_DOCS_URL || 'https://github.com/wecode-ai/wegent/tree/main/docs',
+        feedbackUrl:
+          process.env.NEXT_PUBLIC_FEEDBACK_URL || 'https://github.com/wecode-ai/wegent/issues/new',
+        vscodeLinkTemplate: process.env.NEXT_PUBLIC_VSCODE_LINK_TEMPLATE || '',
+        enableWiki: process.env.NEXT_PUBLIC_ENABLE_WIKI === 'true',
+        enableCodeKnowledgeAddRepo:
+          process.env.NEXT_PUBLIC_ENABLE_CODE_KNOWLEDGE_ADD_REPO?.toLowerCase() !== 'false',
+        enableDisplayQuotas:
+          (process.env.NEXT_PUBLIC_FRONTEND_ENABLE_DISPLAY_QUOTAS || '').toLowerCase() === 'enable',
+        loginMode: (() => {
+          const mode = (process.env.NEXT_PUBLIC_LOGIN_MODE || 'all').toLowerCase()
+          if (mode === 'password' || mode === 'oidc' || mode === 'all') return mode
+          return 'all'
+        })(),
+        oidcLoginText: process.env.NEXT_PUBLIC_OIDC_LOGIN_TEXT || '',
+        otelEnabled: process.env.NEXT_PUBLIC_OTEL_ENABLED === 'true',
+        otelServiceName: process.env.NEXT_PUBLIC_OTEL_SERVICE_NAME || 'wegent-frontend',
+        otelCollectorEndpoint:
+          process.env.NEXT_PUBLIC_OTEL_COLLECTOR_ENDPOINT || 'http://localhost:4318',
       }
       runtimeConfigCache = fallback
       return fallback
@@ -91,6 +133,26 @@ export const getRuntimeConfigSync = (): RuntimeConfig => {
     enableChatContext: process.env.NEXT_PUBLIC_ENABLE_CHAT_CONTEXT === 'true',
     codeShellResumeEnabled:
       process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED?.toLowerCase() !== 'false',
+    docsUrl:
+      process.env.NEXT_PUBLIC_DOCS_URL || 'https://github.com/wecode-ai/wegent/tree/main/docs',
+    feedbackUrl:
+      process.env.NEXT_PUBLIC_FEEDBACK_URL || 'https://github.com/wecode-ai/wegent/issues/new',
+    vscodeLinkTemplate: process.env.NEXT_PUBLIC_VSCODE_LINK_TEMPLATE || '',
+    enableWiki: process.env.NEXT_PUBLIC_ENABLE_WIKI === 'true',
+    enableCodeKnowledgeAddRepo:
+      process.env.NEXT_PUBLIC_ENABLE_CODE_KNOWLEDGE_ADD_REPO?.toLowerCase() !== 'false',
+    enableDisplayQuotas:
+      (process.env.NEXT_PUBLIC_FRONTEND_ENABLE_DISPLAY_QUOTAS || '').toLowerCase() === 'enable',
+    loginMode: (() => {
+      const mode = (process.env.NEXT_PUBLIC_LOGIN_MODE || 'all').toLowerCase()
+      if (mode === 'password' || mode === 'oidc' || mode === 'all') return mode
+      return 'all'
+    })(),
+    oidcLoginText: process.env.NEXT_PUBLIC_OIDC_LOGIN_TEXT || '',
+    otelEnabled: process.env.NEXT_PUBLIC_OTEL_ENABLED === 'true',
+    otelServiceName: process.env.NEXT_PUBLIC_OTEL_SERVICE_NAME || 'wegent-frontend',
+    otelCollectorEndpoint:
+      process.env.NEXT_PUBLIC_OTEL_COLLECTOR_ENDPOINT || 'http://localhost:4318',
   }
 }
 

@@ -31,6 +31,26 @@ export async function GET() {
     return value.toLowerCase() === 'true'
   }
 
+  const parseEnableFlag = (value: string | undefined, defaultValue: boolean): boolean => {
+    if (value === undefined || value === '') return defaultValue
+    const normalized = value.toLowerCase()
+    if (normalized === 'enable' || normalized === 'enabled') return true
+    if (normalized === 'disable' || normalized === 'disabled') return false
+    return parseBoolean(value, defaultValue)
+  }
+
+  const parseLoginMode = (
+    value: string | undefined,
+    defaultValue: 'password' | 'oidc' | 'all'
+  ): 'password' | 'oidc' | 'all' => {
+    if (!value) return defaultValue
+    const normalized = value.toLowerCase()
+    if (normalized === 'password' || normalized === 'oidc' || normalized === 'all') {
+      return normalized
+    }
+    return defaultValue
+  }
+
   return NextResponse.json({
     // Backend API URL for browser
     // Empty string = use '/api' proxy mode (recommended)
@@ -53,5 +73,47 @@ export async function GET() {
       process.env.CODE_SHELL_RESUME_ENABLED,
       parseBoolean(process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED, true)
     ),
+
+    // UI/runtime feature toggles and links
+    docsUrl:
+      process.env.RUNTIME_DOCS_URL ||
+      process.env.NEXT_PUBLIC_DOCS_URL ||
+      'https://github.com/wecode-ai/wegent/tree/main/docs',
+    feedbackUrl:
+      process.env.RUNTIME_FEEDBACK_URL ||
+      process.env.NEXT_PUBLIC_FEEDBACK_URL ||
+      'https://github.com/wecode-ai/wegent/issues/new',
+    vscodeLinkTemplate:
+      process.env.RUNTIME_VSCODE_LINK_TEMPLATE ||
+      process.env.NEXT_PUBLIC_VSCODE_LINK_TEMPLATE ||
+      '',
+
+    // Module toggles
+    enableWiki: parseBoolean(
+      process.env.RUNTIME_ENABLE_WIKI,
+      parseBoolean(process.env.NEXT_PUBLIC_ENABLE_WIKI, false)
+    ),
+    enableCodeKnowledgeAddRepo: parseBoolean(
+      process.env.RUNTIME_ENABLE_CODE_KNOWLEDGE_ADD_REPO,
+      parseBoolean(process.env.NEXT_PUBLIC_ENABLE_CODE_KNOWLEDGE_ADD_REPO, true)
+    ),
+    enableDisplayQuotas: parseEnableFlag(
+      process.env.RUNTIME_FRONTEND_ENABLE_DISPLAY_QUOTAS ||
+        process.env.NEXT_PUBLIC_FRONTEND_ENABLE_DISPLAY_QUOTAS,
+      false
+    ),
+
+    // Login UI
+    loginMode: parseLoginMode(
+      process.env.RUNTIME_LOGIN_MODE || process.env.NEXT_PUBLIC_LOGIN_MODE,
+      'all'
+    ),
+    oidcLoginText:
+      process.env.RUNTIME_OIDC_LOGIN_TEXT || process.env.NEXT_PUBLIC_OIDC_LOGIN_TEXT || '',
+
+    // OpenTelemetry (frontend)
+    otelEnabled: parseBoolean(process.env.RUNTIME_OTEL_ENABLED, false),
+    otelServiceName: process.env.RUNTIME_OTEL_SERVICE_NAME || 'wegent-frontend',
+    otelCollectorEndpoint: process.env.RUNTIME_OTEL_COLLECTOR_ENDPOINT || 'http://localhost:4318',
   })
 }

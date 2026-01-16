@@ -72,6 +72,9 @@ type TaskContextType = {
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined)
 
+// Minimum time the page must be hidden before triggering auto-refresh.
+const MIN_HIDDEN_DURATION_MS = 30_000
+
 // Export the context so it can be used with useContext directly
 export { TaskContext }
 
@@ -102,6 +105,7 @@ export const TaskContextProvider = ({ children }: { children: ReactNode }) => {
   // Track previous task ID for leaving WebSocket room when switching tasks
   const previousTaskIdRef = useRef<number | null>(null)
   const lastFocusRefreshAtRef = useRef<number>(0)
+  const isAutoRefreshingRef = useRef(false)
 
   // Pagination related - legacy combined list
   const [hasMore, setHasMore] = useState(true)

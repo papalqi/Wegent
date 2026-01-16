@@ -27,6 +27,7 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { taskApis, BranchDiffResponse } from '@/apis/tasks'
 import DiffViewer from '../message/DiffViewer'
 import { TaskContainerStatusBadge } from '../container-status/TaskContainerStatusBadge'
+import type { TaskApp } from '@/types/api'
 
 // Tool icon mapping
 const TOOL_ICONS: Record<string, string> = {

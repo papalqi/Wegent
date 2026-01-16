@@ -176,6 +176,10 @@ export interface ChatChunkPayload {
     workbench?: Record<string, unknown>
     /** Shell type for frontend display (Chat, ClaudeCode, Agno, etc.) */
     shell_type?: string
+    /** Incremental reasoning chunk from chat shell */
+    reasoning_chunk?: string
+    /** Full accumulated reasoning content (e.g. Agno executor) */
+    reasoning_content?: string
     /** Single Codex event (or batch) streamed during execution */
     codex_event?: unknown
     /** Raw Codex event stream list (persisted on backend for refresh replay) */

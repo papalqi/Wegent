@@ -1393,7 +1393,7 @@ const BotEditInner: React.ForwardRefRenderFunction<BotEditRef, BotEditProps> = (
               )}
 
               {/* Preload Skills Selection - Hidden from UI (kept for future use) */}
-              {false && supportsPreloadSkills && initialBotSkills.length > 0 && (
+              {false && initialBotSkills.length > 0 && (
                 <div className="flex flex-col">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center">
