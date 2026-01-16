@@ -24,6 +24,10 @@ from shared.telemetry.config import get_otel_config
 from shared.telemetry.context import (set_request_context, set_task_context,
                                       set_user_context)
 
+from executor_manager.common.config import ROUTE_PREFIX
+from executor_manager.clients.task_api_client import TaskApiClient
+from executor_manager.tasks.task_processor import TaskProcessor
+
 # Setup logger
 logger = setup_logger(__name__)
 

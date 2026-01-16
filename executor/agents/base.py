@@ -129,17 +129,6 @@ class Agent:
         logger.info(
             f"Reporting progress: {progress}%, status: {status}, message: {message}, result: {result}, task_type: {self.task_type}"
         )
-        self.callback_client.send_callback(
-            task_id=self.task_id,
-            subtask_id=self.subtask_id,
-            task_title=self.task_title,
-            subtask_title=self.subtask_title,
-            progress=progress,
-            status=status,
-            message=message,
-            result=result,
-            task_type=self.task_type,
-        )
         try:
             self.callback_client.send_callback(
                 task_id=self.task_id,

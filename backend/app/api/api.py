@@ -12,6 +12,7 @@ from app.api.endpoints import (
     oidc,
     openapi_responses,
     pr_actions,
+    projects,
     quota,
     rag,
     repository,

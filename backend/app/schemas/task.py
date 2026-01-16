@@ -217,3 +217,39 @@ class TaskExecutorContainerStatus(BaseModel):
 
 class TaskExecutorContainerStatusBatchResponse(BaseModel):
     items: List[TaskExecutorContainerStatus]
+
+
+class PipelineStage(BaseModel):
+    """Pipeline stage details for pipeline collaboration mode."""
+
+    index: int
+    name: str
+    require_confirmation: bool = False
+    status: str = "pending"
+
+
+class PipelineStageInfo(BaseModel):
+    """Pipeline stage information for a task in pipeline collaboration mode."""
+
+    current_stage: int = 0
+    total_stages: int = 1
+    current_stage_name: str = "default"
+    is_pending_confirmation: bool = False
+    stages: List[PipelineStage] = []
+
+
+class ConfirmStageRequest(BaseModel):
+    """Request to confirm a pipeline stage and proceed or retry."""
+
+    confirmed_prompt: str
+    action: str = "continue"
+
+
+class ConfirmStageResponse(BaseModel):
+    """Response after confirming a pipeline stage."""
+
+    message: str
+    task_id: int
+    current_stage: int
+    total_stages: int
+    next_stage_name: Optional[str] = None

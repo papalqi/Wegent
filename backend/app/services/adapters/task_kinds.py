@@ -2337,6 +2337,14 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             else False
         )
 
+        # Extract app preview information from task status (set by expose_service tool)
+        status_data = (
+            task_crd.status.model_dump(mode="json", exclude_none=True)
+            if task_crd.status
+            else None
+        )
+        app_data = status_data.get("app") if status_data else None
+
         status = task_crd.status.status if task_crd.status else "PENDING"
         error_message = None
         if task_crd.status and status in ["FAILED", "CANCELLED"]:
