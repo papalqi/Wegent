@@ -2,62 +2,62 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-'use client';
+'use client'
 
-import { useMemo, useState, useEffect } from 'react';
-import { ChevronDownIcon, ChevronRightIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
-import { BranchDiffResponse, GitDiffFile } from '@/apis/tasks';
-import { useTranslation } from '@/hooks/useTranslation';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Tag } from '@/components/ui/tag';
-import { cn } from '@/lib/utils';
+import { useMemo, useState, useEffect } from 'react'
+import { ChevronDownIcon, ChevronRightIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
+import { BranchDiffResponse, GitDiffFile } from '@/apis/tasks'
+import { useTranslation } from '@/hooks/useTranslation'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Tag } from '@/components/ui/tag'
+import { cn } from '@/lib/utils'
 
 interface FileChange {
-  old_path: string;
-  new_path: string;
-  new_file: boolean;
-  renamed_file: boolean;
-  deleted_file: boolean;
-  added_lines: number;
-  removed_lines: number;
-  diff_title: string;
+  old_path: string
+  new_path: string
+  new_file: boolean
+  renamed_file: boolean
+  deleted_file: boolean
+  added_lines: number
+  removed_lines: number
+  diff_title: string
 }
 
 interface DiffViewerProps {
-  diffData: BranchDiffResponse | null;
-  isLoading?: boolean;
-  gitType: 'github' | 'gitlab';
-  fileChanges?: FileChange[];
-  showDiffContent?: boolean;
+  diffData: BranchDiffResponse | null
+  isLoading?: boolean
+  gitType: 'github' | 'gitlab'
+  fileChanges?: FileChange[]
+  showDiffContent?: boolean
 }
 
 interface DiffFile {
-  filename: string;
-  status: 'added' | 'removed' | 'modified' | 'renamed';
-  additions: number;
-  deletions: number;
-  changes: number;
-  diff: string;
-  oldPath?: string;
-  newPath?: string;
-  isExpanded: boolean;
+  filename: string
+  status: 'added' | 'removed' | 'modified' | 'renamed'
+  additions: number
+  deletions: number
+  changes: number
+  diff: string
+  oldPath?: string
+  newPath?: string
+  isExpanded: boolean
 }
 
 function _getStatusIcon(status: string) {
-  const iconClasses = 'w-4 h-4';
+  const iconClasses = 'w-4 h-4'
   switch (status) {
     case 'added':
-      return <DocumentTextIcon className={`${iconClasses} text-success`} />;
+      return <DocumentTextIcon className={`${iconClasses} text-success`} />
     case 'removed':
-      return <DocumentTextIcon className={`${iconClasses} text-error`} />;
+      return <DocumentTextIcon className={`${iconClasses} text-error`} />
     case 'modified':
-      return <DocumentTextIcon className={`${iconClasses} text-primary`} />;
+      return <DocumentTextIcon className={`${iconClasses} text-primary`} />
     case 'renamed':
-      return <DocumentTextIcon className={`${iconClasses} text-text-secondary`} />;
+      return <DocumentTextIcon className={`${iconClasses} text-text-secondary`} />
     default:
-      return <DocumentTextIcon className={`${iconClasses} text-text-muted`} />;
+      return <DocumentTextIcon className={`${iconClasses} text-text-muted`} />
   }
 }
 
@@ -78,7 +78,7 @@ function normalizeFileChanges(fileChanges: FileChange[]): DiffFile[] {
     oldPath: change.old_path,
     newPath: change.new_path,
     isExpanded: false,
-  }));
+  }))
 }
 
 function normalizeGitFiles(files: GitDiffFile[]): DiffFile[] {
@@ -99,15 +99,15 @@ function normalizeGitFiles(files: GitDiffFile[]): DiffFile[] {
     oldPath: file.previous_filename,
     newPath: file.filename,
     isExpanded: false,
-  }));
+  }))
 }
 
 function renderDiffContent(diff: string) {
-  if (!diff) return null;
+  if (!diff) return null
 
-  const lines = diff.split(/\r?\n/);
+  const lines = diff.split(/\r?\n/)
   return lines.map((line, index) => {
-    const isHunk = line.startsWith('@@');
+    const isHunk = line.startsWith('@@')
     const isMeta =
       line.startsWith('diff ') ||
       line.startsWith('index ') ||
@@ -116,14 +116,14 @@ function renderDiffContent(diff: string) {
       line.startsWith('new file mode') ||
       line.startsWith('deleted file mode') ||
       line.startsWith('rename from') ||
-      line.startsWith('rename to');
+      line.startsWith('rename to')
 
-    const isAdd = !isHunk && !isMeta && line.startsWith('+');
-    const isRemove = !isHunk && !isMeta && line.startsWith('-');
-    const isContext = !isHunk && !isMeta && line.startsWith(' ');
+    const isAdd = !isHunk && !isMeta && line.startsWith('+')
+    const isRemove = !isHunk && !isMeta && line.startsWith('-')
+    const isContext = !isHunk && !isMeta && line.startsWith(' ')
 
-    const prefix = isAdd ? '+' : isRemove ? '-' : isContext ? ' ' : '';
-    const content = prefix ? line.slice(1) : line;
+    const prefix = isAdd ? '+' : isRemove ? '-' : isContext ? ' ' : ''
+    const content = prefix ? line.slice(1) : line
 
     const lineClass = cn(
       'text-text-primary',
@@ -132,7 +132,7 @@ function renderDiffContent(diff: string) {
       isAdd && 'text-success bg-success/10',
       isRemove && 'text-error bg-error/10',
       isContext && 'text-text-secondary'
-    );
+    )
 
     return (
       <div key={index} className={cn('flex text-xs font-mono', lineClass)}>
@@ -142,8 +142,8 @@ function renderDiffContent(diff: string) {
         <span className="flex-shrink-0 w-4 text-right pr-2 select-none">{prefix}</span>
         <span className="flex-1 whitespace-pre break-words">{content}</span>
       </div>
-    );
-  });
+    )
+  })
 }
 
 export default function DiffViewer({
@@ -152,53 +152,53 @@ export default function DiffViewer({
   fileChanges,
   showDiffContent = true,
 }: DiffViewerProps) {
-  const [diffFiles, setDiffFiles] = useState<DiffFile[]>([]);
-  const [fileQuery, setFileQuery] = useState('');
-  const { t } = useTranslation();
+  const [diffFiles, setDiffFiles] = useState<DiffFile[]>([])
+  const [fileQuery, setFileQuery] = useState('')
+  const { t } = useTranslation()
 
   // Normalize diff data when it changes
   useEffect(() => {
     if (fileChanges && fileChanges.length > 0) {
       // Use simple file changes without diff content
-      setDiffFiles(normalizeFileChanges(fileChanges));
+      setDiffFiles(normalizeFileChanges(fileChanges))
     } else if (diffData) {
       if (diffData.files) {
-        setDiffFiles(normalizeGitFiles(diffData.files));
+        setDiffFiles(normalizeGitFiles(diffData.files))
       }
     }
-  }, [diffData, fileChanges]);
+  }, [diffData, fileChanges])
 
   const toggleFile = (index: number) => {
     setDiffFiles(prev =>
       prev.map((file, i) => (i === index ? { ...file, isExpanded: !file.isExpanded } : file))
-    );
-  };
+    )
+  }
 
   const filteredEntries = useMemo(() => {
-    const q = fileQuery.trim().toLowerCase();
+    const q = fileQuery.trim().toLowerCase()
     return diffFiles
       .map((file, index) => ({ file, index }))
-      .filter(({ file }) => (q ? file.filename.toLowerCase().includes(q) : true));
-  }, [diffFiles, fileQuery]);
+      .filter(({ file }) => (q ? file.filename.toLowerCase().includes(q) : true))
+  }, [diffFiles, fileQuery])
 
-  const visibleFiles = useMemo(() => filteredEntries.map(e => e.file), [filteredEntries]);
+  const visibleFiles = useMemo(() => filteredEntries.map(e => e.file), [filteredEntries])
   const expandableIndices = useMemo(
     () => filteredEntries.filter(e => Boolean(e.file.diff)).map(e => e.index),
     [filteredEntries]
-  );
+  )
   const expandAllVisible = (expanded: boolean) => {
-    const set = new Set(expandableIndices);
+    const set = new Set(expandableIndices)
     setDiffFiles(prev =>
       prev.map((file, i) => (set.has(i) ? { ...file, isExpanded: expanded } : file))
-    );
-  };
+    )
+  }
 
-  const totalAdditions = visibleFiles.reduce((sum, file) => sum + file.additions, 0);
-  const totalDeletions = visibleFiles.reduce((sum, file) => sum + file.deletions, 0);
-  const totalChanges = visibleFiles.reduce((sum, file) => sum + file.changes, 0);
+  const totalAdditions = visibleFiles.reduce((sum, file) => sum + file.additions, 0)
+  const totalDeletions = visibleFiles.reduce((sum, file) => sum + file.deletions, 0)
+  const totalChanges = visibleFiles.reduce((sum, file) => sum + file.changes, 0)
   const allExpanded =
-    expandableIndices.length > 0 && expandableIndices.every(i => Boolean(diffFiles[i]?.isExpanded));
-  const hasDiffContent = visibleFiles.some(file => Boolean(file.diff));
+    expandableIndices.length > 0 && expandableIndices.every(i => Boolean(diffFiles[i]?.isExpanded))
+  const hasDiffContent = visibleFiles.some(file => Boolean(file.diff))
 
   if (isLoading) {
     return (
@@ -206,7 +206,7 @@ export default function DiffViewer({
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         <span className="ml-3 text-text-muted">{t('tasks:workbench.loading_diff_message')}</span>
       </div>
-    );
+    )
   }
 
   if ((!diffData && !fileChanges) || diffFiles.length === 0) {
@@ -214,7 +214,7 @@ export default function DiffViewer({
       <div className="rounded-lg border border-border bg-surface p-8 text-center">
         <p className="text-text-muted">{t('tasks:workbench.no_changes_found')}</p>
       </div>
-    );
+    )
   }
 
   return (
@@ -281,12 +281,12 @@ export default function DiffViewer({
           </div>
         ) : (
           filteredEntries.map(({ file, index }) => {
-            const totalFileChanges = file.additions + file.deletions;
+            const totalFileChanges = file.additions + file.deletions
             const addedPercent =
-              totalFileChanges > 0 ? (file.additions / totalFileChanges) * 100 : 0;
+              totalFileChanges > 0 ? (file.additions / totalFileChanges) * 100 : 0
             const removedPercent =
-              totalFileChanges > 0 ? (file.deletions / totalFileChanges) * 100 : 0;
-            const isToggleable = Boolean(showDiffContent && file.diff);
+              totalFileChanges > 0 ? (file.deletions / totalFileChanges) * 100 : 0
+            const isToggleable = Boolean(showDiffContent && file.diff)
 
             return (
               <div
@@ -383,10 +383,10 @@ export default function DiffViewer({
                   </div>
                 )}
               </div>
-            );
+            )
           })
         )}
       </div>
     </div>
-  );
+  )
 }

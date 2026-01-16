@@ -22,14 +22,14 @@
  * - RUNTIME_INTERNAL_API_URL is not needed in this case
  */
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server'
 
 export async function GET() {
   // Helper to parse boolean env vars
   const parseBoolean = (value: string | undefined, defaultValue: boolean): boolean => {
-    if (value === undefined || value === '') return defaultValue;
-    return value.toLowerCase() === 'true';
-  };
+    if (value === undefined || value === '') return defaultValue
+    return value.toLowerCase() === 'true'
+  }
 
   return NextResponse.json({
     // Backend API URL for browser
@@ -53,5 +53,5 @@ export async function GET() {
       process.env.CODE_SHELL_RESUME_ENABLED,
       parseBoolean(process.env.NEXT_PUBLIC_CODE_SHELL_RESUME_ENABLED, true)
     ),
-  });
+  })
 }

@@ -7,20 +7,22 @@ services:
     image: mysql:9.4
     container_name: wegent-mysql
     restart: always
+    command:
+      - --sort_buffer_size=16M
     environment:
-      MYSQL_ROOT_PASSWORD: 123456
-      MYSQL_DATABASE: task_manager
-      MYSQL_USER: task_user
-      MYSQL_PASSWORD: task_password
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-task_manager}
+      MYSQL_USER: ${MYSQL_USER:-task_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-task_password}
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/conf.d/wegent.cnf:/etc/mysql/conf.d/wegent.cnf:ro
     networks:
       - wegent-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-123456}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -38,7 +40,7 @@ services:
       - |
           exec redis-server --requirepass "$$REDIS_PASSWORD"
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -59,9 +61,9 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms1g -Xmx1g}"
     ports:
-      - "9200:9200"
+      - "${ES_PORT:-9200}:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
     networks:
@@ -80,9 +82,10 @@ services:
     container_name: wegent-backend
     restart: always
     ports:
-      - "8000:8000"
-    volumes:
-      - ./backend/init_data:/app/init_data:ro
+      - "${BACKEND_PORT:-8000}:8000"
+    # volumes:
+      # To customize init data, uncomment the following line to override the built-in data:
+      # - ./custom_init_data:/app/init_data:ro
     environment:
       ENVIRONMENT: development
       CODEX_SHELL_ENABLED: "${CODEX_SHELL_ENABLED:-true}"
@@ -126,14 +129,59 @@ services:
     ports:
       - "${WEGENT_FRONTEND_PORT:-3000}:3000"
     environment:
-      - NODE_ENV=production
-      - RUNTIME_INTERNAL_API_URL=http://backend:8000
-      - RUNTIME_SOCKET_DIRECT_URL=http://localhost:8000
+      - NODE_ENV=${NODE_ENV:-production}
+      # API Configuration
+      - RUNTIME_INTERNAL_API_URL=${RUNTIME_INTERNAL_API_URL:-http://backend:8000}
+      - RUNTIME_SOCKET_DIRECT_URL=${WEGENT_SOCKET_URL:-http://localhost:8000}
+      # Feature Flags
+      # - RUNTIME_ENABLE_CHAT_CONTEXT=false
+      # - RUNTIME_LOGIN_MODE=all
+      # - RUNTIME_OIDC_LOGIN_TEXT=
+      # - RUNTIME_ENABLE_DISPLAY_QUOTAS=enable
+      # - RUNTIME_ENABLE_WIKI=true
+      # URLs
+      # - RUNTIME_VSCODE_LINK_TEMPLATE=
+      # - RUNTIME_FEEDBACK_URL=https://github.com/wecode-ai/wegent/issues/new
+      # - RUNTIME_DOCS_URL=https://github.com/wecode-ai/Wegent
+      # OpenTelemetry Configuration (uncomment to enable)
+      # - RUNTIME_OTEL_ENABLED=false
+      # - RUNTIME_OTEL_SERVICE_NAME=wegent-frontend
+      # - RUNTIME_OTEL_COLLECTOR_ENDPOINT=http://localhost:4318
     working_dir: /app
     depends_on:
       - backend
     networks:
       - wegent-network
+
+  chat_shell:
+    image: ghcr.io/wecode-ai/wegent-chat-shell:latest
+    pull_policy: always
+    container_name: wegent-chat-shell
+    restart: always
+    ports:
+      - "${CHAT_SHELL_PORT:-8100}:8100"
+    environment:
+      - PORT=${CHAT_SHELL_PORT:-8100}
+      - HOST=${CHAT_SHELL_HOST:-0.0.0.0}
+      - CHAT_SHELL_MODE=${CHAT_SHELL_MODE:-http}
+      - CHAT_SHELL_STORAGE_TYPE=${CHAT_SHELL_STORAGE_TYPE:-remote}
+      - CHAT_SHELL_REMOTE_STORAGE_URL=${CHAT_SHELL_REMOTE_STORAGE_URL:-http://backend:8000/api/internal}
+      - EXECUTOR_MANAGER_URL=${EXECUTOR_MANAGER_URL:-http://executor_manager:8001}
+      # - CHAT_SHELL_REMOTE_STORAGE_TOKEN=${INTERNAL_SERVICE_TOKEN:-chat-shell-token}
+      # OpenTelemetry Configuration (uncomment to enable)
+      # - OTEL_ENABLED=true
+      # - OTEL_SERVICE_NAME=wegent-chat-shell
+      # - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+    depends_on:
+      - backend
+    networks:
+      - wegent-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   executor_manager:
     #build:
@@ -144,7 +192,7 @@ services:
     container_name: wegent-executor-manager
     restart: always
     ports:
-      - "8001:8001"
+      - "${EXECUTOR_MANAGER_PORT:-8001}:8001"
     environment:
       - TZ=Asia/Shanghai
       - TASK_API_DOMAIN=http://backend:8000
@@ -166,6 +214,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - backend
+      - redis
     networks:
       - wegent-network
 

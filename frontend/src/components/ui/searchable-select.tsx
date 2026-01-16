@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-'use client';
+'use client'
 
-import * as React from 'react';
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import * as React from 'react'
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import {
   Command,
   CommandEmpty,
@@ -14,50 +14,50 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+} from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 export interface SearchableSelectItem {
-  value: string;
-  label: string;
-  searchText?: string; // Optional custom search text
-  disabled?: boolean;
-  content?: React.ReactNode; // Custom content for the item
+  value: string
+  label: string
+  searchText?: string // Optional custom search text
+  disabled?: boolean
+  content?: React.ReactNode // Custom content for the item
 }
 
 export interface SearchableSelectGroup {
-  key: string;
-  label: string;
-  items: SearchableSelectItem[];
-  defaultOpen?: boolean;
+  key: string
+  label: string
+  items: SearchableSelectItem[]
+  defaultOpen?: boolean
 }
 
 type TriggerButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  [key: `data-${string}`]: string | number | boolean | undefined;
-};
+  [key: `data-${string}`]: string | number | boolean | undefined
+}
 
 interface SearchableSelectProps {
-  value?: string;
-  onValueChange?: (value: string) => void;
-  onSearchChange?: (value: string) => void; // Callback for search text changes (for server-side search)
-  disabled?: boolean;
-  placeholder?: string;
-  searchPlaceholder?: string;
-  items?: SearchableSelectItem[];
-  groups?: SearchableSelectGroup[];
-  loading?: boolean;
-  error?: string | null;
-  emptyText?: string;
-  noMatchText?: string;
-  className?: string;
-  contentClassName?: string;
-  triggerClassName?: string;
-  triggerProps?: TriggerButtonProps;
-  renderTriggerValue?: (item: SearchableSelectItem | undefined) => React.ReactNode;
-  footer?: React.ReactNode;
-  listFooter?: React.ReactNode; // Content rendered at the end of the list (after items, before footer)
-  showChevron?: boolean; // Whether to show chevron icon
-  defaultOpen?: boolean; // Whether to open the dropdown by default
+  value?: string
+  onValueChange?: (value: string) => void
+  onSearchChange?: (value: string) => void // Callback for search text changes (for server-side search)
+  disabled?: boolean
+  placeholder?: string
+  searchPlaceholder?: string
+  items?: SearchableSelectItem[]
+  groups?: SearchableSelectGroup[]
+  loading?: boolean
+  error?: string | null
+  emptyText?: string
+  noMatchText?: string
+  className?: string
+  contentClassName?: string
+  triggerClassName?: string
+  triggerProps?: TriggerButtonProps
+  renderTriggerValue?: (item: SearchableSelectItem | undefined) => React.ReactNode
+  footer?: React.ReactNode
+  listFooter?: React.ReactNode // Content rendered at the end of the list (after items, before footer)
+  showChevron?: boolean // Whether to show chevron icon
+  defaultOpen?: boolean // Whether to open the dropdown by default
 }
 
 export function SearchableSelect({
@@ -83,63 +83,63 @@ export function SearchableSelect({
   showChevron = false,
   defaultOpen = false,
 }: SearchableSelectProps) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-  const [searchValue, setSearchValue] = React.useState('');
+  const [isOpen, setIsOpen] = React.useState(defaultOpen)
+  const [searchValue, setSearchValue] = React.useState('')
 
   const defaultOpenGroupKeys = React.useMemo(() => {
-    if (!groups) return new Set<string>();
-    return new Set(groups.filter(g => g.defaultOpen).map(g => g.key));
-  }, [groups]);
+    if (!groups) return new Set<string>()
+    return new Set(groups.filter(g => g.defaultOpen).map(g => g.key))
+  }, [groups])
 
-  const [openGroupKeys, setOpenGroupKeys] = React.useState<Set<string>>(defaultOpenGroupKeys);
+  const [openGroupKeys, setOpenGroupKeys] = React.useState<Set<string>>(defaultOpenGroupKeys)
 
   React.useEffect(() => {
-    setOpenGroupKeys(defaultOpenGroupKeys);
-  }, [defaultOpenGroupKeys]);
+    setOpenGroupKeys(defaultOpenGroupKeys)
+  }, [defaultOpenGroupKeys])
 
   const resolvedItems = React.useMemo(() => {
-    if (!groups) return items;
-    return groups.flatMap(g => g.items);
-  }, [groups, items]);
+    if (!groups) return items
+    return groups.flatMap(g => g.items)
+  }, [groups, items])
 
   // Find selected item
   const selectedItem = React.useMemo(() => {
-    return resolvedItems.find(item => item.value === value);
-  }, [resolvedItems, value]);
+    return resolvedItems.find(item => item.value === value)
+  }, [resolvedItems, value])
 
   const handleSelect = (currentValue: string) => {
-    onValueChange?.(currentValue);
-    setIsOpen(false);
-  };
+    onValueChange?.(currentValue)
+    setIsOpen(false)
+  }
 
   const handleSearchValueChange = (search: string) => {
-    setSearchValue(search);
-    onSearchChange?.(search);
-  };
+    setSearchValue(search)
+    onSearchChange?.(search)
+  }
 
   // Reset search when popover closes
   React.useEffect(() => {
     if (!isOpen) {
-      setSearchValue('');
-      onSearchChange?.('');
-      setOpenGroupKeys(defaultOpenGroupKeys);
+      setSearchValue('')
+      onSearchChange?.('')
+      setOpenGroupKeys(defaultOpenGroupKeys)
     }
-  }, [isOpen, onSearchChange, defaultOpenGroupKeys]);
+  }, [isOpen, onSearchChange, defaultOpenGroupKeys])
 
   React.useEffect(() => {
-    if (!groups) return;
-    if (!searchValue) return;
-    setOpenGroupKeys(new Set(groups.map(g => g.key)));
-  }, [groups, searchValue]);
+    if (!groups) return
+    if (!searchValue) return
+    setOpenGroupKeys(new Set(groups.map(g => g.key)))
+  }, [groups, searchValue])
 
   const toggleGroup = (key: string) => {
     setOpenGroupKeys(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   return (
     <div className={className}>
@@ -201,7 +201,12 @@ export function SearchableSelect({
                 'placeholder:text-text-muted text-sm'
               )}
             />
-            <CommandList className="min-h-[36px] max-h-[200px] overflow-y-auto flex-1">
+            <CommandList
+              className="min-h-[36px] max-h-[200px] overflow-y-auto flex-1"
+              onWheel={e => {
+                e.stopPropagation()
+              }}
+            >
               {error ? (
                 <div className="py-4 px-3 text-center text-sm text-error">{error}</div>
               ) : resolvedItems.length === 0 ? (
@@ -218,7 +223,7 @@ export function SearchableSelect({
                   {groups ? (
                     <div className="py-1">
                       {groups.map(group => {
-                        const isGroupOpen = openGroupKeys.has(group.key) || !!searchValue;
+                        const isGroupOpen = openGroupKeys.has(group.key) || !!searchValue
                         return (
                           <div key={group.key} className="px-1">
                             <button
@@ -277,7 +282,7 @@ export function SearchableSelect({
                               </CommandGroup>
                             )}
                           </div>
-                        );
+                        )
                       })}
                     </div>
                   ) : (
@@ -326,5 +331,5 @@ export function SearchableSelect({
         </PopoverContent>
       </Popover>
     </div>
-  );
+  )
 }

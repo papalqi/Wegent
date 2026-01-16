@@ -140,6 +140,23 @@ class Agent:
             result=result,
             task_type=self.task_type,
         )
+        try:
+            self.callback_client.send_callback(
+                task_id=self.task_id,
+                subtask_id=self.subtask_id,
+                task_title=self.task_title,
+                subtask_title=self.subtask_title,
+                progress=progress,
+                status=status,
+                message=message,
+                result=result,
+                task_type=self.task_type,
+            )
+        except Exception as e:
+            logger.critical(
+                f"[CALLBACK_FAIL] task_id={self.task_id}, progress={progress}, "
+                f"status={status}, error={type(e).__name__}: {str(e)}"
+            )
 
     def pre_execute(self) -> TaskStatus:
         """

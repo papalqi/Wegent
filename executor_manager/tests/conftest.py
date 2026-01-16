@@ -5,6 +5,7 @@
 import os
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, Mock
 
 # Add parent directory to Python path to allow imports
 project_root = Path(__file__).parent.parent.parent

@@ -13,6 +13,14 @@ from app.schemas.team import TeamInDB
 from app.schemas.user import UserInDB
 
 
+class TaskApp(BaseModel):
+    """App preview information (set by expose_service tool when service starts)"""
+
+    name: str
+    address: str
+    previewUrl: str
+
+
 class TaskStatus(str, Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
@@ -21,6 +29,7 @@ class TaskStatus(str, Enum):
     CANCELLED = "CANCELLED"
     CANCELLING = "CANCELLING"
     DELETE = "DELETE"
+    PENDING_CONFIRMATION = "PENDING_CONFIRMATION"  # Pipeline stage completed, waiting for user confirmation
 
 
 class TaskBase(BaseModel):
@@ -147,6 +156,9 @@ class TaskDetail(BaseModel):
     is_group_chat: bool = False  # Whether this is a group chat task
     is_group_owner: bool = False  # Whether current user is the owner (for group chats)
     member_count: Optional[int] = None  # Number of members (for group chats)
+    app: Optional[TaskApp] = (
+        None  # App preview information (set by expose_service tool)
+    )
 
     class Config:
         from_attributes = True
