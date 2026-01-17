@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2025 WeCode, Inc.
+# SPDX-FileCopyrightText: 2025 Weibo, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -67,6 +67,13 @@ class TaskResource(Base):
         default=datetime.now,
         onupdate=datetime.now,
         comment="Update time",
+    )
+    project_id = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        index=True,
+        comment="Project ID for task grouping",
     )
 
     __table_args__ = (

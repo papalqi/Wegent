@@ -16,15 +16,17 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
 from app.models.kind import Kind
-from app.models.shared_team import SharedTeam
 from app.models.subtask import Subtask, SubtaskRole, SubtaskStatus
 from app.models.task import TaskResource
 from app.models.user import User
 from app.schemas.kind import Bot, Ghost, Model, Shell, Task, Team, Workspace
 from app.schemas.task import TaskCreate, TaskDetail, TaskInDB, TaskStatus, TaskUpdate
 from app.services.adapters.executor_kinds import executor_kinds_service
+from app.services.adapters.pipeline_stage import pipeline_stage_service
 from app.services.adapters.team_kinds import team_kinds_service
 from app.services.base import BaseService
+from app.services.readers.kinds import KindType, kindReader
+from app.services.readers.users import userReader
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +70,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             .filter(
                 TaskResource.id == task_id,
                 TaskResource.kind == "Task",
-                TaskResource.is_active == True,
+                TaskResource.is_active.is_(True),
             )
             .first()
         )
@@ -87,7 +89,12 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                     status_code=400,
                     detail=f"Task has {task_status.lower()}, please create a new task",
                 )
-            elif task_status not in ["COMPLETED", "FAILED", "CANCELLED"]:
+            elif task_status not in [
+                "COMPLETED",
+                "FAILED",
+                "CANCELLED",
+                "PENDING_CONFIRMATION",
+            ]:
                 raise HTTPException(
                     status_code=400,
                     detail="Task is in progress, please wait for it to complete",
@@ -136,14 +143,14 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             is_group_member = task_member_service.is_member(db, task_id, user.id)
 
             if is_group_member:
-                # Group chat member - get team without user ownership check
-                team = team_kinds_service.get_team_by_name_and_namespace_without_user_check(
-                    db, team_name, team_namespace
+                # Group chat member - get team using task owner's user_id
+                team = kindReader.get_by_name_and_namespace(
+                    db, existing_task.user_id, KindType.TEAM, team_namespace, team_name
                 )
             else:
-                # Regular user - check team ownership
-                team = team_kinds_service.get_team_by_name_and_namespace(
-                    db, team_name, team_namespace, user.id
+                # Regular user - check team ownership and permissions
+                team = kindReader.get_by_name_and_namespace(
+                    db, user.id, KindType.TEAM, team_namespace, team_name
                 )
 
             if not team:
@@ -162,13 +169,30 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             task = existing_task
         else:
             # Validate team exists and belongs to user
-            team = team_kinds_service.get_team_by_id_or_name_and_namespace(
-                db,
-                team_id=obj_in.team_id,
-                team_name=obj_in.team_name,
-                team_namespace=obj_in.team_namespace,
-                user_id=user.id,
-            )
+            if obj_in.team_id:
+                # Query by team_id first, then verify user has access
+                team_by_id = kindReader.get_by_id(db, KindType.TEAM, obj_in.team_id)
+                if team_by_id:
+                    # Verify user has access to this specific team
+                    team = kindReader.get_by_name_and_namespace(
+                        db,
+                        user.id,
+                        KindType.TEAM,
+                        team_by_id.namespace,
+                        team_by_id.name,
+                    )
+                    # Ensure the returned team is the same as requested
+                    if team and team.id != obj_in.team_id:
+                        team = None
+                else:
+                    team = None
+            elif obj_in.team_name and obj_in.team_namespace:
+                # Query by name and namespace
+                team = kindReader.get_by_name_and_namespace(
+                    db, user.id, KindType.TEAM, obj_in.team_namespace, obj_in.team_name
+                )
+            else:
+                team = None
 
             if not team:
                 raise HTTPException(
@@ -316,6 +340,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         Includes tasks owned by user AND tasks user is a member of (group chats).
         """
         # Use raw SQL to get task IDs where user is owner OR member
+        # Exclude system namespace tasks (background tasks)
         count_sql = text(
             """
             SELECT COUNT(DISTINCT k.id)
@@ -323,12 +348,14 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             LEFT JOIN task_members tm ON k.id = tm.task_id AND tm.user_id = :user_id AND tm.status = 'ACTIVE'
             WHERE k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
             AND (k.user_id = :user_id OR tm.id IS NOT NULL)
         """
         )
         total_result = db.execute(count_sql, {"user_id": user_id}).scalar()
 
         # Get task IDs sorted by created_at
+        # Exclude system namespace tasks (background tasks)
         ids_sql = text(
             """
             SELECT DISTINCT k.id, k.created_at
@@ -336,6 +363,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             LEFT JOIN task_members tm ON k.id = tm.task_id AND tm.user_id = :user_id AND tm.status = 'ACTIVE'
             WHERE k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
             AND (k.user_id = :user_id OR tm.id IS NOT NULL)
             ORDER BY k.created_at DESC
             LIMIT :limit OFFSET :skip
@@ -353,11 +381,12 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         tasks = db.query(TaskResource).filter(TaskResource.id.in_(task_ids)).all()
 
         # Filter out DELETE status tasks in application layer and restore order
+        # Also filter out background tasks (source=background_executor)
         id_to_task = {}
         for t in tasks:
             task_crd = Task.model_validate(t.json)
             status = task_crd.status.status if task_crd.status else "PENDING"
-            if status != "DELETE":
+            if status != "DELETE" and not self._is_background_task(task_crd):
                 id_to_task[t.id] = t
 
         # Restore the original order and apply limit
@@ -401,6 +430,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         """
         # Get task IDs where user is owner OR member
         # Use raw SQL with UNION for efficiency
+        # Exclude system namespace tasks (background tasks)
         count_sql = text(
             """
             SELECT COUNT(DISTINCT k.id)
@@ -408,12 +438,14 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             LEFT JOIN task_members tm ON k.id = tm.task_id AND tm.user_id = :user_id AND tm.status = 'ACTIVE'
             WHERE k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
             AND (k.user_id = :user_id OR tm.id IS NOT NULL)
         """
         )
         total_result = db.execute(count_sql, {"user_id": user_id}).scalar()
 
         # Get task IDs sorted by created_at, including both owned and member tasks
+        # Exclude system namespace tasks (background tasks)
         ids_sql = text(
             """
             SELECT DISTINCT k.id, k.created_at
@@ -421,6 +453,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             LEFT JOIN task_members tm ON k.id = tm.task_id AND tm.user_id = :user_id AND tm.status = 'ACTIVE'
             WHERE k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
             AND (k.user_id = :user_id OR tm.id IS NOT NULL)
             ORDER BY k.created_at DESC
             LIMIT :limit OFFSET :skip
@@ -438,11 +471,12 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         tasks = db.query(TaskResource).filter(TaskResource.id.in_(task_ids)).all()
 
         # Filter out DELETE status tasks in application layer and restore order
+        # Also filter out background tasks (source=background_executor)
         id_to_task = {}
         for t in tasks:
             task_crd = Task.model_validate(t.json)
             status = task_crd.status.status if task_crd.status else "PENDING"
-            if status != "DELETE":
+            if status != "DELETE" and not self._is_background_task(task_crd):
                 id_to_task[t.id] = t
 
         # Restore the original order and apply limit
@@ -621,6 +655,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
 
         # Get all task IDs where user is owner or member
         # First get task IDs that are group chats (have members)
+        # Exclude system namespace tasks (background tasks)
         member_task_ids_sql = text(
             """
             SELECT DISTINCT tm.task_id
@@ -629,6 +664,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             WHERE tm.status = 'ACTIVE'
             AND k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
             AND (k.user_id = :user_id OR tm.user_id = :user_id)
         """
         )
@@ -638,6 +674,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         member_task_ids = {row[0] for row in member_task_ids_result}
 
         # Also get tasks where is_group_chat is explicitly set to true in JSON
+        # Exclude system namespace tasks (background tasks)
         explicit_group_sql = text(
             """
             SELECT DISTINCT k.id
@@ -645,6 +682,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             LEFT JOIN task_members tm ON k.id = tm.task_id AND tm.user_id = :user_id AND tm.status = 'ACTIVE'
             WHERE k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
             AND (k.user_id = :user_id OR tm.id IS NOT NULL)
             AND JSON_EXTRACT(k.json, '$.spec.is_group_chat') = true
         """
@@ -701,6 +739,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         from app.models.task_member import MemberStatus, TaskMember
 
         # Get all task IDs that are group chats (have members)
+        # Exclude system namespace tasks (background tasks)
         member_task_ids_sql = text(
             """
             SELECT DISTINCT tm.task_id
@@ -709,18 +748,21 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             WHERE tm.status = 'ACTIVE'
             AND k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
         """
         )
         member_task_ids_result = db.execute(member_task_ids_sql).fetchall()
         member_task_ids = {row[0] for row in member_task_ids_result}
 
         # Also get task IDs where is_group_chat is explicitly set to true
+        # Exclude system namespace tasks (background tasks)
         explicit_group_sql = text(
             """
             SELECT DISTINCT k.id
             FROM tasks k
             WHERE k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
             AND k.user_id = :user_id
             AND JSON_EXTRACT(k.json, '$.spec.is_group_chat') = true
         """
@@ -734,24 +776,28 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         all_group_task_ids = member_task_ids | explicit_group_ids
 
         # Get user's owned tasks (not group chats)
+        # Exclude system namespace tasks (background tasks)
         count_sql = text(
             """
             SELECT COUNT(*)
             FROM tasks k
             WHERE k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
             AND k.user_id = :user_id
         """
         )
         total_result = db.execute(count_sql, {"user_id": user_id}).scalar()
 
         # Get task IDs sorted by created_at, excluding group chats
+        # Exclude system namespace tasks (background tasks)
         ids_sql = text(
             """
             SELECT k.id, k.created_at
             FROM tasks k
             WHERE k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
             AND k.user_id = :user_id
             ORDER BY k.created_at DESC
             LIMIT :limit OFFSET :skip
@@ -969,6 +1015,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         Includes tasks owned by user AND tasks user is a member of (group chats).
         """
         # Get task IDs where user is owner OR member, with ID > since_id
+        # Exclude system namespace tasks (background tasks)
         ids_sql = text(
             """
             SELECT DISTINCT k.id, k.created_at
@@ -976,6 +1023,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             LEFT JOIN task_members tm ON k.id = tm.task_id AND tm.user_id = :user_id AND tm.status = 'ACTIVE'
             WHERE k.kind = 'Task'
             AND k.is_active = true
+            AND k.namespace != 'system'
             AND k.id > :since_id
             AND (k.user_id = :user_id OR tm.id IS NOT NULL)
             ORDER BY k.id DESC
@@ -1164,23 +1212,27 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         Title matching and DELETE status filtering are done in application layer.
         """
         # Use raw SQL to get task IDs without JSON_EXTRACT in WHERE clause
+        # Exclude system namespace tasks (background tasks)
         count_sql = text(
             """
             SELECT COUNT(*) FROM tasks
             WHERE user_id = :user_id
             AND kind = 'Task'
             AND is_active = true
+            AND namespace != 'system'
         """
         )
         total_result = db.execute(count_sql, {"user_id": user_id}).scalar()
 
         # Get task IDs sorted by created_at (fetch more to account for filtering)
+        # Exclude system namespace tasks (background tasks)
         ids_sql = text(
             """
             SELECT id FROM tasks
             WHERE user_id = :user_id
             AND kind = 'Task'
             AND is_active = true
+            AND namespace != 'system'
             ORDER BY created_at DESC
             LIMIT :limit OFFSET :skip
         """
@@ -1251,7 +1303,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             .filter(
                 TaskResource.id == task_id,
                 TaskResource.kind == "Task",
-                TaskResource.is_active == True,
+                TaskResource.is_active.is_(True),
                 text("JSON_EXTRACT(json, '$.status.status') != 'DELETE'"),
             )
             .first()
@@ -1263,7 +1315,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             .filter(
                 TaskResource.id == task_id,
                 TaskResource.kind == "Task",
-                TaskResource.is_active == True,
+                TaskResource.is_active.is_(True),
                 text("JSON_EXTRACT(json, '$.status.status') != 'DELETE'"),
             )
             .first()
@@ -1293,7 +1345,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         task_dict = self.get_task_by_id(db, task_id=task_id, user_id=user_id)
 
         # Get related user
-        user = db.query(User).filter(User.id == user_id).first()
+        user = userReader.get_by_id(db, user_id)
 
         # Get related team
         team_id = task_dict.get("team_id")
@@ -1302,7 +1354,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             logger.info(
                 f"[get_task_detail] task_id={task_id}, team_id={team_id}, user_id={user_id}"
             )
-            team = db.query(Kind).filter(Kind.id == team_id).first()
+            team = kindReader.get_by_id(db, KindType.TEAM, team_id)
             if team:
                 # Use the team's owner user_id as the conversion context.
                 #
@@ -1339,6 +1391,17 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             db=db, task_id=task_id, user_id=user_id, from_latest=True
         )
 
+        # DEBUG: Log table contexts in subtasks
+        for subtask in subtasks:
+            if hasattr(subtask, "contexts") and subtask.contexts:
+                for ctx in subtask.contexts:
+                    if ctx.context_type == "table":
+                        logger.info(
+                            f"[get_task_detail] Table context in subtask: subtask_id={subtask.id}, "
+                            f"ctx_id={ctx.id}, name={ctx.name}, has_source_config={hasattr(ctx, 'source_config')}, "
+                            f"source_config={getattr(ctx, 'source_config', None)}"
+                        )
+
         # Get all bot objects for the subtasks
         all_bot_ids = set()
         for subtask in subtasks:
@@ -1348,17 +1411,8 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         bots = {}
         if all_bot_ids:
             # Get bots from kinds table (Bot kind)
-            bot_objects = (
-                db.query(Kind)
-                .filter(
-                    Kind.id.in_(list(all_bot_ids)),
-                    Kind.kind == "Bot",
-                    Kind.is_active == True,
-                )
-                .all()
-            )
+            bot_objects = kindReader.get_by_ids(db, KindType.BOT, list(all_bot_ids))
 
-            # Convert bot objects to dict using bot JSON data
             # Convert bot objects to dict using bot JSON data
             for bot in bot_objects:
                 bot_crd = Bot.model_validate(bot.json)
@@ -1369,64 +1423,40 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 system_prompt = ""
                 mcp_servers = {}
 
-                # Get Ghost data from kinds table
-                ghost = (
-                    db.query(Kind)
-                    .filter(
-                        Kind.user_id == user_id,
-                        Kind.kind == "Ghost",
-                        Kind.name == bot_crd.spec.ghostRef.name,
-                        Kind.namespace == bot_crd.spec.ghostRef.namespace,
-                        Kind.is_active == True,
-                    )
-                    .first()
+                # Get Ghost data using bot owner's user_id
+                ghost = kindReader.get_by_name_and_namespace(
+                    db,
+                    bot.user_id,
+                    KindType.GHOST,
+                    bot_crd.spec.ghostRef.namespace,
+                    bot_crd.spec.ghostRef.name,
                 )
                 if ghost and ghost.json:
                     ghost_crd = Ghost.model_validate(ghost.json)
                     system_prompt = ghost_crd.spec.systemPrompt
                     mcp_servers = ghost_crd.spec.mcpServers or {}
 
-                # Get Model data from kinds table (modelRef is optional)
+                # Get Model data (modelRef is optional)
                 if bot_crd.spec.modelRef:
-                    model = (
-                        db.query(Kind)
-                        .filter(
-                            Kind.user_id == user_id,
-                            Kind.kind == "Model",
-                            Kind.name == bot_crd.spec.modelRef.name,
-                            Kind.namespace == bot_crd.spec.modelRef.namespace,
-                            Kind.is_active == True,
-                        )
-                        .first()
+                    model = kindReader.get_by_name_and_namespace(
+                        db,
+                        bot.user_id,
+                        KindType.MODEL,
+                        bot_crd.spec.modelRef.namespace,
+                        bot_crd.spec.modelRef.name,
                     )
                     if model and model.json:
                         model_crd = Model.model_validate(model.json)
                         agent_config = model_crd.spec.modelConfig
 
-                # Get Shell data from kinds table (first check user's shells, then public shells)
-                shell = (
-                    db.query(Kind)
-                    .filter(
-                        Kind.user_id == user_id,
-                        Kind.kind == "Shell",
-                        Kind.name == bot_crd.spec.shellRef.name,
-                        Kind.namespace == bot_crd.spec.shellRef.namespace,
-                        Kind.is_active == True,
-                    )
-                    .first()
+                # Get Shell data (personal -> public fallback handled by kindReader)
+                shell = kindReader.get_by_name_and_namespace(
+                    db,
+                    bot.user_id,
+                    KindType.SHELL,
+                    bot_crd.spec.shellRef.namespace,
+                    bot_crd.spec.shellRef.name,
                 )
-                if not shell:
-                    # If not found in user's shells, check public shells (user_id = 0)
-                    shell = (
-                        db.query(Kind)
-                        .filter(
-                            Kind.user_id == 0,
-                            Kind.kind == "Shell",
-                            Kind.name == bot_crd.spec.shellRef.name,
-                            Kind.is_active == True,
-                        )
-                        .first()
-                    )
                 if shell and shell.json:
                     shell_crd = Shell.model_validate(shell.json)
                     shell_type = shell_crd.spec.shellType
@@ -1477,6 +1507,12 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                                 "document_count": ctx.document_count,
                             }
                         )
+                    elif ctx.context_type == "table":
+                        # Build source_config for table contexts
+                        type_data = ctx.type_data or {}
+                        url = type_data.get("url")
+                        if url:
+                            ctx_dict["source_config"] = {"url": url}
                     contexts_list.append(ctx_dict)
 
             # Legacy attachments list - kept for backward compatibility but empty
@@ -1561,7 +1597,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             .filter(
                 TaskResource.id == task_id,
                 TaskResource.kind == "Task",
-                TaskResource.is_active == True,
+                TaskResource.is_active.is_(True),
             )
             .first()
         )
@@ -1648,7 +1684,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                     TaskResource.kind == "Workspace",
                     TaskResource.name == task_crd.spec.workspaceRef.name,
                     TaskResource.namespace == task_crd.spec.workspaceRef.namespace,
-                    TaskResource.is_active == True,
+                    TaskResource.is_active.is_(True),
                 )
                 .first()
             )
@@ -1706,7 +1742,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             .filter(
                 TaskResource.id == task_id,
                 TaskResource.kind == "Task",
-                TaskResource.is_active == True,
+                TaskResource.is_active.is_(True),
             )
             .first()
         )
@@ -1721,7 +1757,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 .filter(
                     TaskResource.id == task_id,
                     TaskResource.kind == "Task",
-                    TaskResource.is_active == True,
+                    TaskResource.is_active.is_(True),
                 )
                 .first()
             )
@@ -1852,7 +1888,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             .filter(
                 TaskResource.id == task_id,
                 TaskResource.kind == "Task",
-                TaskResource.is_active == True,
+                TaskResource.is_active.is_(True),
             )
             .first()
         )
@@ -1986,6 +2022,140 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 f"Error cancelling Chat Shell stream for subtask {subtask_id}: {str(e)}"
             )
 
+    def confirm_pipeline_stage(
+        self,
+        db: Session,
+        *,
+        task_id: int,
+        user_id: int,
+        confirmed_prompt: str,
+        action: str = "continue",
+    ) -> Dict[str, Any]:
+        """
+        Confirm a pipeline stage and proceed to the next stage.
+
+        Args:
+            db: Database session
+            task_id: Task ID
+            user_id: User ID who owns the task
+            confirmed_prompt: The confirmed/edited prompt to pass to next stage
+            action: "continue" to proceed to next stage, "retry" to stay at current stage
+
+        Returns:
+            Dict with confirmation result info
+        """
+        # Get task and verify ownership
+        task = (
+            db.query(TaskResource)
+            .filter(
+                TaskResource.id == task_id,
+                TaskResource.kind == "Task",
+                TaskResource.is_active.is_(True),
+            )
+            .first()
+        )
+
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        # Check user access (owner or group member)
+        from app.services.task_member_service import task_member_service
+
+        if not task_member_service.is_member(db, task_id, user_id):
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        task_crd = Task.model_validate(task.json)
+
+        # Verify task is in PENDING_CONFIRMATION status
+        current_status = task_crd.status.status if task_crd.status else "PENDING"
+        if current_status != "PENDING_CONFIRMATION":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Task is not awaiting confirmation. Current status: {current_status}",
+            )
+
+        # Get team using pipeline_stage_service
+        team = pipeline_stage_service.get_team_for_task(db, task, task_crd)
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        team_crd = Team.model_validate(team.json)
+
+        if team_crd.spec.collaborationModel != "pipeline":
+            raise HTTPException(
+                status_code=400,
+                detail="Stage confirmation is only available for pipeline teams",
+            )
+
+        # Delegate to pipeline_stage_service
+        return pipeline_stage_service.confirm_stage(
+            db=db,
+            task=task,
+            task_crd=task_crd,
+            team_crd=team_crd,
+            confirmed_prompt=confirmed_prompt,
+            action=action,
+        )
+
+    def get_pipeline_stage_info(
+        self,
+        db: Session,
+        *,
+        task_id: int,
+        user_id: int,
+    ) -> Dict[str, Any]:
+        """
+        Get pipeline stage information for a task.
+
+        Args:
+            db: Database session
+            task_id: Task ID
+            user_id: User ID for permission check
+
+        Returns:
+            Dict with pipeline stage info
+        """
+        # Get task and verify ownership
+        task = (
+            db.query(TaskResource)
+            .filter(
+                TaskResource.id == task_id,
+                TaskResource.kind == "Task",
+                TaskResource.is_active.is_(True),
+            )
+            .first()
+        )
+
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        # Check user access
+        from app.services.task_member_service import task_member_service
+
+        if not task_member_service.is_member(db, task_id, user_id):
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        task_crd = Task.model_validate(task.json)
+
+        # Get team using pipeline_stage_service
+        team = pipeline_stage_service.get_team_for_task(db, task, task_crd)
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        team_crd = Team.model_validate(team.json)
+
+        if team_crd.spec.collaborationModel != "pipeline":
+            return {
+                "current_stage": 0,
+                "total_stages": 1,
+                "current_stage_name": "default",
+                "is_pending_confirmation": False,
+                "stages": [],
+            }
+
+        # Delegate to pipeline_stage_service
+        return pipeline_stage_service.get_stage_info(db, task_id, team_crd)
+
     def create_task_id(self, db: Session, user_id: int) -> int:
         """
         Create new task id using tasks table auto increment (pre-allocation mechanism)
@@ -2089,7 +2259,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 TaskResource.kind == "Workspace",
                 TaskResource.name == task_crd.spec.workspaceRef.name,
                 TaskResource.namespace == task_crd.spec.workspaceRef.namespace,
-                TaskResource.is_active == True,
+                TaskResource.is_active.is_(True),
             )
             .first()
         )
@@ -2115,39 +2285,13 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 pass
 
         # Get team data (including shared teams)
-        team = (
-            db.query(Kind)
-            .filter(
-                Kind.user_id == user_id,
-                Kind.kind == "Team",
-                Kind.name == task_crd.spec.teamRef.name,
-                Kind.namespace == task_crd.spec.teamRef.namespace,
-                Kind.is_active == True,
-            )
-            .first()
+        team = kindReader.get_by_name_and_namespace(
+            db,
+            user_id,
+            KindType.TEAM,
+            task_crd.spec.teamRef.namespace,
+            task_crd.spec.teamRef.name,
         )
-
-        # If not found in user's own teams, check shared teams
-        if not team:
-            shared_teams = (
-                db.query(SharedTeam)
-                .filter(SharedTeam.user_id == user_id, SharedTeam.is_active == True)
-                .all()
-            )
-
-            original_user_ids = [st.original_user_id for st in shared_teams]
-            if original_user_ids:
-                team = (
-                    db.query(Kind)
-                    .filter(
-                        Kind.user_id.in_(original_user_ids),
-                        Kind.kind == "Team",
-                        Kind.name == task_crd.spec.teamRef.name,
-                        Kind.namespace == task_crd.spec.teamRef.namespace,
-                        Kind.is_active == True,
-                    )
-                    .first()
-                )
 
         team_id = team.id if team else None
 
@@ -2170,7 +2314,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 updated_at = task.updated_at
 
         # Get user info
-        user = db.query(User).filter(User.id == user_id).first()
+        user = userReader.get_by_id(db, user_id)
         user_name = user.user_name if user else ""
 
         type = (
@@ -2192,6 +2336,14 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             if hasattr(task_crd.spec, "is_group_chat")
             else False
         )
+
+        # Extract app preview information from task status (set by expose_service tool)
+        status_data = (
+            task_crd.status.model_dump(mode="json", exclude_none=True)
+            if task_crd.status
+            else None
+        )
+        app_data = status_data.get("app") if status_data else None
 
         status = task_crd.status.status if task_crd.status else "PENDING"
         error_message = None
@@ -2224,6 +2376,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             "completed_at": completed_at,
             "model_id": model_id,
             "is_group_chat": is_group_chat,  # Add is_group_chat field
+            "app": app_data,  # App preview info
         }
 
     def _convert_team_to_dict(
@@ -2237,17 +2390,9 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         # Convert members to bots format
         bots = []
         for member in team_crd.spec.members:
-            # Find bot in kinds table
-            bot = (
-                db.query(Kind)
-                .filter(
-                    Kind.user_id == user_id,
-                    Kind.kind == "Bot",
-                    Kind.name == member.botRef.name,
-                    Kind.namespace == member.botRef.namespace,
-                    Kind.is_active == True,
-                )
-                .first()
+            # Find bot using kindReader
+            bot = kindReader.get_by_name_and_namespace(
+                db, user_id, KindType.BOT, member.botRef.namespace, member.botRef.name
             )
 
             if bot:
@@ -2262,7 +2407,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         workflow = {"mode": team_crd.spec.collaborationModel}
 
         # Get user info for user name
-        user = db.query(User).filter(User.id == team.user_id).first()
+        user = userReader.get_by_id(db, team.user_id)
         user_name = user.user_name if user else ""
 
         return {
@@ -2296,19 +2441,14 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         # Get bot IDs from team members
         bot_ids = []
         for member in team_crd.spec.members:
-            # Find bot in kinds table
-            bot = (
-                db.query(Kind)
-                .filter(
-                    Kind.user_id == team.user_id,
-                    Kind.kind == "Bot",
-                    Kind.name == member.botRef.name,
-                    Kind.namespace == member.botRef.namespace,
-                    Kind.is_active == True,
-                )
-                .first()
+            # Find bot using kindReader
+            bot = kindReader.get_by_name_and_namespace(
+                db,
+                team.user_id,
+                KindType.BOT,
+                member.botRef.namespace,
+                member.botRef.name,
             )
-
             if bot:
                 bot_ids.append(bot.id)
 
@@ -2401,44 +2541,50 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                     .first()
                 )
 
-                if bot is None:
-                    raise Exception(
-                        f"Bot {member.botRef.name} not found in kinds table"
-                    )
+            # Get the target bot for the determined stage
+            target_member = team_crd.spec.members[target_stage_index]
+            bot = kindReader.get_by_name_and_namespace(
+                db,
+                team.user_id,
+                KindType.BOT,
+                target_member.botRef.namespace,
+                target_member.botRef.name,
+            )
 
-                subtask = Subtask(
-                    user_id=user_id,
-                    task_id=task.id,
-                    team_id=team.id,
-                    title=f"{task_crd.spec.title} - {bot.name}",
-                    bot_ids=[bot.id],
-                    role=SubtaskRole.ASSISTANT,
-                    prompt="",
-                    status=SubtaskStatus.PENDING,
-                    progress=0,
-                    message_id=next_message_id,
-                    parent_id=parent_id,
-                    # If executor_infos is not empty, take the i-th one, otherwise use empty string
-                    executor_name=(
-                        executor_infos[i].get("executor_name")
-                        if len(executor_infos) > i
-                        else ""
-                    ),
-                    executor_namespace=(
-                        executor_infos[i].get("executor_namespace")
-                        if len(executor_infos) > i
-                        else ""
-                    ),
-                    error_message="",
-                    completed_at=datetime.now(),
-                    result=None,
+            if bot is None:
+                raise Exception(
+                    f"Bot {target_member.botRef.name} not found in kinds table"
                 )
 
-                # Update id of next message and parent
-                next_message_id = next_message_id + 1
-                parent_id = parent_id + 1
+            # Pipeline mode: all bots run in the same executor
+            # Get executor info from any existing assistant subtask
+            executor_name = ""
+            executor_namespace = ""
+            for s in existing_subtasks:
+                if s.role == SubtaskRole.ASSISTANT and s.executor_name:
+                    executor_name = s.executor_name
+                    executor_namespace = s.executor_namespace
+                    break
 
-                db.add(subtask)
+            subtask = Subtask(
+                user_id=user_id,
+                task_id=task.id,
+                team_id=team.id,
+                title=f"{task_crd.spec.title} - {bot.name}",
+                bot_ids=[bot.id],
+                role=SubtaskRole.ASSISTANT,
+                prompt="",
+                status=SubtaskStatus.PENDING,
+                progress=0,
+                message_id=next_message_id,
+                parent_id=parent_id,
+                executor_name=executor_name,
+                executor_namespace=executor_namespace,
+                error_message="",
+                completed_at=datetime.now(),
+                result=None,
+            )
+            db.add(subtask)
         else:
             # For other collaboration models, create a single assistant subtask
             assistant_subtask = Subtask(
@@ -2545,7 +2691,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                     TaskResource.kind == "Workspace",
                     TaskResource.name.in_(workspace_names),
                     TaskResource.namespace.in_(workspace_namespaces),
-                    TaskResource.is_active == True,
+                    TaskResource.is_active.is_(True),
                 )
                 .all()
             )
@@ -2553,14 +2699,23 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             for workspace in workspaces:
                 key = f"{workspace.name}:{workspace.namespace}"
                 if workspace.json:
-                    workspace_crd = Workspace.model_validate(workspace.json)
-                    workspace_data[key] = {
-                        "git_url": workspace_crd.spec.repository.gitUrl,
-                        "git_repo": workspace_crd.spec.repository.gitRepo,
-                        "git_repo_id": workspace_crd.spec.repository.gitRepoId or 0,
-                        "git_domain": workspace_crd.spec.repository.gitDomain,
-                        "branch_name": workspace_crd.spec.repository.branchName,
-                    }
+                    try:
+                        workspace_crd = Workspace.model_validate(workspace.json)
+                        workspace_data[key] = {
+                            "git_url": workspace_crd.spec.repository.gitUrl,
+                            "git_repo": workspace_crd.spec.repository.gitRepo,
+                            "git_repo_id": workspace_crd.spec.repository.gitRepoId or 0,
+                            "git_domain": workspace_crd.spec.repository.gitDomain,
+                            "branch_name": workspace_crd.spec.repository.branchName,
+                        }
+                    except Exception:
+                        workspace_data[key] = {
+                            "git_url": "",
+                            "git_repo": "",
+                            "git_repo_id": 0,
+                            "git_domain": "",
+                            "branch_name": "",
+                        }
                 else:
                     workspace_data[key] = {
                         "git_url": "",
@@ -2582,7 +2737,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                     Kind.kind == "Team",
                     Kind.name.in_(team_names),
                     Kind.namespace.in_(team_namespaces),
-                    Kind.is_active == True,
+                    Kind.is_active.is_(True),
                 )
                 .all()
             )
@@ -2596,29 +2751,24 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                 ref for ref in team_refs if f"{ref[0]}:{ref[1]}" not in team_data
             ]
             if missing_team_refs:
-                # Get all shared teams for this user
-                shared_teams = (
-                    db.query(SharedTeam)
-                    .filter(SharedTeam.user_id == user_id, SharedTeam.is_active == True)
-                    .all()
-                )
+                # Get all shared team_ids for this user
+                from app.services.readers.shared_teams import sharedTeamReader
 
-                # Get original user IDs from shared teams
-                original_user_ids = [st.original_user_id for st in shared_teams]
+                shared_team_ids = sharedTeamReader.get_shared_team_ids(db, user_id)
 
-                if original_user_ids:
-                    # Query teams from shared team owners
+                if shared_team_ids:
+                    # Query teams from shared team ids
                     missing_team_names, missing_team_namespaces = zip(
                         *missing_team_refs
                     )
                     shared_team_kinds = (
                         db.query(Kind)
                         .filter(
-                            Kind.user_id.in_(original_user_ids),
+                            Kind.id.in_(shared_team_ids),
                             Kind.kind == "Team",
                             Kind.name.in_(missing_team_names),
                             Kind.namespace.in_(missing_team_namespaces),
-                            Kind.is_active == True,
+                            Kind.is_active.is_(True),
                         )
                         .all()
                     )
@@ -2628,7 +2778,7 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                         team_data[key] = team
 
         # Get user info once
-        user = db.query(User).filter(User.id == user_id).first()
+        user = userReader.get_by_id(db, user_id)
         user_name = user.user_name if user else ""
 
         # Build result mapping
@@ -2711,6 +2861,28 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
 
         return result
 
+    def _is_background_task(self, task_crd: Task) -> bool:
+        """
+        Check if a task is a background task that should be hidden from user task lists.
+
+        Background tasks include:
+        - Summary generation tasks (taskType=summary)
+        - Tasks created by background_executor (source=background_executor)
+        """
+        try:
+            labels = task_crd.metadata.labels
+            if not labels:
+                return False
+
+            # Check for background task indicators
+            return (
+                labels.get("taskType") == "summary"
+                or labels.get("source") == "background_executor"
+                or labels.get("type") == "background"
+            )
+        except Exception:
+            return False
+
     def _convert_to_task_dict_optimized(
         self, task: Kind, related_data: Dict[str, Any], task_crd: Task
     ) -> Dict[str, Any]:
@@ -2760,6 +2932,11 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
             "updated_at": related_data.get("updated_at", task.updated_at),
             "completed_at": related_data.get("completed_at"),
             "is_group_chat": related_data.get("is_group_chat", False),
+            "app": (
+                task_crd.status.app.model_dump()
+                if task_crd.status and task_crd.status.app
+                else None
+            ),
         }
 
 

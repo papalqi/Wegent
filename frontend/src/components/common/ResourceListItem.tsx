@@ -2,18 +2,18 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import React from 'react';
-import { Tag } from '@/components/ui/tag';
+import React from 'react'
+import { Tag } from '@/components/ui/tag'
 
 /**
  * Tag configuration for ResourceListItem
  */
 export interface ResourceTag {
-  key: string;
-  label: string;
-  variant?: 'default' | 'info' | 'success' | 'warning' | 'error';
-  className?: string;
-  props?: React.HTMLAttributes<HTMLSpanElement>;
+  key: string
+  label: string
+  variant?: 'default' | 'info' | 'success' | 'warning' | 'error'
+  className?: string
+  props?: React.HTMLAttributes<HTMLSpanElement>
 }
 
 /**
@@ -22,23 +22,23 @@ export interface ResourceTag {
  */
 export interface ResourceListItemProps {
   /** Unique identifier of the resource */
-  name: string;
+  name: string
   /** Display name (takes priority over name) */
-  displayName?: string;
+  displayName?: string
   /** Description text to show below the name */
-  description?: string;
+  description?: string
   /** Whether this is a public resource */
-  isPublic?: boolean;
+  isPublic?: boolean
   /** Whether to show ID line when displayName differs from name */
-  showId?: boolean;
+  showId?: boolean
   /** Array of tags to display */
-  tags?: ResourceTag[];
+  tags?: ResourceTag[]
   /** Icon element (passed from parent) */
-  icon?: React.ReactNode;
+  icon?: React.ReactNode
   /** Optional children (e.g., status indicator for bots) */
-  children?: React.ReactNode;
+  children?: React.ReactNode
   /** Public resource label translation */
-  publicLabel?: string;
+  publicLabel?: string
 }
 
 /**
@@ -57,8 +57,8 @@ export function ResourceListItem({
   children,
   publicLabel = 'Public',
 }: ResourceListItemProps) {
-  const finalDisplayName = displayName || name;
-  const shouldShowId = showId && displayName && displayName !== name;
+  const finalDisplayName = displayName || name
+  const shouldShowId = showId && displayName && displayName !== name
 
   return (
     <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -91,7 +91,7 @@ export function ResourceListItem({
         {tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 mt-2 min-w-0">
             {tags.map(tag => {
-              const { props, className } = tag;
+              const { props, className } = tag
               return (
                 <Tag
                   key={tag.key}
@@ -101,11 +101,11 @@ export function ResourceListItem({
                 >
                   {tag.label}
                 </Tag>
-              );
+              )
             })}
           </div>
         )}
       </div>
     </div>
-  );
+  )
 }

@@ -210,6 +210,72 @@ def delete_container(container_name: str) -> dict:
         return {"status": "failed", "error_msg": f"Error: {e}"}
 
 
+def pause_container(container_name: str) -> dict:
+    """
+    Pause a running Docker container (E2B standard).
+
+    This preserves the container state without consuming CPU resources.
+
+    Args:
+        container_name (str): Name of the container to pause
+
+    Returns:
+        dict: Result with status and optional error message
+    """
+    try:
+        # Check ownership first
+        if not check_container_ownership(container_name):
+            return {
+                "status": "failed",
+                "error_msg": f"Container '{container_name}' not found or not owned by executor_manager",
+            }
+
+        cmd = ["docker", "pause", container_name]
+        subprocess.run(cmd, check=True, capture_output=True)
+        logger.info(f"Paused Docker container '{container_name}'")
+        return {"status": "success"}
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.decode() if hasattr(e.stderr, "decode") else str(e.stderr)
+        logger.error(f"Docker error pausing container '{container_name}': {error_msg}")
+        return {"status": "failed", "error_msg": f"Docker error: {error_msg}"}
+    except Exception as e:
+        logger.error(f"Error pausing Docker container '{container_name}': {e}")
+        return {"status": "failed", "error_msg": f"Error: {e}"}
+
+
+def unpause_container(container_name: str) -> dict:
+    """
+    Resume (unpause) a paused Docker container (E2B standard).
+
+    Args:
+        container_name (str): Name of the container to unpause
+
+    Returns:
+        dict: Result with status and optional error message
+    """
+    try:
+        # Check ownership first
+        if not check_container_ownership(container_name):
+            return {
+                "status": "failed",
+                "error_msg": f"Container '{container_name}' not found or not owned by executor_manager",
+            }
+
+        cmd = ["docker", "unpause", container_name]
+        subprocess.run(cmd, check=True, capture_output=True)
+        logger.info(f"Unpaused Docker container '{container_name}'")
+        return {"status": "success"}
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.decode() if hasattr(e.stderr, "decode") else str(e.stderr)
+        logger.error(
+            f"Docker error unpausing container '{container_name}': {error_msg}"
+        )
+        return {"status": "failed", "error_msg": f"Docker error: {error_msg}"}
+    except Exception as e:
+        logger.error(f"Error unpausing Docker container '{container_name}': {e}")
+        return {"status": "failed", "error_msg": f"Error: {e}"}
+
+
 def _build_docker_ps_command(label_selector: str = None) -> list:
     """
     Build docker ps command with appropriate filters.

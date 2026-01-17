@@ -278,7 +278,6 @@ run_detached() {
     # Last resort: direct background execution
     bash -c "$cmd" &
   fi
-  echo $!
 }
 
 validate_port() {
@@ -907,19 +906,7 @@ main() {
   backend_log="${ROOT_DIR}/backend/uvicorn.log"
   : >"$backend_log"
 
-  env \
-    PYTHONPATH="${backend_pythonpath}" \
-    ENVIRONMENT="development" \
-    DB_AUTO_MIGRATE="True" \
-    DATABASE_URL="mysql+pymysql://root:123456@127.0.0.1:${MYSQL_PORT}/task_manager" \
-    REDIS_URL="redis://127.0.0.1:${REDIS_PORT}/0" \
-    EXECUTOR_MANAGER_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}" \
-    EXECUTOR_CANCEL_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/tasks/cancel" \
-    EXECUTOR_DELETE_TASK_URL="http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/executor/delete" \
-    FRONTEND_URL="${BACKEND_FRONTEND_URL}" \
-    WEGENT_PERSIST_REPO_ROOT_HOST="${PERSIST_REPO_ROOT}" \
-    sh -c "cd '${ROOT_DIR}/backend' && exec uv run uvicorn app.main:app --host 0.0.0.0 --port '${BACKEND_PORT}'" >>"$backend_log" 2>&1 &
-
+  run_detached "cd '${ROOT_DIR}/backend' && exec env PYTHONPATH='${backend_pythonpath}' ENVIRONMENT='development' DB_AUTO_MIGRATE='True' DATABASE_URL='mysql+pymysql://root:123456@127.0.0.1:${MYSQL_PORT}/task_manager' REDIS_URL='redis://127.0.0.1:${REDIS_PORT}/0' EXECUTOR_MANAGER_URL='http://127.0.0.1:${EXECUTOR_MANAGER_PORT}' EXECUTOR_CANCEL_TASK_URL='http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/tasks/cancel' EXECUTOR_DELETE_TASK_URL='http://127.0.0.1:${EXECUTOR_MANAGER_PORT}/executor-manager/executor/delete' FRONTEND_URL='${BACKEND_FRONTEND_URL}' WEGENT_PERSIST_REPO_ROOT_HOST='${PERSIST_REPO_ROOT}' uv run uvicorn app.main:app --host 0.0.0.0 --port '${BACKEND_PORT}' >>'${backend_log}' 2>&1"
   BACKEND_PGID="$!"
   echo -e "${GREEN}✓ Backend started (PGID=${BACKEND_PGID})${NC}"
   echo -e "${GREEN}  Backend log: ${backend_log}${NC}"
@@ -951,13 +938,7 @@ main() {
     frontend_log="${ROOT_DIR}/frontend/next.log"
     : >"$frontend_log"
 
-    env \
-      NODE_ENV="development" \
-      PORT="${FRONTEND_PORT}" \
-      RUNTIME_INTERNAL_API_URL="http://127.0.0.1:${BACKEND_PORT}" \
-      RUNTIME_SOCKET_DIRECT_URL="${SOCKET_DIRECT_URL}" \
-      sh -c "cd '${ROOT_DIR}/frontend' && exec npm run dev -- -p '${FRONTEND_PORT}' -H '${FRONTEND_HOST}'" >>"$frontend_log" 2>&1 &
-
+    run_detached "cd '${ROOT_DIR}/frontend' && exec env NODE_ENV='development' PORT='${FRONTEND_PORT}' RUNTIME_INTERNAL_API_URL='http://127.0.0.1:${BACKEND_PORT}' RUNTIME_SOCKET_DIRECT_URL='${SOCKET_DIRECT_URL}' npm run dev -- -p '${FRONTEND_PORT}' -H '${FRONTEND_HOST}' >>'${frontend_log}' 2>&1"
     FRONTEND_PGID="$!"
     echo -e "${GREEN}✓ Frontend started in dev mode (PGID=${FRONTEND_PGID})${NC}"
     echo -e "${GREEN}  Frontend log: ${frontend_log}${NC}"
@@ -995,12 +976,7 @@ main() {
     frontend_log="${ROOT_DIR}/frontend/next.log"
     : >"$frontend_log"
 
-    env \
-      NODE_ENV="production" \
-      RUNTIME_INTERNAL_API_URL="http://127.0.0.1:${BACKEND_PORT}" \
-      RUNTIME_SOCKET_DIRECT_URL="${SOCKET_DIRECT_URL}" \
-      sh -c "cd '${ROOT_DIR}/frontend' && exec npm start -- -p '${FRONTEND_PORT}' -H '${FRONTEND_HOST}'" >>"$frontend_log" 2>&1 &
-
+    run_detached "cd '${ROOT_DIR}/frontend' && exec env NODE_ENV='production' RUNTIME_INTERNAL_API_URL='http://127.0.0.1:${BACKEND_PORT}' RUNTIME_SOCKET_DIRECT_URL='${SOCKET_DIRECT_URL}' npm start -- -p '${FRONTEND_PORT}' -H '${FRONTEND_HOST}' >>'${frontend_log}' 2>&1"
     FRONTEND_PGID="$!"
     echo -e "${GREEN}✓ Frontend started (PGID=${FRONTEND_PGID})${NC}"
     echo -e "${GREEN}  Frontend log: ${frontend_log}${NC}"

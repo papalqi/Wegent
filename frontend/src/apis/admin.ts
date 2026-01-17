@@ -2,222 +2,222 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import { apiClient } from './client';
-import { RetrieverCRD } from './retrievers';
+import { apiClient } from './client'
+import { RetrieverCRD } from './retrievers'
 
 // Re-export RetrieverCRD for backward compatibility
-export type { RetrieverCRD } from './retrievers';
+export type { RetrieverCRD } from './retrievers'
 
 // Admin User Types
-export type UserRole = 'admin' | 'user';
-export type AuthSource = 'password' | 'oidc' | 'unknown';
+export type UserRole = 'admin' | 'user'
+export type AuthSource = 'password' | 'oidc' | 'unknown'
 
 export interface AdminUser {
-  id: number;
-  user_name: string;
-  email: string | null;
-  role: UserRole;
-  auth_source: AuthSource;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  id: number
+  user_name: string
+  email: string | null
+  role: UserRole
+  auth_source: AuthSource
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface AdminUserListResponse {
-  total: number;
-  items: AdminUser[];
+  total: number
+  items: AdminUser[]
 }
 
 export interface AdminUserCreate {
-  user_name: string;
-  password?: string;
-  email?: string;
-  role?: UserRole;
-  auth_source?: 'password' | 'oidc';
+  user_name: string
+  password?: string
+  email?: string
+  role?: UserRole
+  auth_source?: 'password' | 'oidc'
 }
 
 export interface AdminUserUpdate {
-  user_name?: string;
-  email?: string;
-  role?: UserRole;
-  is_active?: boolean;
+  user_name?: string
+  email?: string
+  role?: UserRole
+  is_active?: boolean
 }
 
 export interface PasswordResetRequest {
-  new_password: string;
+  new_password: string
 }
 
 export interface RoleUpdateRequest {
-  role: UserRole;
+  role: UserRole
 }
 
 // Public Model Types
 export interface AdminPublicModel {
-  id: number;
-  name: string;
-  namespace: string;
-  display_name: string | null;
-  json: Record<string, unknown>;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  id: number
+  name: string
+  namespace: string
+  display_name: string | null
+  json: Record<string, unknown>
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface AdminPublicModelListResponse {
-  total: number;
-  items: AdminPublicModel[];
+  total: number
+  items: AdminPublicModel[]
 }
 
 export interface AdminPublicModelCreate {
-  name: string;
-  namespace?: string;
-  json: Record<string, unknown>;
+  name: string
+  namespace?: string
+  json: Record<string, unknown>
 }
 
 export interface AdminPublicModelUpdate {
-  name?: string;
-  namespace?: string;
-  json?: Record<string, unknown>;
-  is_active?: boolean;
+  name?: string
+  namespace?: string
+  json?: Record<string, unknown>
+  is_active?: boolean
 }
 
 // Custom Config Model Types (internal, hidden from unified model list)
-export type ApiKeyStatus = 'EMPTY' | 'PLACEHOLDER' | 'SET' | 'UNKNOWN';
+export type ApiKeyStatus = 'EMPTY' | 'PLACEHOLDER' | 'SET' | 'UNKNOWN'
 
 export interface AdminCustomConfigModelRefBot {
-  id: number;
-  user_id: number;
-  namespace: string;
-  name: string;
+  id: number
+  user_id: number
+  namespace: string
+  name: string
 }
 
 export interface AdminCustomConfigModel {
-  id: number;
-  user_id: number;
-  user_name: string | null;
-  namespace: string;
-  name: string;
-  provider: string | null;
-  model_id: string | null;
-  base_url: string | null;
-  api_key_status: ApiKeyStatus;
-  referenced_by_bots: number;
-  referenced_bots: AdminCustomConfigModelRefBot[];
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  id: number
+  user_id: number
+  user_name: string | null
+  namespace: string
+  name: string
+  provider: string | null
+  model_id: string | null
+  base_url: string | null
+  api_key_status: ApiKeyStatus
+  referenced_by_bots: number
+  referenced_bots: AdminCustomConfigModelRefBot[]
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface AdminCustomConfigModelListResponse {
-  total: number;
-  items: AdminCustomConfigModel[];
+  total: number
+  items: AdminCustomConfigModel[]
 }
 
 export interface AdminCustomConfigModelCleanupResponse {
-  candidates: number;
-  deleted: number;
+  candidates: number
+  deleted: number
 }
 
 // System Stats Types
 export interface SystemStats {
-  total_users: number;
-  active_users: number;
-  admin_count: number;
-  total_tasks: number;
-  total_public_models: number;
+  total_users: number
+  active_users: number
+  admin_count: number
+  total_tasks: number
+  total_public_models: number
 }
 
 // Chat Slogan & Tips Types
-export type SloganTipMode = 'chat' | 'code' | 'both';
+export type SloganTipMode = 'chat' | 'code' | 'both'
 
 export interface ChatSloganItem {
-  id: number;
-  zh: string;
-  en: string;
-  mode?: SloganTipMode;
+  id: number
+  zh: string
+  en: string
+  mode?: SloganTipMode
 }
 
 export interface ChatTipItem {
-  id: number;
-  zh: string;
-  en: string;
-  mode?: SloganTipMode;
+  id: number
+  zh: string
+  en: string
+  mode?: SloganTipMode
 }
 
 export interface ChatSloganTipsUpdate {
-  slogans: ChatSloganItem[];
-  tips: ChatTipItem[];
+  slogans: ChatSloganItem[]
+  tips: ChatTipItem[]
 }
 
 export interface ChatSloganTipsResponse {
-  version: number;
-  slogans: ChatSloganItem[];
-  tips: ChatTipItem[];
+  version: number
+  slogans: ChatSloganItem[]
+  tips: ChatTipItem[]
 }
 
 // Service Key Types
 export interface ServiceKey {
-  id: number;
-  name: string;
-  key_prefix: string;
-  description: string | null;
-  expires_at: string;
-  last_used_at: string;
-  created_at: string;
-  is_active: boolean;
-  created_by: string | null;
+  id: number
+  name: string
+  key_prefix: string
+  description: string | null
+  expires_at: string
+  last_used_at: string
+  created_at: string
+  is_active: boolean
+  created_by: string | null
 }
 
 export interface ServiceKeyCreated extends ServiceKey {
-  key: string; // Full key, only at creation
+  key: string // Full key, only at creation
 }
 
 export interface ServiceKeyCreateRequest {
-  name: string;
-  description?: string;
+  name: string
+  description?: string
 }
 
 export interface ServiceKeyListResponse {
-  items: ServiceKey[];
-  total: number;
+  items: ServiceKey[]
+  total: number
 }
 
 // Personal Key Types (Admin Management)
 export interface AdminPersonalKey {
-  id: number;
-  user_id: number;
-  user_name: string;
-  name: string;
-  key_prefix: string;
-  description: string | null;
-  expires_at: string;
-  last_used_at: string;
-  created_at: string;
-  is_active: boolean;
+  id: number
+  user_id: number
+  user_name: string
+  name: string
+  key_prefix: string
+  description: string | null
+  expires_at: string
+  last_used_at: string
+  created_at: string
+  is_active: boolean
 }
 
 export interface AdminPersonalKeyListResponse {
-  items: AdminPersonalKey[];
-  total: number;
+  items: AdminPersonalKey[]
+  total: number
 }
 
 // Public Retriever Types
 export interface AdminPublicRetriever {
-  id: number;
-  name: string;
-  namespace: string;
-  displayName: string | null;
-  storageType: string;
-  description: string | null;
-  json: RetrieverCRD;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  id: number
+  name: string
+  namespace: string
+  displayName: string | null
+  storageType: string
+  description: string | null
+  json: RetrieverCRD
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface AdminPublicRetrieverListResponse {
-  total: number;
-  items: AdminPublicRetriever[];
+  total: number
+  items: AdminPublicRetriever[]
 }
 
 // Admin API Services
@@ -233,65 +233,65 @@ export const adminApis = {
     includeInactive: boolean = false,
     search?: string
   ): Promise<AdminUserListResponse> {
-    const params = new URLSearchParams();
-    params.append('page', String(page));
-    params.append('limit', String(limit));
+    const params = new URLSearchParams()
+    params.append('page', String(page))
+    params.append('limit', String(limit))
     if (includeInactive) {
-      params.append('include_inactive', 'true');
+      params.append('include_inactive', 'true')
     }
     if (search) {
-      params.append('search', search);
+      params.append('search', search)
     }
-    return apiClient.get(`/admin/users?${params.toString()}`);
+    return apiClient.get(`/admin/users?${params.toString()}`)
   },
 
   /**
    * Get user by ID
    */
   async getUserById(userId: number): Promise<AdminUser> {
-    return apiClient.get(`/admin/users/${userId}`);
+    return apiClient.get(`/admin/users/${userId}`)
   },
 
   /**
    * Create a new user
    */
   async createUser(userData: AdminUserCreate): Promise<AdminUser> {
-    return apiClient.post('/admin/users', userData);
+    return apiClient.post('/admin/users', userData)
   },
 
   /**
    * Update user information
    */
   async updateUser(userId: number, userData: AdminUserUpdate): Promise<AdminUser> {
-    return apiClient.put(`/admin/users/${userId}`, userData);
+    return apiClient.put(`/admin/users/${userId}`, userData)
   },
 
   /**
    * Delete a user (soft delete)
    */
   async deleteUser(userId: number): Promise<void> {
-    return apiClient.delete(`/admin/users/${userId}`);
+    return apiClient.delete(`/admin/users/${userId}`)
   },
 
   /**
    * Reset user password
    */
   async resetPassword(userId: number, data: PasswordResetRequest): Promise<AdminUser> {
-    return apiClient.post(`/admin/users/${userId}/reset-password`, data);
+    return apiClient.post(`/admin/users/${userId}/reset-password`, data)
   },
 
   /**
    * Toggle user active status
    */
   async toggleUserStatus(userId: number): Promise<AdminUser> {
-    return apiClient.post(`/admin/users/${userId}/toggle-status`);
+    return apiClient.post(`/admin/users/${userId}/toggle-status`)
   },
 
   /**
    * Update user role
    */
   async updateUserRole(userId: number, data: RoleUpdateRequest): Promise<AdminUser> {
-    return apiClient.put(`/admin/users/${userId}/role`, data);
+    return apiClient.put(`/admin/users/${userId}/role`, data)
   },
 
   // ==================== Public Model Management ====================
@@ -303,14 +303,14 @@ export const adminApis = {
     page: number = 1,
     limit: number = 20
   ): Promise<AdminPublicModelListResponse> {
-    return apiClient.get(`/admin/public-models?page=${page}&limit=${limit}`);
+    return apiClient.get(`/admin/public-models?page=${page}&limit=${limit}`)
   },
 
   /**
    * Create a new public model
    */
   async createPublicModel(modelData: AdminPublicModelCreate): Promise<AdminPublicModel> {
-    return apiClient.post('/admin/public-models', modelData);
+    return apiClient.post('/admin/public-models', modelData)
   },
 
   /**
@@ -320,14 +320,14 @@ export const adminApis = {
     modelId: number,
     modelData: AdminPublicModelUpdate
   ): Promise<AdminPublicModel> {
-    return apiClient.put(`/admin/public-models/${modelId}`, modelData);
+    return apiClient.put(`/admin/public-models/${modelId}`, modelData)
   },
 
   /**
    * Delete a public model
    */
   async deletePublicModel(modelId: number): Promise<void> {
-    return apiClient.delete(`/admin/public-models/${modelId}`);
+    return apiClient.delete(`/admin/public-models/${modelId}`)
   },
 
   // ==================== Custom Config Model Cleanup ====================
@@ -342,30 +342,30 @@ export const adminApis = {
     search?: string,
     referencesLimit: number = 5
   ): Promise<AdminCustomConfigModelListResponse> {
-    const params = new URLSearchParams();
-    params.append('page', String(page));
-    params.append('limit', String(limit));
-    params.append('references_limit', String(referencesLimit));
+    const params = new URLSearchParams()
+    params.append('page', String(page))
+    params.append('limit', String(limit))
+    params.append('references_limit', String(referencesLimit))
     if (includeInactive) {
-      params.append('include_inactive', 'true');
+      params.append('include_inactive', 'true')
     }
     if (search) {
-      params.append('search', search);
+      params.append('search', search)
     }
-    return apiClient.get(`/admin/custom-config-models?${params.toString()}`);
+    return apiClient.get(`/admin/custom-config-models?${params.toString()}`)
   },
 
   /**
    * Delete a custom config model (force=true allows deletion when referenced by active bots)
    */
   async deleteCustomConfigModel(modelId: number, force: boolean = false): Promise<void> {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams()
     if (force) {
-      params.append('force', 'true');
+      params.append('force', 'true')
     }
     return apiClient.delete(
       `/admin/custom-config-models/${modelId}${params.toString() ? `?${params.toString()}` : ''}`
-    );
+    )
   },
 
   /**
@@ -375,12 +375,12 @@ export const adminApis = {
     dryRun: boolean = true,
     olderThanDays: number = 0
   ): Promise<AdminCustomConfigModelCleanupResponse> {
-    const params = new URLSearchParams();
-    params.append('dry_run', dryRun ? 'true' : 'false');
+    const params = new URLSearchParams()
+    params.append('dry_run', dryRun ? 'true' : 'false')
     if (olderThanDays) {
-      params.append('older_than_days', String(olderThanDays));
+      params.append('older_than_days', String(olderThanDays))
     }
-    return apiClient.post(`/admin/custom-config-models/cleanup-orphans?${params.toString()}`);
+    return apiClient.post(`/admin/custom-config-models/cleanup-orphans?${params.toString()}`)
   },
 
   // ==================== System Stats ====================
@@ -389,7 +389,7 @@ export const adminApis = {
    * Get system statistics
    */
   async getSystemStats(): Promise<SystemStats> {
-    return apiClient.get('/admin/stats');
+    return apiClient.get('/admin/stats')
   },
 
   // ==================== System Config (Quick Access) ====================
@@ -398,14 +398,14 @@ export const adminApis = {
    * Get system recommended quick access configuration
    */
   async getQuickAccessConfig(): Promise<{ version: number; teams: number[] }> {
-    return apiClient.get('/admin/system-config/quick-access');
+    return apiClient.get('/admin/system-config/quick-access')
   },
 
   /**
    * Update system recommended quick access configuration
    */
   async updateQuickAccessConfig(teams: number[]): Promise<{ version: number; teams: number[] }> {
-    return apiClient.put('/admin/system-config/quick-access', { teams });
+    return apiClient.put('/admin/system-config/quick-access', { teams })
   },
 
   // ==================== Chat Slogan & Tips Config ====================
@@ -414,14 +414,14 @@ export const adminApis = {
    * Get chat slogan and tips configuration
    */
   async getSloganTipsConfig(): Promise<ChatSloganTipsResponse> {
-    return apiClient.get('/admin/system-config/slogan-tips');
+    return apiClient.get('/admin/system-config/slogan-tips')
   },
 
   /**
    * Update chat slogan and tips configuration
    */
   async updateSloganTipsConfig(data: ChatSloganTipsUpdate): Promise<ChatSloganTipsResponse> {
-    return apiClient.put('/admin/system-config/slogan-tips', data);
+    return apiClient.put('/admin/system-config/slogan-tips', data)
   },
 
   // ==================== Service Key Management ====================
@@ -430,7 +430,7 @@ export const adminApis = {
    * Get list of all service keys
    */
   async getServiceKeys(): Promise<ServiceKeyListResponse> {
-    return apiClient.get('/admin/service-keys');
+    return apiClient.get('/admin/service-keys')
   },
 
   /**
@@ -438,21 +438,21 @@ export const adminApis = {
    * The full key is only returned at creation time
    */
   async createServiceKey(data: ServiceKeyCreateRequest): Promise<ServiceKeyCreated> {
-    return apiClient.post('/admin/service-keys', data);
+    return apiClient.post('/admin/service-keys', data)
   },
 
   /**
    * Toggle service key active status
    */
   async toggleServiceKeyStatus(keyId: number): Promise<ServiceKey> {
-    return apiClient.post(`/admin/service-keys/${keyId}/toggle-status`);
+    return apiClient.post(`/admin/service-keys/${keyId}/toggle-status`)
   },
 
   /**
    * Delete a service key
    */
   async deleteServiceKey(keyId: number): Promise<void> {
-    return apiClient.delete(`/admin/service-keys/${keyId}`);
+    return apiClient.delete(`/admin/service-keys/${keyId}`)
   },
 
   // ==================== Personal Key Management (Admin) ====================
@@ -465,27 +465,27 @@ export const adminApis = {
     limit: number = 50,
     search?: string
   ): Promise<AdminPersonalKeyListResponse> {
-    const params = new URLSearchParams();
-    params.append('page', String(page));
-    params.append('limit', String(limit));
+    const params = new URLSearchParams()
+    params.append('page', String(page))
+    params.append('limit', String(limit))
     if (search) {
-      params.append('search', search);
+      params.append('search', search)
     }
-    return apiClient.get(`/admin/personal-keys?${params.toString()}`);
+    return apiClient.get(`/admin/personal-keys?${params.toString()}`)
   },
 
   /**
    * Toggle personal key active status
    */
   async togglePersonalKeyStatus(keyId: number): Promise<AdminPersonalKey> {
-    return apiClient.post(`/admin/personal-keys/${keyId}/toggle-status`);
+    return apiClient.post(`/admin/personal-keys/${keyId}/toggle-status`)
   },
 
   /**
    * Delete a personal key
    */
   async deletePersonalKey(keyId: number): Promise<void> {
-    return apiClient.delete(`/admin/personal-keys/${keyId}`);
+    return apiClient.delete(`/admin/personal-keys/${keyId}`)
   },
 
   // ==================== Public Retriever Management ====================
@@ -497,14 +497,14 @@ export const adminApis = {
     page: number = 1,
     limit: number = 20
   ): Promise<AdminPublicRetrieverListResponse> {
-    return apiClient.get(`/admin/public-retrievers?page=${page}&limit=${limit}`);
+    return apiClient.get(`/admin/public-retrievers?page=${page}&limit=${limit}`)
   },
 
   /**
    * Create a new public retriever
    */
   async createPublicRetriever(retrieverData: RetrieverCRD): Promise<AdminPublicRetriever> {
-    return apiClient.post('/admin/public-retrievers', retrieverData);
+    return apiClient.post('/admin/public-retrievers', retrieverData)
   },
 
   /**
@@ -514,14 +514,14 @@ export const adminApis = {
     retrieverId: number,
     retrieverData: RetrieverCRD
   ): Promise<AdminPublicRetriever> {
-    return apiClient.put(`/admin/public-retrievers/${retrieverId}`, retrieverData);
+    return apiClient.put(`/admin/public-retrievers/${retrieverId}`, retrieverData)
   },
 
   /**
    * Delete a public retriever
    */
   async deletePublicRetriever(retrieverId: number): Promise<void> {
-    return apiClient.delete(`/admin/public-retrievers/${retrieverId}`);
+    return apiClient.delete(`/admin/public-retrievers/${retrieverId}`)
   },
 
   // ==================== Database Management ====================
@@ -530,24 +530,24 @@ export const adminApis = {
    * Export database as SQL dump file
    */
   async exportDatabase(): Promise<Blob> {
-    const { getApiBaseUrl } = await import('@/lib/runtime-config');
-    const { getToken } = await import('./user');
-    const baseURL = getApiBaseUrl();
-    const token = getToken();
+    const { getApiBaseUrl } = await import('@/lib/runtime-config')
+    const { getToken } = await import('./user')
+    const baseURL = getApiBaseUrl()
+    const token = getToken()
 
     const response = await fetch(`${baseURL}/admin/database/export`, {
       method: 'GET',
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
       },
-    });
+    })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Failed to export database' }));
-      throw new Error(error.detail || 'Failed to export database');
+      const error = await response.json().catch(() => ({ detail: 'Failed to export database' }))
+      throw new Error(error.detail || 'Failed to export database')
     }
 
-    return response.blob();
+    return response.blob()
   },
 
   /**
@@ -556,13 +556,13 @@ export const adminApis = {
   async importDatabase(
     file: File
   ): Promise<{ success: boolean; message: string; file_size_mb: number }> {
-    const { getApiBaseUrl } = await import('@/lib/runtime-config');
-    const { getToken } = await import('./user');
-    const baseURL = getApiBaseUrl();
-    const token = getToken();
+    const { getApiBaseUrl } = await import('@/lib/runtime-config')
+    const { getToken } = await import('./user')
+    const baseURL = getApiBaseUrl()
+    const token = getToken()
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const formData = new FormData()
+    formData.append('file', file)
 
     const response = await fetch(`${baseURL}/admin/database/import`, {
       method: 'POST',
@@ -571,13 +571,13 @@ export const adminApis = {
         // Don't set Content-Type, let browser set it with boundary
       },
       body: formData,
-    });
+    })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Failed to import database' }));
-      throw new Error(error.detail || 'Failed to import database');
+      const error = await response.json().catch(() => ({ detail: 'Failed to import database' }))
+      throw new Error(error.detail || 'Failed to import database')
     }
 
-    return response.json();
+    return response.json()
   },
-};
+}

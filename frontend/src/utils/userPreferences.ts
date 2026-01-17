@@ -15,18 +15,18 @@ const STORAGE_KEYS = {
   LAST_REPO_NAME: 'wegent_last_repo_name',
   LAST_CODE_WORKSPACE_MODE: 'wegent_last_code_workspace_mode',
   LAST_CODE_REPO_DIR: 'wegent_last_code_repo_dir',
-} as const;
+} as const
 
-export type TabType = 'chat' | 'code' | 'wiki';
+export type TabType = 'chat' | 'code' | 'wiki'
 
 /**
  * Save user's last active tab
  */
 export function saveLastTab(tab: TabType): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.LAST_TAB, tab);
+    localStorage.setItem(STORAGE_KEYS.LAST_TAB, tab)
   } catch (error) {
-    console.warn('Failed to save last tab to localStorage:', error);
+    console.warn('Failed to save last tab to localStorage:', error)
   }
 }
 
@@ -35,11 +35,11 @@ export function saveLastTab(tab: TabType): void {
  */
 export function getLastTab(): TabType | null {
   try {
-    const tab = localStorage.getItem(STORAGE_KEYS.LAST_TAB);
-    return tab === 'chat' || tab === 'code' || tab === 'wiki' ? tab : null;
+    const tab = localStorage.getItem(STORAGE_KEYS.LAST_TAB)
+    return tab === 'chat' || tab === 'code' || tab === 'wiki' ? tab : null
   } catch (error) {
-    console.warn('Failed to get last tab from localStorage:', error);
-    return null;
+    console.warn('Failed to get last tab from localStorage:', error)
+    return null
   }
 }
 
@@ -49,12 +49,12 @@ export function getLastTab(): TabType | null {
 export function saveLastTeam(teamId: number): void {
   try {
     if (!teamId || isNaN(teamId)) {
-      console.warn('[userPreferences] Invalid team ID, not saving:', teamId);
-      return;
+      console.warn('[userPreferences] Invalid team ID, not saving:', teamId)
+      return
     }
-    localStorage.setItem(STORAGE_KEYS.LAST_TEAM_ID, String(teamId));
+    localStorage.setItem(STORAGE_KEYS.LAST_TEAM_ID, String(teamId))
   } catch (error) {
-    console.warn('Failed to save last team to localStorage:', error);
+    console.warn('Failed to save last team to localStorage:', error)
   }
 }
 
@@ -63,20 +63,20 @@ export function saveLastTeam(teamId: number): void {
  */
 export function getLastTeamId(): number | null {
   try {
-    const teamId = localStorage.getItem(STORAGE_KEYS.LAST_TEAM_ID);
+    const teamId = localStorage.getItem(STORAGE_KEYS.LAST_TEAM_ID)
     if (!teamId || teamId === 'undefined' || teamId === 'null' || teamId === 'NaN') {
-      return null;
+      return null
     }
-    const result = parseInt(teamId, 10);
+    const result = parseInt(teamId, 10)
     if (isNaN(result)) {
-      console.log('[userPreferences] Failed to parse team ID, got NaN from:', teamId);
-      return null;
+      console.log('[userPreferences] Failed to parse team ID, got NaN from:', teamId)
+      return null
     }
-    console.log('[userPreferences] Getting team from localStorage:', result);
-    return result;
+    console.log('[userPreferences] Getting team from localStorage:', result)
+    return result
   } catch (error) {
-    console.warn('Failed to get last team from localStorage:', error);
-    return null;
+    console.warn('Failed to get last team from localStorage:', error)
+    return null
   }
 }
 
@@ -86,15 +86,15 @@ export function getLastTeamId(): number | null {
 export function saveLastTeamByMode(teamId: number, mode: 'chat' | 'code'): void {
   try {
     if (!teamId || isNaN(teamId)) {
-      console.warn('[userPreferences] Invalid team ID, not saving:', teamId);
-      return;
+      console.warn('[userPreferences] Invalid team ID, not saving:', teamId)
+      return
     }
-    const key = mode === 'chat' ? STORAGE_KEYS.LAST_TEAM_ID_CHAT : STORAGE_KEYS.LAST_TEAM_ID_CODE;
-    localStorage.setItem(key, String(teamId));
+    const key = mode === 'chat' ? STORAGE_KEYS.LAST_TEAM_ID_CHAT : STORAGE_KEYS.LAST_TEAM_ID_CODE
+    localStorage.setItem(key, String(teamId))
     // Also save to the generic key for backward compatibility
-    localStorage.setItem(STORAGE_KEYS.LAST_TEAM_ID, String(teamId));
+    localStorage.setItem(STORAGE_KEYS.LAST_TEAM_ID, String(teamId))
   } catch (error) {
-    console.warn('Failed to save last team to localStorage:', error);
+    console.warn('Failed to save last team to localStorage:', error)
   }
 }
 
@@ -103,29 +103,29 @@ export function saveLastTeamByMode(teamId: number, mode: 'chat' | 'code'): void 
  */
 export function getLastTeamIdByMode(mode: 'chat' | 'code'): number | null {
   try {
-    const key = mode === 'chat' ? STORAGE_KEYS.LAST_TEAM_ID_CHAT : STORAGE_KEYS.LAST_TEAM_ID_CODE;
-    const teamId = localStorage.getItem(key);
+    const key = mode === 'chat' ? STORAGE_KEYS.LAST_TEAM_ID_CHAT : STORAGE_KEYS.LAST_TEAM_ID_CODE
+    const teamId = localStorage.getItem(key)
     if (!teamId || teamId === 'undefined' || teamId === 'null' || teamId === 'NaN') {
       // console.log(
       //   `[userPreferences] Invalid or missing team ID in localStorage for ${mode} mode:`,
       //   teamId
       // );
       // Fallback to generic key
-      return getLastTeamId();
+      return getLastTeamId()
     }
-    const result = parseInt(teamId, 10);
+    const result = parseInt(teamId, 10)
     if (isNaN(result)) {
       console.log(
         `[userPreferences] Failed to parse team ID for ${mode} mode, got NaN from:`,
         teamId
-      );
-      return getLastTeamId();
+      )
+      return getLastTeamId()
     }
-    console.log(`[userPreferences] Getting team from localStorage for ${mode} mode:`, result);
-    return result;
+    console.log(`[userPreferences] Getting team from localStorage for ${mode} mode:`, result)
+    return result
   } catch (error) {
-    console.warn('Failed to get last team from localStorage:', error);
-    return null;
+    console.warn('Failed to get last team from localStorage:', error)
+    return null
   }
 }
 
@@ -134,10 +134,10 @@ export function getLastTeamIdByMode(mode: 'chat' | 'code'): number | null {
  */
 export function saveLastRepo(repoId: number, repoName: string): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.LAST_REPO_ID, String(repoId));
-    localStorage.setItem(STORAGE_KEYS.LAST_REPO_NAME, repoName);
+    localStorage.setItem(STORAGE_KEYS.LAST_REPO_ID, String(repoId))
+    localStorage.setItem(STORAGE_KEYS.LAST_REPO_NAME, repoName)
   } catch (error) {
-    console.warn('Failed to save last repo to localStorage:', error);
+    console.warn('Failed to save last repo to localStorage:', error)
   }
 }
 
@@ -146,59 +146,59 @@ export function saveLastRepo(repoId: number, repoName: string): void {
  */
 export function getLastRepo(): { repoId: number; repoName: string } | null {
   try {
-    const repoId = localStorage.getItem(STORAGE_KEYS.LAST_REPO_ID);
-    const repoName = localStorage.getItem(STORAGE_KEYS.LAST_REPO_NAME);
+    const repoId = localStorage.getItem(STORAGE_KEYS.LAST_REPO_ID)
+    const repoName = localStorage.getItem(STORAGE_KEYS.LAST_REPO_NAME)
 
     if (repoId && repoName) {
       return {
         repoId: parseInt(repoId, 10),
         repoName,
-      };
+      }
     }
-    return null;
+    return null
   } catch (error) {
-    console.warn('Failed to get last repo from localStorage:', error);
-    return null;
+    console.warn('Failed to get last repo from localStorage:', error)
+    return null
   }
 }
 
-export type CodeWorkspaceMode = 'repo' | 'dir';
+export type CodeWorkspaceMode = 'repo' | 'dir'
 
 export function saveLastCodeWorkspaceMode(mode: CodeWorkspaceMode): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.LAST_CODE_WORKSPACE_MODE, mode);
+    localStorage.setItem(STORAGE_KEYS.LAST_CODE_WORKSPACE_MODE, mode)
   } catch (error) {
-    console.warn('Failed to save last code workspace mode to localStorage:', error);
+    console.warn('Failed to save last code workspace mode to localStorage:', error)
   }
 }
 
 export function getLastCodeWorkspaceMode(): CodeWorkspaceMode | null {
   try {
-    const mode = localStorage.getItem(STORAGE_KEYS.LAST_CODE_WORKSPACE_MODE);
-    return mode === 'repo' || mode === 'dir' ? mode : null;
+    const mode = localStorage.getItem(STORAGE_KEYS.LAST_CODE_WORKSPACE_MODE)
+    return mode === 'repo' || mode === 'dir' ? mode : null
   } catch (error) {
-    console.warn('Failed to get last code workspace mode from localStorage:', error);
-    return null;
+    console.warn('Failed to get last code workspace mode from localStorage:', error)
+    return null
   }
 }
 
 export function saveLastCodeRepoDir(repoDir: string): void {
   try {
-    const value = repoDir.trim();
-    if (!value) return;
-    localStorage.setItem(STORAGE_KEYS.LAST_CODE_REPO_DIR, value);
+    const value = repoDir.trim()
+    if (!value) return
+    localStorage.setItem(STORAGE_KEYS.LAST_CODE_REPO_DIR, value)
   } catch (error) {
-    console.warn('Failed to save last code repo dir to localStorage:', error);
+    console.warn('Failed to save last code repo dir to localStorage:', error)
   }
 }
 
 export function getLastCodeRepoDir(): string | null {
   try {
-    const repoDir = localStorage.getItem(STORAGE_KEYS.LAST_CODE_REPO_DIR);
-    return repoDir && repoDir !== 'undefined' && repoDir !== 'null' ? repoDir : null;
+    const repoDir = localStorage.getItem(STORAGE_KEYS.LAST_CODE_REPO_DIR)
+    return repoDir && repoDir !== 'undefined' && repoDir !== 'null' ? repoDir : null
   } catch (error) {
-    console.warn('Failed to get last code repo dir from localStorage:', error);
-    return null;
+    console.warn('Failed to get last code repo dir from localStorage:', error)
+    return null
   }
 }
 
@@ -208,9 +208,9 @@ export function getLastCodeRepoDir(): string | null {
 export function clearAllPreferences(): void {
   try {
     Object.values(STORAGE_KEYS).forEach(key => {
-      localStorage.removeItem(key);
-    });
+      localStorage.removeItem(key)
+    })
   } catch (error) {
-    console.warn('Failed to clear preferences from localStorage:', error);
+    console.warn('Failed to clear preferences from localStorage:', error)
   }
 }

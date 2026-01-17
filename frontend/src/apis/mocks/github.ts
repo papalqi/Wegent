@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse } from 'msw'
 
 export const MOCK_REPOS = [
   {
@@ -32,59 +32,59 @@ export const MOCK_REPOS = [
     private: true,
     type: 'github',
   },
-];
+]
 
 export const MOCK_BRANCHES = [
   { name: 'master', protected: true, default: true },
   { name: 'develop', protected: false, default: false },
   { name: 'feature/ui-updatelonglonglonglonglong', protected: false, default: false },
-];
+]
 
 function searchRepos(query: string) {
-  const q = query.trim().toLowerCase();
-  if (!q) return MOCK_REPOS;
+  const q = query.trim().toLowerCase()
+  if (!q) return MOCK_REPOS
   return MOCK_REPOS.filter(repo => {
     return (
       repo.name.toLowerCase().includes(q) ||
       repo.git_repo.toLowerCase().includes(q) ||
       repo.git_domain.toLowerCase().includes(q)
-    );
-  });
+    )
+  })
 }
 
 export const githubHandlers = [
   http.get('/api/github/validate-token', () => {
-    return HttpResponse.json({ valid: true, user: { login: 'mock-user' } });
+    return HttpResponse.json({ valid: true, user: { login: 'mock-user' } })
   }),
   // Repository list
   http.get('/api/github/repositories', () => {
-    return HttpResponse.json(MOCK_REPOS);
+    return HttpResponse.json(MOCK_REPOS)
   }),
   // Branch list
   http.get('/api/github/repositories/branches', () => {
-    return HttpResponse.json(MOCK_BRANCHES);
+    return HttpResponse.json(MOCK_BRANCHES)
   }),
 
   // New unified git endpoints
   http.get('/api/git/validate-token', () => {
-    return HttpResponse.json({ valid: true, user: { login: 'mock-user' } });
+    return HttpResponse.json({ valid: true, user: { login: 'mock-user' } })
   }),
   http.get('/api/git/repositories', () => {
-    return HttpResponse.json(MOCK_REPOS);
+    return HttpResponse.json(MOCK_REPOS)
   }),
   http.get('/api/git/repositories/search', ({ request }) => {
-    const url = new URL(request.url);
-    const query = url.searchParams.get('q') || '';
-    return HttpResponse.json(searchRepos(query));
+    const url = new URL(request.url)
+    const query = url.searchParams.get('q') || ''
+    return HttpResponse.json(searchRepos(query))
   }),
   http.get('/api/git/repositories/branches', () => {
-    return HttpResponse.json(MOCK_BRANCHES);
+    return HttpResponse.json(MOCK_BRANCHES)
   }),
   http.post('/api/git/repositories/refresh', () => {
     return HttpResponse.json({
       success: true,
       message: 'Repository cache refreshed',
       cleared_domains: ['github.com'],
-    });
+    })
   }),
-];
+]

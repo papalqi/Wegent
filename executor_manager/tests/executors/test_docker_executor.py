@@ -10,6 +10,8 @@ import requests
 from executor_manager.executors.docker.executor import DockerExecutor
 from shared.status import TaskStatus
 
+from executor_manager.executors.docker.executor import DockerExecutor
+
 
 class TestDockerExecutor:
     """Test cases for DockerExecutor"""
