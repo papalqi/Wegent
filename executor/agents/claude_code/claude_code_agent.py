@@ -39,6 +39,17 @@ from shared.telemetry.decorators import add_span_event, trace_async
 from shared.utils.crypto import decrypt_git_token, is_token_encrypted
 from shared.utils.sensitive_data_masker import mask_sensitive_data
 
+from executor.agents.agno.thinking_step_manager import ThinkingStepManager
+from executor.agents.base import Agent
+from executor.agents.claude_code.progress_state_manager import \
+    ProgressStateManager
+from executor.agents.claude_code.response_processor import process_response
+from executor.config import config
+from executor.tasks.resource_manager import ResourceManager
+from executor.tasks.task_state_manager import TaskState, TaskStateManager
+from executor.utils.mcp_utils import (extract_mcp_servers_config,
+                                      replace_mcp_server_variables)
+
 logger = setup_logger("claude_code_agent")
 
 
@@ -62,6 +73,7 @@ class ClaudeCodeAgent(Agent):
     """
 
     # Static dictionary for storing client connections to enable connection reuse
+    # Key: session_id (task_id:bot_id format), Value: ClaudeSDKClient
     _clients: Dict[str, ClaudeSDKClient] = {}
 
     # Static dictionary for storing hook functions
@@ -504,8 +516,8 @@ class ClaudeCodeAgent(Agent):
             # Check if bot config is available
             if "bot" in self.task_data and len(self.task_data["bot"]) > 0:
                 bot_config = self.task_data["bot"][0]
-                user_name = self.task_data["user"]["name"]
-                git_url = self.task_data["git_url"]
+                user_name = self.task_data.get("user", {}).get("name", "unknown")
+                git_url = self.task_data.get("git_url", "")
                 # Get config from bot
                 agent_config = self._create_claude_model(
                     bot_config, user_name=user_name, git_url=git_url
@@ -657,7 +669,7 @@ class ClaudeCodeAgent(Agent):
             "max_buffer_size": 50 * 1024 * 1024,  # 50MB
         }
         bots = task_data.get("bot", [])
-        bot_config = bots[0]
+        bot_config = bots[0] if bots else {}
         # Extract all non-None parameters from bot_config
         if bot_config:
             # Extract MCP servers configuration
@@ -742,6 +754,11 @@ class ClaudeCodeAgent(Agent):
                 except Exception as e:
                     logger.warning(f"Failed to process custom instructions: {e}")
                     # Continue execution with original systemPrompt
+
+            # Setup SubAgent configuration files for coordinate mode
+            # This is called outside the project_path check because coordinate mode
+            # can work without a git repo (e.g., with attachments only)
+            self._setup_coordinate_mode()
 
             # Download attachments for this task
             self._download_attachments()
@@ -938,37 +955,7 @@ class ClaudeCodeAgent(Agent):
 
             # Create new client if not reusing
             if self.client is None:
-                # Create new client connection
-                logger.info(
-                    f"Creating new Claude client for session_id: {self.session_id}"
-                )
-                logger.info(
-                    f"Initializing Claude client with options: {mask_sensitive_data(self.options)}"
-                )
-
-                if self.options.get("cwd") is None or self.options.get("cwd") == "":
-                    cwd = os.path.join(config.WORKSPACE_ROOT, str(self.task_id))
-                    os.makedirs(cwd, exist_ok=True)
-                    self.options["cwd"] = cwd
-
-                if self.options:
-                    code_options = ClaudeAgentOptions(**self.options)
-                    self.client = ClaudeSDKClient(options=code_options)
-                else:
-                    self.client = ClaudeSDKClient()
-
-                # Connect the client
-                await self.client.connect()
-
-                # Store client connection for reuse
-                self._clients[self.session_id] = self.client
-
-                # Register client as a resource for cleanup
-                self.resource_manager.register_resource(
-                    task_id=self.task_id,
-                    resource_id=f"claude_client_{self.session_id}",
-                    is_async=True,
-                )
+                await self._create_and_connect_client()
 
             # Check cancellation again before proceeding
             if self.task_state_manager.is_cancelled(self.task_id):
@@ -1002,6 +989,26 @@ class ClaudeCodeAgent(Agent):
                 logger.info(f"Task {self.task_id} cancelled before sending query")
                 return TaskStatus.COMPLETED
 
+            # If new_session is True, create a new client with subtask_id as session_id
+            # This is needed because different bots may have different skills, MCP servers, etc.
+            # We keep the old client in cache for potential jump-back to previous bot
+            if self.new_session:
+                new_session_id = str(self.subtask_id)
+                old_session_id = self.session_id
+                self.session_id = new_session_id
+                # Update the session_id_map cache for current bot
+                self._session_id_map[self._internal_session_key] = new_session_id
+                # Note: We do NOT close the old client here, because:
+                # 1. Different bots have different skills/MCP servers, so we need separate clients
+                # 2. Pipeline tasks may jump back to previous bots, which need their own clients
+                # 3. The old client's session_id key is different from new one (task_id:bot_id format)
+                # Create new client with current bot's configuration
+                logger.info(
+                    f"new_session=True, creating new client with subtask_id {new_session_id} as session_id "
+                    f"(old: {old_session_id}, internal_key: {self._internal_session_key})"
+                )
+                await self._create_and_connect_client()
+
             # Use session_id to send messages, ensuring messages are in the same session
             # Use the current updated prompt for each execution, even with the same session ID
             logger.info(
@@ -1030,6 +1037,43 @@ class ClaudeCodeAgent(Agent):
 
         except Exception as e:
             return self._handle_execution_error(e, "async execution")
+
+    async def _create_and_connect_client(self) -> None:
+        """
+        Create and connect a new Claude SDK client.
+        Sets up the working directory if needed, creates the client with options,
+        connects it, and stores it in the cache.
+        """
+        logger.info(f"Creating new Claude client for session_id: {self.session_id}")
+        logger.info(
+            f"Initializing Claude client with options: {mask_sensitive_data(self.options)}"
+        )
+
+        # Ensure working directory exists
+        if self.options.get("cwd") is None or self.options.get("cwd") == "":
+            cwd = os.path.join(config.WORKSPACE_ROOT, str(self.task_id))
+            os.makedirs(cwd, exist_ok=True)
+            self.options["cwd"] = cwd
+
+        # Create client with options
+        if self.options:
+            code_options = ClaudeAgentOptions(**self.options)
+            self.client = ClaudeSDKClient(options=code_options)
+        else:
+            self.client = ClaudeSDKClient()
+
+        # Connect the client
+        await self.client.connect()
+
+        # Store client connection for reuse
+        self._clients[self.session_id] = self.client
+
+        # Register client as a resource for cleanup
+        self.resource_manager.register_resource(
+            task_id=self.task_id,
+            resource_id=f"claude_client_{self.session_id}",
+            is_async=True,
+        )
 
     def _handle_execution_result(
         self, result_content: str, execution_type: str = "execution"
@@ -1690,10 +1734,11 @@ class ClaudeCodeAgent(Agent):
                 logger.warning("No auth token available, cannot download attachments")
                 return
 
-            # Determine workspace path
-            workspace = self.project_path or os.path.join(
-                config.WORKSPACE_ROOT, str(self.task_id)
-            )
+            # Determine workspace path for attachments
+            # Attachments should be stored in WORKSPACE_ROOT/task_id, not in the project path
+            # This ensures attachments are accessible at /workspace/{task_id}:executor:attachments/...
+            # instead of /workspace/{task_id}/{repo_name}/{task_id}:executor:attachments/...
+            workspace = os.path.join(config.WORKSPACE_ROOT, str(self.task_id))
 
             # Import and use attachment downloader
             from executor.services.attachment_downloader import \
@@ -1778,3 +1823,120 @@ class ClaudeCodeAgent(Agent):
         except Exception as e:
             logger.error("Error deploying skills: %s", e)
             # Don't raise - skills deployment failure shouldn't block task execution
+
+    def _setup_coordinate_mode(self) -> None:
+        """
+        Setup SubAgent configuration files for coordinate mode.
+
+        In coordinate mode with multiple bots, the Leader (bot[0]) coordinates
+        work among members (bot[1:]). This method generates .claude/agents/*.md
+        configuration files for each member bot so that Claude Code can invoke
+        them as SubAgents.
+
+        SubAgent config files are placed in {target_path}/.claude/agents/ where
+        target_path is determined by priority:
+        1. self.project_path (if git repo was cloned)
+        2. self.options["cwd"] (if already set)
+        3. Default workspace: /workspace/{task_id}
+        """
+        bots = self.task_data.get("bot", [])
+        mode = self.task_data.get("mode")
+
+        # Only setup for coordinate mode with multiple bots
+        if mode != "coordinate" or len(bots) <= 1:
+            logger.debug(
+                f"Skipping SubAgent setup: mode={mode}, bots_count={len(bots)}"
+            )
+            return
+
+        # Determine target path for SubAgent configs
+        # Priority: project_path > options["cwd"] > default workspace
+        target_path = self.project_path or self.options.get("cwd")
+        if not target_path:
+            # Create default workspace directory
+            target_path = os.path.join(config.WORKSPACE_ROOT, str(self.task_id))
+            os.makedirs(target_path, exist_ok=True)
+            # Also update options["cwd"] so Claude Code uses this directory
+            self.options["cwd"] = target_path
+            logger.info(f"Created default workspace for SubAgent configs: {target_path}")
+
+        # Leader is bot[0], members are bot[1:]
+        member_bots = bots[1:]
+
+        if not member_bots:
+            logger.debug("Skipping SubAgent setup: no member bots after leader")
+            return
+
+        # Create .claude/agents directory
+        agents_dir = os.path.join(target_path, ".claude", "agents")
+        os.makedirs(agents_dir, exist_ok=True)
+
+        # Generate SubAgent config file for each member
+        for bot in member_bots:
+            self._generate_subagent_file(agents_dir, bot)
+
+        # Add to git exclude to prevent showing in git diff (only if .git exists)
+        self._add_to_git_exclude(target_path, ".claude/agents/")
+
+        logger.info(
+            f"Generated {len(member_bots)} SubAgent config files for coordinate mode in {agents_dir}"
+        )
+
+    def _generate_subagent_file(self, agents_dir: str, bot: Dict[str, Any]) -> None:
+        """
+        Generate SubAgent Markdown configuration file.
+
+        The generated file follows Claude Code's SubAgent format with YAML frontmatter
+        containing name, description, and model settings.
+
+        Args:
+            agents_dir: Path to the .claude/agents directory
+            bot: Bot configuration dictionary containing name, system_prompt, etc.
+        """
+        # Normalize bot name for filename (lowercase, replace spaces/underscores with hyphens)
+        raw_name = bot.get("name", "unnamed")
+        bot_id = bot.get("id", "")
+        # Remove unsafe filesystem characters and normalize
+        name = (
+            re.sub(r"[^\w\s-]", "", raw_name)
+            .lower()
+            .replace("_", "-")
+            .replace(" ", "-")
+        )
+        # Ensure name is not empty after sanitization
+        if not name:
+            name = "unnamed"
+        # Append bot ID to prevent filename collisions (e.g., "My Bot" vs "my_bot")
+        if bot_id:
+            name = f"{name}-{bot_id}"
+
+        # Get system prompt from bot config
+        system_prompt = bot.get("system_prompt", "")
+
+        # Generate description from bot name or use existing description
+        description = bot.get("description") or f"Handle tasks related to {raw_name}"
+
+        # Escape YAML special characters in description to prevent parsing issues
+        # Wrap in double quotes and escape internal quotes
+        escaped_description = description.replace('"', '\\"').replace("\n", " ")
+        escaped_description = f'"{escaped_description}"'
+
+        # Build SubAgent config content
+        # - model: inherit -> use same model as Leader (inherit from parent)
+        # - tools: omitted -> inherits all tools from Leader (per Claude Code docs)
+        content = f"""---
+name: {name}
+description: {escaped_description}
+model: inherit
+---
+
+{system_prompt}
+"""
+
+        filepath = os.path.join(agents_dir, f"{name}.md")
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(content)
+            logger.info(f"Generated SubAgent config: {filepath}")
+        except Exception as e:
+            logger.warning(f"Failed to generate SubAgent config for {raw_name}: {e}")

@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import { Task } from '@/types/api';
-import { TaskListResponse } from '@/apis/tasks';
-import { http, HttpResponse } from 'msw';
+import { Task } from '@/types/api'
+import { TaskListResponse } from '@/apis/tasks'
+import { http, HttpResponse } from 'msw'
 
 export const MOCK_TASKS: Task[] = [
   {
@@ -70,7 +70,7 @@ export const MOCK_TASKS: Task[] = [
     updated_at: '2024-07-22T14:00:00Z',
     completed_at: '',
   },
-];
+]
 
 function getMockTaskContainerStatus(taskId: number) {
   if (taskId === 1) {
@@ -80,7 +80,7 @@ function getMockTaskContainerStatus(taskId: number) {
       status: 'running',
       state: 'running',
       reason: null,
-    } as const;
+    } as const
   }
 
   if (taskId === 2) {
@@ -90,7 +90,7 @@ function getMockTaskContainerStatus(taskId: number) {
       status: 'exited',
       state: 'exited',
       reason: 'completed',
-    } as const;
+    } as const
   }
 
   return {
@@ -99,109 +99,109 @@ function getMockTaskContainerStatus(taskId: number) {
     status: 'not_found',
     state: null,
     reason: 'not_found',
-  } as const;
+  } as const
 }
 
 export const taskHandlers = [
   http.get('/api/tasks', ({ request }) => {
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get('page') || '1');
-    const limit = 10; // Default limit
-    const status = url.searchParams.get('status');
+    const url = new URL(request.url)
+    const page = parseInt(url.searchParams.get('page') || '1')
+    const limit = 10 // Default limit
+    const status = url.searchParams.get('status')
 
-    let filteredTasks = MOCK_TASKS;
+    let filteredTasks = MOCK_TASKS
     if (status) {
-      filteredTasks = MOCK_TASKS.filter(task => task.status === status);
+      filteredTasks = MOCK_TASKS.filter(task => task.status === status)
     }
 
-    const total = filteredTasks.length;
-    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit);
+    const total = filteredTasks.length
+    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit)
 
     const response: TaskListResponse = {
       total,
       items: paginatedTasks,
-    };
-    return HttpResponse.json(response);
+    }
+    return HttpResponse.json(response)
   }),
 
   http.get('/api/tasks/lite', ({ request }) => {
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get('page') || '1');
-    const limit = parseInt(url.searchParams.get('limit') || '10');
-    const status = url.searchParams.get('status');
+    const url = new URL(request.url)
+    const page = parseInt(url.searchParams.get('page') || '1')
+    const limit = parseInt(url.searchParams.get('limit') || '10')
+    const status = url.searchParams.get('status')
 
-    let filteredTasks = MOCK_TASKS;
+    let filteredTasks = MOCK_TASKS
     if (status) {
-      filteredTasks = MOCK_TASKS.filter(task => task.status === status);
+      filteredTasks = MOCK_TASKS.filter(task => task.status === status)
     }
 
-    const total = filteredTasks.length;
-    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit);
-    return HttpResponse.json({ total, items: paginatedTasks } satisfies TaskListResponse);
+    const total = filteredTasks.length
+    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit)
+    return HttpResponse.json({ total, items: paginatedTasks } satisfies TaskListResponse)
   }),
 
   http.get('/api/tasks/lite/personal', ({ request }) => {
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get('page') || '1');
-    const limit = parseInt(url.searchParams.get('limit') || '10');
-    const status = url.searchParams.get('status');
+    const url = new URL(request.url)
+    const page = parseInt(url.searchParams.get('page') || '1')
+    const limit = parseInt(url.searchParams.get('limit') || '10')
+    const status = url.searchParams.get('status')
 
-    let filteredTasks = MOCK_TASKS.filter(t => !t.is_group_chat);
+    let filteredTasks = MOCK_TASKS.filter(t => !t.is_group_chat)
     if (status) {
-      filteredTasks = filteredTasks.filter(task => task.status === status);
+      filteredTasks = filteredTasks.filter(task => task.status === status)
     }
 
-    const total = filteredTasks.length;
-    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit);
-    return HttpResponse.json({ total, items: paginatedTasks } satisfies TaskListResponse);
+    const total = filteredTasks.length
+    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit)
+    return HttpResponse.json({ total, items: paginatedTasks } satisfies TaskListResponse)
   }),
 
   http.get('/api/tasks/lite/group', ({ request }) => {
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get('page') || '1');
-    const limit = parseInt(url.searchParams.get('limit') || '10');
-    const status = url.searchParams.get('status');
+    const url = new URL(request.url)
+    const page = parseInt(url.searchParams.get('page') || '1')
+    const limit = parseInt(url.searchParams.get('limit') || '10')
+    const status = url.searchParams.get('status')
 
-    let filteredTasks = MOCK_TASKS.filter(t => t.is_group_chat);
+    let filteredTasks = MOCK_TASKS.filter(t => t.is_group_chat)
     if (status) {
-      filteredTasks = filteredTasks.filter(task => task.status === status);
+      filteredTasks = filteredTasks.filter(task => task.status === status)
     }
 
-    const total = filteredTasks.length;
-    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit);
-    return HttpResponse.json({ total, items: paginatedTasks } satisfies TaskListResponse);
+    const total = filteredTasks.length
+    const paginatedTasks = filteredTasks.slice((page - 1) * limit, page * limit)
+    return HttpResponse.json({ total, items: paginatedTasks } satisfies TaskListResponse)
   }),
 
   http.get('/api/tasks/container-status', ({ request }) => {
-    const url = new URL(request.url);
-    const taskIds = url.searchParams.getAll('task_ids').map(id => Number(id));
-    const validIds = taskIds.filter(id => Number.isFinite(id) && id > 0);
+    const url = new URL(request.url)
+    const taskIds = url.searchParams.getAll('task_ids').map(id => Number(id))
+    const validIds = taskIds.filter(id => Number.isFinite(id) && id > 0)
     return HttpResponse.json({
       items: validIds.map(id => getMockTaskContainerStatus(id)),
-    });
+    })
   }),
 
   http.get('/api/tasks/:id', ({ params }) => {
-    const { id } = params;
-    const task = MOCK_TASKS.find(t => t.id === Number(id));
+    const { id } = params
+    const task = MOCK_TASKS.find(t => t.id === Number(id))
     if (task) {
-      return HttpResponse.json(task);
+      return HttpResponse.json(task)
     } else {
-      return new HttpResponse(null, { status: 404 });
+      return new HttpResponse(null, { status: 404 })
     }
   }),
 
   http.get('/api/tasks/:id/container-status', ({ params }) => {
-    const { id } = params;
-    const taskId = Number(id);
+    const { id } = params
+    const taskId = Number(id)
     if (!Number.isFinite(taskId) || taskId <= 0) {
-      return new HttpResponse(null, { status: 400 });
+      return new HttpResponse(null, { status: 400 })
     }
-    return HttpResponse.json(getMockTaskContainerStatus(taskId));
+    return HttpResponse.json(getMockTaskContainerStatus(taskId))
   }),
 
   http.post('/api/tasks', async ({ request }) => {
-    const newTaskData = (await request.json()) as Partial<Task>;
+    const newTaskData = (await request.json()) as Partial<Task>
     const newTask: Task = {
       id: MOCK_TASKS.length + 1,
       title: newTaskData.title || 'New Task',
@@ -223,19 +223,19 @@ export const taskHandlers = [
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       completed_at: '',
-    };
-    MOCK_TASKS.push(newTask);
-    return HttpResponse.json(newTask, { status: 201 });
+    }
+    MOCK_TASKS.push(newTask)
+    return HttpResponse.json(newTask, { status: 201 })
   }),
 
   http.delete('/api/tasks/:id', ({ params }) => {
-    const { id } = params;
-    const index = MOCK_TASKS.findIndex(t => t.id === Number(id));
+    const { id } = params
+    const index = MOCK_TASKS.findIndex(t => t.id === Number(id))
     if (index !== -1) {
-      MOCK_TASKS.splice(index, 1);
-      return HttpResponse.json({ message: 'Task deleted successfully' });
+      MOCK_TASKS.splice(index, 1)
+      return HttpResponse.json({ message: 'Task deleted successfully' })
     } else {
-      return new HttpResponse(null, { status: 404 });
+      return new HttpResponse(null, { status: 404 })
     }
   }),
-];
+]

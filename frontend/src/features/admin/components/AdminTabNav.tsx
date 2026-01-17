@@ -1,11 +1,11 @@
-// SPDX-FileCopyrightText: 2025 WeCode, Inc.
+// SPDX-FileCopyrightText: 2025 Weibo, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
-'use client';
+'use client'
 
-import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from '@/hooks/useTranslation';
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from '@/hooks/useTranslation'
 import {
   Select,
   SelectContent,
@@ -13,9 +13,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useIsMobile } from '@/features/layout/hooks/useMediaQuery';
-import { Users, Cpu, Settings, Sparkles, KeyRound, Database, HardDrive, Brush } from 'lucide-react';
+} from '@/components/ui/select'
+import { useIsMobile } from '@/features/layout/hooks/useMediaQuery'
+import { Users, Cpu, Settings, Sparkles, KeyRound, Database, HardDrive, Brush } from 'lucide-react'
 
 export type AdminTabId =
   | 'users'
@@ -25,25 +25,25 @@ export type AdminTabId =
   | 'custom-config-models'
   | 'api-keys'
   | 'system-config'
-  | 'database';
+  | 'database'
 
 interface AdminTabNavProps {
-  activeTab: AdminTabId;
-  onTabChange: (tab: AdminTabId) => void;
+  activeTab: AdminTabId
+  onTabChange: (tab: AdminTabId) => void
 }
 
 interface TabItem {
-  id: AdminTabId;
-  label: string;
-  icon: React.ElementType;
+  id: AdminTabId
+  label: string
+  icon: React.ElementType
 }
 
 export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
-  const { t } = useTranslation();
-  const isMobile = useIsMobile();
-  const indicatorContainerRef = useRef<HTMLDivElement | null>(null);
-  const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const [indicatorStyle, setIndicatorStyle] = useState({ width: 0, left: 0 });
+  const { t } = useTranslation()
+  const isMobile = useIsMobile()
+  const indicatorContainerRef = useRef<HTMLDivElement | null>(null)
+  const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const [indicatorStyle, setIndicatorStyle] = useState({ width: 0, left: 0 })
 
   // Tab items
   const tabs: TabItem[] = [
@@ -55,36 +55,36 @@ export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
     { id: 'api-keys', label: t('admin:tabs.api_keys'), icon: KeyRound },
     { id: 'system-config', label: t('admin:tabs.system_config'), icon: Settings },
     { id: 'database', label: t('admin:tabs.database'), icon: HardDrive },
-  ];
+  ]
 
   // Update the indicator position when the active tab changes
   useEffect(() => {
     const updateIndicator = () => {
-      const container = indicatorContainerRef.current;
-      const current = itemRefs.current[activeTab];
+      const container = indicatorContainerRef.current
+      const current = itemRefs.current[activeTab]
 
       if (!container || !current) {
         setIndicatorStyle(prev =>
           prev.width === 0 && prev.left === 0 ? prev : { width: 0, left: 0 }
-        );
-        return;
+        )
+        return
       }
 
-      const containerRect = container.getBoundingClientRect();
-      const currentRect = current.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect()
+      const currentRect = current.getBoundingClientRect()
       setIndicatorStyle({
         width: currentRect.width,
         left: currentRect.left - containerRect.left,
-      });
-    };
+      })
+    }
 
-    updateIndicator();
-    window.addEventListener('resize', updateIndicator);
+    updateIndicator()
+    window.addEventListener('resize', updateIndicator)
 
     return () => {
-      window.removeEventListener('resize', updateIndicator);
-    };
-  }, [activeTab]);
+      window.removeEventListener('resize', updateIndicator)
+    }
+  }, [activeTab])
 
   // Mobile: Dropdown select
   if (isMobile) {
@@ -108,7 +108,7 @@ export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
           </SelectContent>
         </Select>
       </div>
-    );
+    )
   }
 
   // Desktop: Horizontal tab navigation
@@ -134,7 +134,7 @@ export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
           key={tab.id}
           type="button"
           ref={element => {
-            itemRefs.current[tab.id] = element;
+            itemRefs.current[tab.id] = element
           }}
           onClick={() => onTabChange(tab.id)}
           className={`relative flex items-center gap-2 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-md transition-colors duration-200 ${
@@ -149,7 +149,7 @@ export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
         </button>
       ))}
     </div>
-  );
+  )
 }
 
-export default AdminTabNav;
+export default AdminTabNav

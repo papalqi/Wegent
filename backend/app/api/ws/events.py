@@ -9,7 +9,6 @@ This module defines all event names and Pydantic models for
 Socket.IO message payloads.
 """
 
-from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -43,6 +42,9 @@ class ClientEvents:
 class ServerEvents:
     """Server -> Client event names."""
 
+    # Authentication events
+    AUTH_ERROR = "auth:error"  # Token expired or invalid
+
     # Chat streaming events (to task room)
     CHAT_START = "chat:start"
     CHAT_CHUNK = "chat:chunk"
@@ -69,6 +71,7 @@ class ServerEvents:
     TASK_STATUS = "task:status"
     TASK_SHARED = "task:shared"
     TASK_INVITED = "task:invited"  # User invited to group chat
+    TASK_APP_UPDATE = "task:app_update"  # App data updated (to task room)
     UNREAD_COUNT = "unread:count"
 
     # Generic Skill Events
@@ -136,6 +139,9 @@ class ChatSendPayload(BaseModel):
     branch_name: Optional[str] = Field(None, description="Git branch name")
     task_type: Optional[Literal["chat", "code"]] = Field(
         None, description="Task type: chat or code"
+    )
+    preload_skills: Optional[List[str]] = Field(
+        None, description="List of skill names to preload into system prompt"
     )
 
 
@@ -316,6 +322,7 @@ class TaskCreatedPayload(BaseModel):
     team_id: int
     team_name: str
     created_at: str
+    is_group_chat: bool = False
 
 
 class TaskDeletedPayload(BaseModel):
@@ -360,6 +367,16 @@ class TaskInvitedPayload(BaseModel):
     invited_by: Dict[str, Any]
     is_group_chat: bool = True
     created_at: str
+
+
+class TaskAppUpdatePayload(BaseModel):
+    """Payload for task:app_update event (app preview data updated)."""
+
+    task_id: int
+    app: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="App data (name, address, previewUrl)",
+    )
 
 
 class UnreadCountPayload(BaseModel):
@@ -502,3 +519,17 @@ class GenericAck(BaseModel):
 
     success: bool = True
     error: Optional[str] = None
+
+
+# ============================================================
+# Authentication Error Payloads
+# ============================================================
+
+
+class AuthErrorPayload(BaseModel):
+    """Payload for auth:error event."""
+
+    error: str = Field(..., description="Error message")
+    code: Literal["TOKEN_EXPIRED", "INVALID_TOKEN"] = Field(
+        ..., description="Error code for identifying the type of auth error"
+    )

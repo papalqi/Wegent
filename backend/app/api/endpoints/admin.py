@@ -246,10 +246,19 @@ async def create_user(
         role=user_data.role,
         auth_source=user_data.auth_source,
         is_active=True,
+        git_info=[],
+        preferences="{}",
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    # Apply default resources for the new user in a background thread
+    def run_async_task():
+        asyncio.run(apply_default_resources_async(new_user.id))
+
+    thread = threading.Thread(target=run_async_task, daemon=True)
+    thread.start()
 
     return AdminUserResponse(
         id=new_user.id,

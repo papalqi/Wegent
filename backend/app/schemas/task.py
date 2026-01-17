@@ -13,6 +13,14 @@ from app.schemas.team import TeamInDB
 from app.schemas.user import UserInDB
 
 
+class TaskApp(BaseModel):
+    """App preview information (set by expose_service tool when service starts)"""
+
+    name: str
+    address: str
+    previewUrl: str
+
+
 class TaskStatus(str, Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
@@ -21,6 +29,7 @@ class TaskStatus(str, Enum):
     CANCELLED = "CANCELLED"
     CANCELLING = "CANCELLING"
     DELETE = "DELETE"
+    PENDING_CONFIRMATION = "PENDING_CONFIRMATION"  # Pipeline stage completed, waiting for user confirmation
 
 
 class TaskBase(BaseModel):
@@ -147,6 +156,9 @@ class TaskDetail(BaseModel):
     is_group_chat: bool = False  # Whether this is a group chat task
     is_group_owner: bool = False  # Whether current user is the owner (for group chats)
     member_count: Optional[int] = None  # Number of members (for group chats)
+    app: Optional[TaskApp] = (
+        None  # App preview information (set by expose_service tool)
+    )
 
     class Config:
         from_attributes = True
@@ -205,3 +217,39 @@ class TaskExecutorContainerStatus(BaseModel):
 
 class TaskExecutorContainerStatusBatchResponse(BaseModel):
     items: List[TaskExecutorContainerStatus]
+
+
+class PipelineStage(BaseModel):
+    """Pipeline stage details for pipeline collaboration mode."""
+
+    index: int
+    name: str
+    require_confirmation: bool = False
+    status: str = "pending"
+
+
+class PipelineStageInfo(BaseModel):
+    """Pipeline stage information for a task in pipeline collaboration mode."""
+
+    current_stage: int = 0
+    total_stages: int = 1
+    current_stage_name: str = "default"
+    is_pending_confirmation: bool = False
+    stages: List[PipelineStage] = []
+
+
+class ConfirmStageRequest(BaseModel):
+    """Request to confirm a pipeline stage and proceed or retry."""
+
+    confirmed_prompt: str
+    action: str = "continue"
+
+
+class ConfirmStageResponse(BaseModel):
+    """Response after confirming a pipeline stage."""
+
+    message: str
+    task_id: int
+    current_stage: int
+    total_stages: int
+    next_stage_name: Optional[str] = None

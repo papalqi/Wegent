@@ -12,10 +12,12 @@ from app.api.endpoints import (
     oidc,
     openapi_responses,
     pr_actions,
+    projects,
     quota,
     rag,
     repository,
     subtasks,
+    tables,
     users,
     utils,
     wiki,
@@ -31,9 +33,18 @@ from app.api.endpoints.adapter import (
     models,
     retrievers,
     shells,
+    task_knowledge_bases,
     task_members,
     tasks,
     teams,
+)
+from app.api.endpoints.internal import bots_router as internal_bots_router
+from app.api.endpoints.internal import (
+    chat_storage_router,
+    rag_router,
+    services_router,
+    skills_router,
+    tables_router,
 )
 from app.api.endpoints.kind import k_router
 from app.api.router import api_router
@@ -45,6 +56,7 @@ api_router.include_router(oidc.router, prefix="/auth/oidc", tags=["auth", "oidc"
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(groups.router, prefix="/groups", tags=["groups"])
+api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 api_router.include_router(api_keys.router, prefix="/api-keys", tags=["api-keys"])
 api_router.include_router(bots.router, prefix="/bots", tags=["bots"])
 api_router.include_router(models.router, prefix="/models", tags=["public-models"])
@@ -54,6 +66,9 @@ api_router.include_router(teams.router, prefix="/teams", tags=["teams"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(subtasks.router, prefix="/subtasks", tags=["subtasks"])
 api_router.include_router(task_members.router, prefix="/tasks", tags=["task-members"])
+api_router.include_router(
+    task_knowledge_bases.router, prefix="/tasks", tags=["task-knowledge-bases"]
+)
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(
     attachments.router, prefix="/attachments", tags=["attachments"]
@@ -78,6 +93,31 @@ api_router.include_router(
 api_router.include_router(
     knowledge.document_router, prefix="/knowledge-documents", tags=["knowledge"]
 )
+api_router.include_router(
+    knowledge.qa_history_router,
+    prefix="/v1/knowledge-base/qa-history",
+    tags=["knowledge-qa-history"],
+)
+api_router.include_router(
+    knowledge.summary_router,
+    prefix="/knowledge-bases",
+    tags=["knowledge-summary"],
+)
+api_router.include_router(tables.router, prefix="/tables", tags=["tables"])
 api_router.include_router(rag.router, prefix="/rag", tags=["rag"])
 api_router.include_router(utils.router, prefix="/utils", tags=["utils"])
 api_router.include_router(k_router)
+
+# Internal API endpoints (for service-to-service communication)
+api_router.include_router(
+    chat_storage_router, prefix="/internal", tags=["internal-chat"]
+)
+api_router.include_router(rag_router, prefix="/internal", tags=["internal-rag"])
+api_router.include_router(skills_router, prefix="/internal", tags=["internal-skills"])
+api_router.include_router(tables_router, prefix="/internal", tags=["internal-tables"])
+api_router.include_router(
+    internal_bots_router, prefix="/internal", tags=["internal-bots"]
+)
+api_router.include_router(
+    services_router, prefix="/internal", tags=["internal-services"]
+)
