@@ -485,7 +485,6 @@ jobs:
     needs:
       - prepare-release
       - build-backend
-      - build-chat-shell
       - build-executor
       - build-executor-manager
       - build-frontend
