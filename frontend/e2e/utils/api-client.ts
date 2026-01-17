@@ -48,6 +48,10 @@ export class ApiClient {
       'Content-Type': 'application/json',
     }
 
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`
+    }
+
     let response: APIResponse | undefined
 
     const options = {
