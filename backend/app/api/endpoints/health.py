@@ -90,6 +90,27 @@ def readiness_check(response: Response, db: Session = Depends(get_db)):
         }
 
 
+@router.head("/ready", include_in_schema=False)
+def readiness_check_head(db: Session = Depends(get_db)):
+    """
+    HEAD variant of /ready for CI health checks (e.g. wait-on uses HEAD by default).
+    Returns:
+        Response: 200 when ready, otherwise 503
+    """
+    if shutdown_manager.is_shutting_down:
+        return Response(status_code=503)
+
+    try:
+        result = db.execute(text("SELECT COUNT(*) FROM users"))
+        user_count = int(result.scalar() or 0)
+    except Exception:
+        return Response(status_code=503)
+
+    if user_count > 0:
+        return Response(status_code=200)
+    return Response(status_code=503)
+
+
 @router.get("/startup")
 def startup_check(db: Session = Depends(get_db)):
     return {"status": "started"}
