@@ -15,7 +15,17 @@ export class AdminPage extends BasePage {
     await this.goto('/admin')
   }
 
-  async navigateToTab(tab: 'users' | 'public-models' | 'system-config'): Promise<void> {
+  async navigateToTab(
+    tab:
+      | 'users'
+      | 'public-models'
+      | 'public-retrievers'
+      | 'public-skills'
+      | 'custom-config-models'
+      | 'api-keys'
+      | 'system-config'
+      | 'database'
+  ): Promise<void> {
     await this.goto(`/admin?tab=${tab}`)
     // Wait for DOM to be ready
     await this.page.waitForLoadState('domcontentloaded')
@@ -168,7 +178,7 @@ export class AdminPage extends BasePage {
 
   async clickCreatePublicModel(): Promise<void> {
     await this.page.click(
-      'button:has-text("Create Model"), button:has-text("新建模型"), button:has-text("Add Model")'
+      'button:has-text("Create Model"), button:has-text("创建模型"), button:has-text("新建模型"), button:has-text("Add Model")'
     )
     await this.waitForDialog()
   }
@@ -176,28 +186,76 @@ export class AdminPage extends BasePage {
   async fillPublicModelForm(data: {
     name: string
     namespace?: string
-    config: string
+    displayName?: string
+    providerType?: 'openai' | 'openai-responses' | 'anthropic' | 'gemini'
+    modelId: string
+    baseUrl?: string
+    apiKey: string
+    customHeaders?: string
   }): Promise<void> {
+    const dialog = this.page.locator('[role="dialog"]').first()
+
     // Fill model name - use the actual input id from PublicModelList.tsx
-    const nameInput = this.page.locator('input#name, input[placeholder*="model"]').first()
+    const nameInput = dialog.locator('input#name, input#edit-name').first()
     await nameInput.fill(data.name)
+
+    if (data.displayName !== undefined) {
+      const displayNameInput = dialog.locator('input#displayName, input#edit-displayName').first()
+      if (await displayNameInput.isVisible().catch(() => false)) {
+        await displayNameInput.fill(data.displayName)
+      }
+    }
 
     // Fill namespace if provided - use the actual input id from PublicModelList.tsx
     if (data.namespace) {
-      const namespaceInput = this.page.locator('input#namespace').first()
+      const namespaceInput = dialog.locator('input#namespace, input#edit-namespace').first()
       if (await namespaceInput.isVisible()) {
         await namespaceInput.fill(data.namespace)
       }
     }
 
-    // Fill config JSON - use the actual textarea id from PublicModelList.tsx
-    const configTextarea = this.page.locator('textarea#config, textarea').first()
-    await configTextarea.fill(data.config)
+    if (data.providerType) {
+      const providerSelect = dialog.locator('[role="combobox"]').first()
+      await providerSelect.click()
+      await this.page.waitForTimeout(200)
+
+      const optionLabel =
+        data.providerType === 'openai'
+          ? 'OpenAI'
+          : data.providerType === 'openai-responses'
+            ? 'OpenAI Responses'
+            : data.providerType === 'anthropic'
+              ? 'Anthropic'
+              : 'Gemini'
+      await this.page.locator(`[role="option"]:has-text("${optionLabel}")`).click()
+    }
+
+    const modelIdInput = dialog.locator('input#modelId, input#edit-modelId').first()
+    await modelIdInput.fill(data.modelId)
+
+    if (data.baseUrl !== undefined) {
+      const baseUrlInput = dialog.locator('input#baseUrl, input#edit-baseUrl').first()
+      if (await baseUrlInput.isVisible().catch(() => false)) {
+        await baseUrlInput.fill(data.baseUrl)
+      }
+    }
+
+    const apiKeyInput = dialog.locator('input#apiKey, input#edit-apiKey').first()
+    await apiKeyInput.fill(data.apiKey)
+
+    if (data.customHeaders !== undefined) {
+      const headersTextarea = dialog
+        .locator('textarea#customHeaders, textarea#edit-customHeaders')
+        .first()
+      if (await headersTextarea.isVisible().catch(() => false)) {
+        await headersTextarea.fill(data.customHeaders)
+      }
+    }
   }
 
   async submitPublicModelForm(): Promise<void> {
     await this.page.click(
-      '[role="dialog"] button:has-text("Save"), [role="dialog"] button:has-text("保存"), [role="dialog"] button:has-text("Create")'
+      '[role="dialog"] button:has-text("Save"), [role="dialog"] button:has-text("保存"), [role="dialog"] button:has-text("Create"), [role="dialog"] button:has-text("创建")'
     )
     await this.waitForLoading()
   }
@@ -210,7 +268,9 @@ export class AdminPage extends BasePage {
 
   async clickEditPublicModel(modelName: string): Promise<void> {
     const modelCard = this.page.locator(`.space-y-3 > div:has-text("${modelName}")`).first()
-    const editButton = modelCard.locator('button[title*="Edit"], button:has-text("Edit")').first()
+    const editButton = modelCard
+      .locator('button[title*="Edit"], button[title*="编辑"], button:has-text("Edit")')
+      .first()
     await editButton.click()
     await this.waitForDialog()
   }
@@ -218,10 +278,10 @@ export class AdminPage extends BasePage {
   async clickDeletePublicModel(modelName: string): Promise<void> {
     const modelCard = this.page.locator(`.space-y-3 > div:has-text("${modelName}")`).first()
     const deleteButton = modelCard
-      .locator('button[title*="Delete"], button:has-text("Delete")')
+      .locator('button[title*="Delete"], button[title*="删除"], button:has-text("Delete")')
       .first()
     await deleteButton.click()
-    await this.waitForDialog()
+    await this.page.locator('[role="alertdialog"]').waitFor({ state: 'visible' })
   }
 
   // ==================== System Config ====================

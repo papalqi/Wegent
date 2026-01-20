@@ -243,15 +243,13 @@ graph LR
 **Core Table Structure**:
 ```
 wegent_db/
-├── ghosts           # Ghost definitions
-├── models           # Model configurations
-├── shells           # Shell configurations
-├── bots             # Bot instances
-├── teams            # Team definitions
-├── workspaces       # Workspace configurations
-├── tasks            # Task records
 ├── users            # User information (with role field)
-└── public_models    # System-wide public models
+├── kinds            # CRD resources (Ghost/Shell/Model/Bot/Team/...; public resources use user_id=0)
+├── tasks            # Task records
+├── subtasks         # Subtask records
+├── task_members     # Task / group chat members
+├── api_keys         # API key resources (service/personal)
+└── ...              # projects/wiki/shared_tasks/system_configs/etc.
 ```
 
 **Data Model Features**:

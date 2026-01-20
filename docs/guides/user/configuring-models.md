@@ -44,9 +44,10 @@ Model 决定"思考能力有多强"
 
 ### 与数据库的关系
 
-Model 资源存储在数据库的以下表中:
-- `public_models`: 存储所有用户共享的公共 Model 配置
-- `kinds`: 存储用户自定义的私有 Model 配置 (type='user')
+Model 资源统一存储在数据库的 `kinds` 表中（Kubernetes-style CRD 存储）。
+
+- **用户模型**：`kinds.user_id = 当前用户ID`，`kinds.kind = 'Model'`（个人通常在 `namespace='default'`；群组模型在对应的 group namespace）
+- **公共模型**：`kinds.user_id = 0`，`kinds.kind = 'Model'`，`namespace='default'`（系统级共享）
 
 ### 模型类型
 
@@ -54,12 +55,22 @@ Wegent 支持两种类型的模型:
 
 | 类型 | 说明 | 存储位置 |
 |------|------|----------|
-| **公共模型** | 系统提供的所有用户共享的模型 | `public_models` 表 |
-| **用户模型** | 用户自定义的私有模型 | `kinds` 表 |
+| **公共模型** | 系统提供的所有用户共享的模型 | `kinds` 表（`user_id=0`） |
+| **用户模型** | 用户自定义的私有模型 | `kinds` 表（`user_id=当前用户`） |
 
 当将模型绑定到 Bot 时，系统按以下顺序解析模型:
-1. 用户的私有模型 (type='user')
-2. 公共模型 (type='public')
+1. 用户模型（type='user'）
+2. 公共模型（type='public'）
+
+> 提示：当用户模型与公共模型同名时，建议在 Bot 的 `agent_config.bind_model_type` 中显式指定 `public` / `user`，避免歧义。
+
+### 管理员：配置公共模型（Web UI）
+
+管理员可以在 **Admin → 公共模型管理** 中创建/编辑公共模型。公共模型会对所有用户可见，并出现在模型选择器中。
+
+建议：
+- **不要把真实密钥明文写进模型配置**；可使用形如 `${OPENAI_API_KEY}` 的占位符，并通过部署环境变量注入。
+- OpenAI/OpenAI-Responses 的 Base URL 支持自动补全 `/v1`（末尾加 `#` 可禁用自动追加）。
 
 ---
 

@@ -519,6 +519,186 @@ export class ApiClient {
     return this.call('DELETE', `/api/admin/public-models/${modelId}`)
   }
 
+  /**
+   * List public retrievers (admin only)
+   */
+  async adminListPublicRetrievers(page: number = 1, limit: number = 100): Promise<ApiResponse> {
+    return this.call('GET', `/api/admin/public-retrievers?page=${page}&limit=${limit}`)
+  }
+
+  /**
+   * Create public retriever (admin only)
+   */
+  async adminCreatePublicRetriever(retrieverData: unknown): Promise<ApiResponse> {
+    return this.call('POST', '/api/admin/public-retrievers', retrieverData)
+  }
+
+  /**
+   * Update public retriever (admin only)
+   */
+  async adminUpdatePublicRetriever(retrieverId: number, data: unknown): Promise<ApiResponse> {
+    return this.call('PUT', `/api/admin/public-retrievers/${retrieverId}`, data)
+  }
+
+  /**
+   * Delete public retriever (admin only)
+   */
+  async adminDeletePublicRetriever(retrieverId: number): Promise<ApiResponse> {
+    return this.call('DELETE', `/api/admin/public-retrievers/${retrieverId}`)
+  }
+
+  /**
+   * Get chat slogan/tips config (admin only)
+   */
+  async adminGetSloganTipsConfig(): Promise<ApiResponse> {
+    return this.call('GET', '/api/admin/system-config/slogan-tips')
+  }
+
+  /**
+   * Update chat slogan/tips config (admin only)
+   */
+  async adminUpdateSloganTipsConfig(data: unknown): Promise<ApiResponse> {
+    return this.call('PUT', '/api/admin/system-config/slogan-tips', data)
+  }
+
+  /**
+   * List service keys (admin only)
+   */
+  async adminListServiceKeys(): Promise<ApiResponse> {
+    return this.call('GET', '/api/admin/service-keys')
+  }
+
+  /**
+   * Create service key (admin only)
+   * Note: full key is only returned once.
+   */
+  async adminCreateServiceKey(data: unknown): Promise<ApiResponse> {
+    return this.call('POST', '/api/admin/service-keys', data)
+  }
+
+  /**
+   * Toggle service key active status (admin only)
+   */
+  async adminToggleServiceKeyStatus(keyId: number): Promise<ApiResponse> {
+    return this.call('POST', `/api/admin/service-keys/${keyId}/toggle-status`)
+  }
+
+  /**
+   * Delete service key (admin only)
+   */
+  async adminDeleteServiceKey(keyId: number): Promise<ApiResponse> {
+    return this.call('DELETE', `/api/admin/service-keys/${keyId}`)
+  }
+
+  /**
+   * Create personal API key for current user
+   */
+  async createPersonalApiKey(data: unknown): Promise<ApiResponse> {
+    return this.call('POST', '/api/api-keys', data)
+  }
+
+  /**
+   * Delete personal API key for current user
+   */
+  async deletePersonalApiKey(keyId: number): Promise<ApiResponse> {
+    return this.call('DELETE', `/api/api-keys/${keyId}`)
+  }
+
+  /**
+   * List all personal keys (admin only)
+   */
+  async adminListPersonalKeys(
+    page: number = 1,
+    limit: number = 100,
+    search?: string
+  ): Promise<ApiResponse> {
+    const params = new URLSearchParams()
+    params.append('page', String(page))
+    params.append('limit', String(limit))
+    if (search) params.append('search', search)
+    return this.call('GET', `/api/admin/personal-keys?${params.toString()}`)
+  }
+
+  /**
+   * Toggle personal key active status (admin only)
+   */
+  async adminTogglePersonalKeyStatus(keyId: number): Promise<ApiResponse> {
+    return this.call('POST', `/api/admin/personal-keys/${keyId}/toggle-status`)
+  }
+
+  /**
+   * Delete a personal key (admin only)
+   */
+  async adminDeletePersonalKey(keyId: number): Promise<ApiResponse> {
+    return this.call('DELETE', `/api/admin/personal-keys/${keyId}`)
+  }
+
+  /**
+   * Create a model CRD via Kind API (used for custom-config models)
+   */
+  async createModelResource(namespace: string, modelCrd: unknown): Promise<ApiResponse> {
+    return this.call('POST', `/api/v1/namespaces/${namespace}/models`, modelCrd)
+  }
+
+  /**
+   * List custom config models (admin only)
+   */
+  async adminListCustomConfigModels(
+    page: number = 1,
+    limit: number = 100,
+    includeInactive: boolean = false,
+    search?: string,
+    referencesLimit: number = 5
+  ): Promise<ApiResponse> {
+    const params = new URLSearchParams()
+    params.append('page', String(page))
+    params.append('limit', String(limit))
+    params.append('references_limit', String(referencesLimit))
+    if (includeInactive) params.append('include_inactive', 'true')
+    if (search) params.append('search', search)
+    return this.call('GET', `/api/admin/custom-config-models?${params.toString()}`)
+  }
+
+  /**
+   * Delete custom config model (admin only)
+   */
+  async adminDeleteCustomConfigModel(
+    modelId: number,
+    force: boolean = false
+  ): Promise<ApiResponse> {
+    const params = new URLSearchParams()
+    if (force) params.append('force', 'true')
+    const suffix = params.toString() ? `?${params.toString()}` : ''
+    return this.call('DELETE', `/api/admin/custom-config-models/${modelId}${suffix}`)
+  }
+
+  /**
+   * Cleanup orphan custom config models (admin only)
+   */
+  async adminCleanupCustomConfigModelOrphans(
+    dryRun: boolean = true,
+    olderThanDays: number = 0
+  ): Promise<ApiResponse> {
+    const params = new URLSearchParams()
+    params.append('dry_run', dryRun ? 'true' : 'false')
+    params.append('older_than_days', String(olderThanDays))
+    return this.call('POST', `/api/admin/custom-config-models/cleanup-orphans?${params.toString()}`)
+  }
+
+  /**
+   * List public skills (any authenticated user)
+   */
+  async listPublicSkills(skip: number = 0, limit: number = 100): Promise<ApiResponse> {
+    return this.call('GET', `/api/v1/kinds/skills/public/list?skip=${skip}&limit=${limit}`)
+  }
+
+  /**
+   * Delete public skill (admin only)
+   */
+  async deletePublicSkill(skillId: number): Promise<ApiResponse> {
+    return this.call('DELETE', `/api/v1/kinds/skills/public/${skillId}`)
+  }
+
   // ==================== Utility Methods ====================
 
   /**

@@ -243,15 +243,13 @@ graph LR
 **核心表结构**：
 ```
 wegent_db/
-├── ghosts           # Ghost 定义
-├── models           # Model 配置
-├── shells           # Shell 配置
-├── bots             # Bot 实例
-├── teams            # Team 定义
-├── workspaces       # Workspace 配置
-├── tasks            # Task 记录
 ├── users            # 用户信息（含角色字段）
-└── public_models    # 系统级公共模型
+├── kinds            # CRD 资源存储（Ghost/Shell/Model/Bot/Team/...；公共资源用 user_id=0）
+├── tasks            # Task 记录
+├── subtasks         # 子任务记录
+├── task_members     # 任务/群聊成员
+├── api_keys         # API Key 资源（服务/个人）
+└── ...              # projects/wiki/shared_tasks/system_configs 等
 ```
 
 **数据模型特点**：

@@ -6,6 +6,7 @@
 import '@/features/common/scrollbar.css'
 
 import React, { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tag } from '@/components/ui/tag'
@@ -40,6 +41,7 @@ import {
 } from '@/components/ui/select'
 import { modelApis, ModelCRD, UnifiedModel, ModelCategoryType } from '@/apis/models'
 import UnifiedAddButton from '@/components/common/UnifiedAddButton'
+import { useUser } from '@/features/common/UserContext'
 
 // Model category type filter options
 const MODEL_CATEGORY_FILTER_OPTIONS: { value: ModelCategoryType | 'all'; labelKey: string }[] = [
@@ -92,6 +94,8 @@ const ModelList: React.FC<ModelListProps> = ({
 }) => {
   const { t } = useTranslation()
   const { toast } = useToast()
+  const { user } = useUser()
+  const isAdmin = user?.role === 'admin'
   const [unifiedModels, setUnifiedModels] = useState<UnifiedModel[]>([])
   const [loading, setLoading] = useState(true)
   const [editingModel, setEditingModel] = useState<ModelCRD | null>(null)
@@ -394,6 +398,16 @@ const ModelList: React.FC<ModelListProps> = ({
             <CpuChipIcon className="w-12 h-12 text-text-muted mb-4" />
             <p className="text-text-muted">{t('common:models.no_models')}</p>
             <p className="text-sm text-text-muted mt-1">{t('common:models.no_models_hint')}</p>
+            <p className="text-xs text-text-muted mt-3">
+              {t('common:models.public_models_admin_hint')}
+            </p>
+            {isAdmin && (
+              <Link href="/admin?tab=public-models" className="mt-3">
+                <Button variant="outline" size="sm">
+                  {t('common:models.manage_public_models')}
+                </Button>
+              </Link>
+            )}
           </div>
         )}
 
@@ -573,11 +587,23 @@ const ModelList: React.FC<ModelListProps> = ({
               )}
 
               {/* Public Models Section */}
-              {publicModels.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium text-text-secondary px-2">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-2 gap-2">
+                  <h3 className="text-sm font-medium text-text-secondary">
                     {t('common:models.public_models')} ({publicModels.length})
                   </h3>
+                  {isAdmin && (
+                    <Link href="/admin?tab=public-models" className="shrink-0">
+                      <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                        {t('common:models.manage_public_models')}
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+                <p className="text-xs text-text-muted px-2">
+                  {t('common:models.public_models_admin_hint')}
+                </p>
+                {publicModels.length > 0 ? (
                   <div className="space-y-3">
                     {publicModels.map(displayModel => (
                       <Card
@@ -620,8 +646,12 @@ const ModelList: React.FC<ModelListProps> = ({
                       </Card>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-xs text-text-muted px-2">
+                    {t('common:models.no_public_models')}
+                  </p>
+                )}
+              </div>
             </div>
           </>
         )}

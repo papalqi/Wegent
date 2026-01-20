@@ -7,6 +7,27 @@ test.describe('Admin - Public Model API Tests', () => {
   let apiClient: ApiClient
   let testModelId: number | null = null
 
+  const buildPublicModelJson = (modelName: string, displayName?: string) => ({
+    apiVersion: 'agent.wecode.io/v1',
+    kind: 'Model',
+    metadata: {
+      name: modelName,
+      namespace: 'default',
+      ...(displayName ? { displayName } : {}),
+    },
+    spec: {
+      modelConfig: {
+        env: {
+          model: 'openai',
+          model_id: 'gpt-4o-mini',
+          api_key: 'test-key',
+          base_url: 'https://api.openai.com/v1',
+        },
+      },
+    },
+    status: { state: 'Available' },
+  })
+
   test.beforeEach(async ({ request }) => {
     apiClient = createApiClient(request)
     await apiClient.login(ADMIN_USER.username, ADMIN_USER.password)
@@ -31,23 +52,8 @@ test.describe('Admin - Public Model API Tests', () => {
     const modelName = DataBuilders.uniqueName('api-test-model')
     const response = await apiClient.adminCreatePublicModel({
       name: modelName,
-      json: {
-        apiVersion: 'agent.wecode.io/v1',
-        kind: 'Model',
-        metadata: {
-          name: modelName,
-          displayName: 'API Test Model',
-          namespace: 'default',
-        },
-        spec: {
-          modelConfig: {
-            provider: 'openai',
-            modelId: 'gpt-4',
-            apiKey: 'test-key',
-            baseUrl: 'https://api.openai.com/v1',
-          },
-        },
-      },
+      namespace: 'default',
+      json: buildPublicModelJson(modelName, 'API Test Model'),
     })
 
     expect([200, 201]).toContain(response.status)
@@ -61,23 +67,8 @@ test.describe('Admin - Public Model API Tests', () => {
     const modelName = DataBuilders.uniqueName('api-update-model')
     const createResponse = await apiClient.adminCreatePublicModel({
       name: modelName,
-      json: {
-        apiVersion: 'agent.wecode.io/v1',
-        kind: 'Model',
-        metadata: {
-          name: modelName,
-          displayName: 'API Update Test Model',
-          namespace: 'default',
-        },
-        spec: {
-          modelConfig: {
-            provider: 'openai',
-            modelId: 'gpt-4',
-            apiKey: 'test-key',
-            baseUrl: 'https://api.openai.com/v1',
-          },
-        },
-      },
+      namespace: 'default',
+      json: buildPublicModelJson(modelName, 'API Update Test Model'),
     })
 
     expect([200, 201]).toContain(createResponse.status)
@@ -96,23 +87,8 @@ test.describe('Admin - Public Model API Tests', () => {
     const modelName = DataBuilders.uniqueName('api-delete-model')
     const createResponse = await apiClient.adminCreatePublicModel({
       name: modelName,
-      json: {
-        apiVersion: 'agent.wecode.io/v1',
-        kind: 'Model',
-        metadata: {
-          name: modelName,
-          displayName: 'API Delete Test Model',
-          namespace: 'default',
-        },
-        spec: {
-          modelConfig: {
-            provider: 'openai',
-            modelId: 'gpt-4',
-            apiKey: 'test-key',
-            baseUrl: 'https://api.openai.com/v1',
-          },
-        },
-      },
+      namespace: 'default',
+      json: buildPublicModelJson(modelName, 'API Delete Test Model'),
     })
 
     const modelId = (createResponse.data as { id: number }).id
