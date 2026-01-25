@@ -66,6 +66,21 @@ AGENTS.md 的更新是提升 AI 编程效率的重要流程：当你遇到问题
   - `cd shared && uv run pytest`
   - `cd frontend && npm test`；E2E：`npm run test:e2e`
 
+## Systemd 常用命令（运维/排障）
+
+> 默认服务名通常是 `wegent.service`（混合模式：`start.sh`）。如你的服务名不同，把下方命令里的服务名替换掉即可。
+
+- 查看状态：`systemctl status wegent.service --no-pager`
+- 启动/停止/重启：`sudo systemctl start|stop|restart wegent.service`
+- 开机自启：`sudo systemctl enable|disable wegent.service`
+- 重新加载 unit 文件：`sudo systemctl daemon-reload`（改了 `/etc/systemd/system/*.service` 后必做）
+- 查看最近日志：`journalctl -u wegent.service -n 200 --no-pager`
+- 实时跟踪日志：`journalctl -u wegent.service -f`
+- 清理失败状态：`sudo systemctl reset-failed wegent.service`
+- 查看 unit 内容：`systemctl cat wegent.service`
+- 临时覆盖 unit 配置：`sudo systemctl edit wegent.service`（保存后执行 `daemon-reload` + `restart`）
+- 快速确认端口：`ss -lntp | rg ':3000|:8000|:8001|:3306|:6379'`
+
 ## 深入阅读
 - 架构/CRD：`docs/concepts/architecture.md`、`core-concepts.md`
 - YAML 规范：`docs/reference/yaml-specification.md`

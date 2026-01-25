@@ -867,23 +867,24 @@ main() {
         --add-host host.docker.internal:${network_gateway}
         -p "${EXECUTOR_MANAGER_PORT}:8001"
         -e TZ=Asia/Shanghai
-        -e TASK_API_DOMAIN="http://${network_gateway}:${BACKEND_PORT}"
-        -e EXECUTOR_MANAGER_PORT="8001"
-        -e MAX_CONCURRENT_TASKS=30
-        -e PORT=8001
-        -e CALLBACK_HOST="http://executor_manager:8001"
-        -e CALLBACK_PORT="8001"
-        -e NETWORK=wegent-network
-        -e DOCKER_HOST_ADDR="host.docker.internal"
-        -e EXECUTOR_IMAGE="${EXECUTOR_IMAGE}"
-        -e EXECUTOR_PORT_RANGE_MIN=10001
-        -e EXECUTOR_PORT_RANGE_MAX=10100
-        -e WEGENT_PERSIST_REPO_ROOT_HOST="${PERSIST_REPO_ROOT}"
-        -e EXECUTOR_WORKSPACE="${EXECUTOR_WORKSPACE}"
-        -e EXECUTOR_WORKSPCE="${EXECUTOR_WORKSPACE}"
-        -v /var/run/docker.sock:/var/run/docker.sock
-    "${EXECUTOR_MANAGER_IMAGE}"
-  )
+	        -e TASK_API_DOMAIN="http://${network_gateway}:${BACKEND_PORT}"
+	        -e EXECUTOR_MANAGER_PORT="8001"
+	        -e MAX_CONCURRENT_TASKS=30
+	        -e PORT=8001
+	        -e CALLBACK_HOST="http://executor_manager:8001"
+	        -e CALLBACK_PORT="8001"
+	        -e NETWORK=wegent-network
+	        -e DOCKER_HOST_ADDR="host.docker.internal"
+	        -e REDIS_URL="redis://:${REDIS_PASSWORD}@redis:6379/0"
+	        -e EXECUTOR_IMAGE="${EXECUTOR_IMAGE}"
+	        -e EXECUTOR_PORT_RANGE_MIN=10001
+	        -e EXECUTOR_PORT_RANGE_MAX=10100
+	        -e WEGENT_PERSIST_REPO_ROOT_HOST="${PERSIST_REPO_ROOT}"
+	        -e EXECUTOR_WORKSPACE="${EXECUTOR_WORKSPACE}"
+	        -e EXECUTOR_WORKSPCE="${EXECUTOR_WORKSPACE}"
+	        -v /var/run/docker.sock:/var/run/docker.sock
+	    "${EXECUTOR_MANAGER_IMAGE}"
+	  )
   "${docker_cmd[@]}" >/dev/null
 
   # Executor Manager performs a one-time executor binary extraction which can take ~2 minutes
@@ -971,12 +972,12 @@ main() {
 
     sync_frontend_standalone_assets
 
-    echo -e "${BLUE}[6/6] Starting Frontend (host, npm start)...${NC}"
+    echo -e "${BLUE}[6/6] Starting Frontend (host, standalone server.js)...${NC}"
     local frontend_log=""
     frontend_log="${ROOT_DIR}/frontend/next.log"
     : >"$frontend_log"
 
-    run_detached "cd '${ROOT_DIR}/frontend' && exec env NODE_ENV='production' RUNTIME_INTERNAL_API_URL='http://127.0.0.1:${BACKEND_PORT}' RUNTIME_SOCKET_DIRECT_URL='${SOCKET_DIRECT_URL}' npm start -- -p '${FRONTEND_PORT}' -H '${FRONTEND_HOST}' >>'${frontend_log}' 2>&1"
+    run_detached "cd '${ROOT_DIR}/frontend' && exec env NODE_ENV='production' PORT='${FRONTEND_PORT}' HOSTNAME='${FRONTEND_HOST}' RUNTIME_INTERNAL_API_URL='http://127.0.0.1:${BACKEND_PORT}' RUNTIME_SOCKET_DIRECT_URL='${SOCKET_DIRECT_URL}' node .next/standalone/server.js >>'${frontend_log}' 2>&1"
     FRONTEND_PGID="$!"
     echo -e "${GREEN}✓ Frontend started (PGID=${FRONTEND_PGID})${NC}"
     echo -e "${GREEN}  Frontend log: ${frontend_log}${NC}"

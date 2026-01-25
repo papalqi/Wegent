@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "NODE_OPTIONS='--max-old-space-size=2048'  next build",
-    "start": "next start",
+    "build": "NODE_OPTIONS='--max-old-space-size=2048' next build && node scripts/fix-next-build-output.cjs",
+    "start": "node .next/standalone/server.js",
     "lint": "next lint",
     "format": "prettier --write .",
     "prepare": "cd .. && husky frontend/.husky",

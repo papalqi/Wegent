@@ -8,6 +8,7 @@ import { useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useToast } from '@/hooks/use-toast'
+import { loginWithOidcToken } from '@/apis/user'
 
 /**
  * OIDC Token Handler Component
@@ -25,7 +26,6 @@ export default function OidcTokenHandler() {
   useEffect(() => {
     const accessToken = searchParams.get('access_token')
     const error = searchParams.get('error')
-    const tokenType = searchParams.get('token_type')
     const loginSuccess = searchParams.get('login_success')
     const errorMessage = searchParams.get('message')
 
@@ -45,24 +45,31 @@ export default function OidcTokenHandler() {
     }
 
     if (loginSuccess === 'true' && accessToken) {
-      localStorage.setItem('auth_token', accessToken)
-      localStorage.setItem('token_type', tokenType || 'bearer')
+      loginWithOidcToken(accessToken)
+        .then(() => {
+          toast({
+            title: t('common:auth.login_success'),
+          })
 
-      toast({
-        title: t('common:auth.login_success'),
-      })
+          const url = new URL(window.location.href)
+          url.searchParams.delete('access_token')
+          url.searchParams.delete('token_type')
+          url.searchParams.delete('login_success')
 
-      const url = new URL(window.location.href)
-      url.searchParams.delete('access_token')
-      url.searchParams.delete('token_type')
-      url.searchParams.delete('login_success')
+          router.replace(url.pathname + url.search)
 
-      router.replace(url.pathname + url.search)
-
-      setTimeout(() => {
-        console.log('Trigger user status refresh')
-        window.dispatchEvent(new Event('common:oidc-login-success'))
-      }, 100)
+          setTimeout(() => {
+            console.log('Trigger user status refresh')
+            window.dispatchEvent(new Event('oidc-login-success'))
+          }, 100)
+        })
+        .catch(err => {
+          console.error('OIDC token processing failed:', err)
+          toast({
+            variant: 'destructive',
+            title: t('common:auth.oidc_login_failed'),
+          })
+        })
     }
   }, [router, searchParams, t, toast])
 

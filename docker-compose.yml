@@ -198,6 +198,7 @@ services:
       - TASK_API_DOMAIN=http://backend:8000
       - MAX_CONCURRENT_TASKS=30
       - PORT=8001
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CALLBACK_HOST=http://executor_manager:8001
       - NETWORK=wegent-network
       # Note: fork CI tags Codex-enabled executor as <version>-codex (e.g. 1.0.32-codex).
